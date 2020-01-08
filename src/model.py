@@ -2,6 +2,7 @@
 
 import pandas as pd
 from pyomo.environ import *
+from pyomo.util.infeasible import log_infeasible_constraints
 
 import matplotlib.pyplot as plt
 
@@ -16,31 +17,37 @@ class NEMDEModel:
         self.tee = True
         self.keepfiles = False
         self.solver_options = {}  # 'MIPGap': 0.0005,
-        self.opt = SolverFactory('cplex', solver_io='mps')
+        self.opt = SolverFactory('cplex', solver_io='lp')
 
     def define_sets(self, m):
         """Define model sets"""
 
-        # Set of market participants (generators and loads) ('GENERATOR', DUID, offer_type)
-        m.S_PARTICIPANT_UNITS = Set(initialize=self.data.get_participant_unit_index())
+        # Market participants (generators and loads)
+        m.S_TRADERS = Set(initialize=self.data.get_trader_ids())
 
-        # Market participant interconnectors ('INTERCONNECTOR', interconnector ID, region)
-        m.S_PARTICIPANT_INTERCONNECTORS = Set(initialize=self.data.get_participant_interconnector_index())
+        # Market Network Service Providers (interconnectors that bid into the market)
+        m.S_MNSPS = Set(initialize=self.data.get_mnsp_ids())
 
-        # All market participants (generators, loads, and interconnectors)
-        m.S_PARTICIPANTS = m.S_PARTICIPANT_UNITS.union(m.S_PARTICIPANT_INTERCONNECTORS)
+        # All interconnectors (interconnector_id)
+        m.S_INTERCONNECTORS = Set(initialize=self.data.get_interconnector_ids())
+
+        # Trader offer types
+        m.S_TRADER_OFFERS = Set(initialize=self.data.get_trader_offer_index())
+
+        # MNSP offer types
+        m.S_MNSP_OFFERS = Set(initialize=self.data.get_mnsp_offer_index())
 
         # Generic constraints
         m.S_GENERIC_CONSTRAINTS = Set(initialize=self.data.get_generic_constraint_index())
 
         # Generic constraints trader variables
-        m.S_TRADER_VARS = Set(initialize=self.data.get_trader_factor_variables())
+        m.S_TRADER_VARS = Set(initialize=self.data.get_generic_constraint_trader_variables())
 
         # Generic constraint interconnector variables
-        m.S_INTERCONNECTOR_VARS = Set(initialize=self.data.get_interconnector_factor_variables())
+        m.S_INTERCONNECTOR_VARS = Set(initialize=self.data.get_generic_constraint_interconnector_variables())
 
         # Generic constraint region variables
-        m.S_REGION_VARS = Set(initialize=self.data.get_region_factor_variables())
+        m.S_REGION_VARS = Set(initialize=self.data.get_generic_constraint_region_variables())
 
         # Trader types (generator, load, normally_on_load)
         m.S_PARTICIPANT_TYPES = Set(initialize=self.data.get_participant_types())
@@ -53,44 +60,59 @@ class NEMDEModel:
     def define_parameters(self, m):
         """Define model parameters"""
 
-        def price_bands_rule(m, i, j, k, b):
-            """Price bands for all participants"""
+        def trader_price_band_rule(m, i, j, k):
+            """Price bands for traders"""
 
-            if (i == 'GENERATOR') or (i == 'LOAD') or (i == 'NORMALLY_ON_LOAD'):
-                return self.data.get_trader_price_band_value(j, k, b)
-            elif i == 'INTERCONNECTOR':
-                return self.data.get_interconnector_price_band_value(j, k, b)
-            else:
-                raise Exception(f'Unexpected participant type: {i}')
+            return self.data.get_trader_price_band_value(i, j, k)
 
-        # Price bands
-        m.PRICE_BANDS = Param(m.S_PARTICIPANTS, m.S_BANDS, rule=price_bands_rule)
+        # Price bands for traders (generators / loads)
+        m.TRADER_PRICE_BAND = Param(m.S_TRADER_OFFERS, m.S_BANDS, rule=trader_price_band_rule)
 
-        def quantity_bands_rule(m, i, j, k, b):
-            """Quantity bands for all participants"""
+        def trader_quantity_band_rule(m, i, j, k):
+            """Quantity bands for traders"""
 
-            if (i == 'GENERATOR') or (i == 'LOAD') or (i == 'NORMALLY_ON_LOAD'):
-                return self.data.get_trader_quantity_band_value(j, k, b)
-            elif i == 'INTERCONNECTOR':
-                return self.data.get_interconnector_quantity_band_value(j, k, b)
-            else:
-                raise Exception(f'Unexpected participant type: {i}')
+            return self.data.get_trader_quantity_band_value(i, j, k)
 
-        # Price bands
-        m.QUANTITY_BANDS = Param(m.S_PARTICIPANTS, m.S_BANDS, rule=quantity_bands_rule)
+        # Quantity bands for traders (generators / loads)
+        m.TRADER_QUANTITY_BAND = Param(m.S_TRADER_OFFERS, m.S_BANDS, rule=trader_quantity_band_rule)
 
-        def max_available_rule(m, i, j, k):
+        def trader_max_available_rule(m, i, j):
             """Max available energy output from given trader"""
-
-            if (i == 'GENERATOR') or (i == 'LOAD') or (i == 'NORMALLY_ON_LOAD'):
-                return self.data.get_trader_max_available_value(j, k)
-            elif i == 'INTERCONNECTOR':
-                return self.data.get_interconnector_max_available_value(j, k)
-            else:
-                raise Exception(f'Unexpected participant type: {i}')
+            return self.data.get_trader_max_available_value(i, j)
 
         # Max available output for given trader
-        m.MAX_AVAILABLE = Param(m.S_PARTICIPANTS, rule=max_available_rule)
+        m.TRADER_MAX_AVAILABLE = Param(m.S_TRADER_OFFERS, rule=trader_max_available_rule)
+
+        def trader_initial_mw_rule(m, i):
+            """Initial power output condition for each trader"""
+
+            return self.data.get_trader_initial_condition_mw(i)
+
+        # Initial MW output for generators / loads
+        m.TRADER_INITIAL_MW = Param(m.S_TRADERS, rule=trader_initial_mw_rule)
+
+        def mnsp_price_band_rule(m, i, j, k):
+            """Price bands for MNSPs"""
+
+            return self.data.get_mnsp_price_band_value(i, j, k)
+
+        # Price bands for MNSPs
+        m.MNSP_PRICE_BAND = Param(m.S_MNSP_OFFERS, m.S_BANDS, rule=mnsp_price_band_rule)
+
+        def mnsp_quantity_band_rule(m, i, j, k):
+            """Quantity bands for MNSPs"""
+
+            return self.data.get_mnsp_quantity_band_value(i, j, k)
+
+        # Quantity bands for MNSPs
+        m.MNSP_QUANTITY_BAND = Param(m.S_MNSP_OFFERS, m.S_BANDS, rule=mnsp_quantity_band_rule)
+
+        def mnsp_max_available_rule(m, i, j):
+            """Max available energy output from given MNSP"""
+            return self.data.get_mnsp_max_available_value(i, j)
+
+        # Max available output for given MNSP
+        m.MNSP_MAX_AVAILABLE = Param(m.S_MNSP_OFFERS, rule=mnsp_max_available_rule)
 
         def generic_constraint_rhs_rule(m, c):
             """RHS value for given generic constraint"""
@@ -108,19 +130,8 @@ class NEMDEModel:
         # Constraint violation factors
         m.CVF = Param(m.S_GENERIC_CONSTRAINTS, rule=generic_constraint_violation_factor_rule)
 
-        def participant_type_factor_rule(m, i):
-            """Scaling factor to assign to trader (generator / load) and interconnector cost functions"""
-
-            # TODO: Assuming interconnector treated as generator. Must verify this.
-            if (i == 'GENERATOR') or (i == 'INTERCONNECTOR'):
-                return 1
-            elif (i == 'LOAD') or (i == 'NORMALLY_ON_LOAD'):
-                return -1
-            else:
-                raise Exception(f'Unexpected trader type: {i}')
-
-        # Trader type scaling factor to be used trader cost function formulation
-        m.PARTICIPANT_TYPE_FACTOR = Param(m.S_PARTICIPANT_TYPES, rule=participant_type_factor_rule)
+        # Ramp-rate constraint violation factor
+        m.CVF_RAMP_RATE = Param(initialize=self.data.get_constraint_violation_ramp_rate_penalty())
 
         return m
 
@@ -128,7 +139,8 @@ class NEMDEModel:
         """Define model variables"""
 
         # Objective function variables
-        m.V_PARTICIPANT_OFFERS = Var(m.S_PARTICIPANTS, m.S_BANDS, within=NonNegativeReals)
+        m.V_TRADER_OFFER = Var(m.S_TRADER_OFFERS, m.S_BANDS, within=NonNegativeReals)
+        m.V_MNSP_OFFER = Var(m.S_MNSP_OFFERS, m.S_BANDS, within=NonNegativeReals)
 
         # Generic constraint variables
         m.V_TRADER = Var(m.S_TRADER_VARS)
@@ -139,26 +151,54 @@ class NEMDEModel:
         m.V_CV = Var(m.S_GENERIC_CONSTRAINTS, within=NonNegativeReals)
         m.V_CV_LHS = Var(m.S_GENERIC_CONSTRAINTS, within=NonNegativeReals)
         m.V_CV_RHS = Var(m.S_GENERIC_CONSTRAINTS, within=NonNegativeReals)
+        m.V_CV_RAMP_UP = Var(m.S_TRADERS, within=NonNegativeReals)
+        m.V_CV_RAMP_DOWN = Var(m.S_TRADERS, within=NonNegativeReals)
 
         return m
 
     def define_expressions(self, m):
         """Define model expressions"""
 
-        def total_offer_mw_rule(m, i, j, k):
+        def trader_total_offer_rule(m, i, j):
             """Total energy offered over all bands"""
-            return sum(m.V_PARTICIPANT_OFFERS[i, j, k, b] for b in m.S_BANDS)
 
-        # Total offered energy
-        m.TOTAL_OFFER_MW = Expression(m.S_PARTICIPANTS, rule=total_offer_mw_rule)
+            return sum(m.V_TRADER_OFFER[i, j, b] for b in m.S_BANDS)
 
-        def trader_cost_function_rule(m, i, j, k):
-            return m.PARTICIPANT_TYPE_FACTOR[i] * sum(m.V_PARTICIPANT_OFFERS[i, j, k, b] * m.PRICE_BANDS[i, j, k, b]
-                                                      for b in m.S_BANDS)
+        # Total offered energy for each trader and bid type
+        m.TRADER_TOTAL_OFFER_MW = Expression(m.S_TRADER_OFFERS, rule=trader_total_offer_rule)
+
+        def trader_cost_function_rule(m, i, j):
+            """Total cost associated with each offer"""
+
+            # Scaling factor depending on participant type. Generator (+1), load (-1)
+            trader_type = self.data.get_trader_type(i)
+
+            if ((trader_type == 'LOAD') or (trader_type == 'NORMALLY_ON_LOAD')) and (j == 'ENOF'):
+                factor = -1
+            else:
+                factor = 1
+
+            return factor * sum(m.V_TRADER_OFFER[i, j, b] * m.TRADER_PRICE_BAND[i, j, b] for b in m.S_BANDS)
 
         # Trader cost functions
-        # Note: terms are scaled by PARTICIPANT_TYPE_FACTOR to denote loads (-1) and generators / interconnectors (+1)
-        m.COST_FUNCTION = Expression(m.S_PARTICIPANTS, rule=trader_cost_function_rule)
+        m.TRADER_COST_FUNCTION = Expression(m.S_TRADER_OFFERS, rule=trader_cost_function_rule)
+
+        def mnsp_total_offer_rule(m, i, j):
+            """Total energy offered over all bands"""
+
+            return sum(m.V_MNSP_OFFER[i, j, b] for b in m.S_BANDS)
+
+        # Total offered energy for each MNSP
+        m.MNSP_TOTAL_OFFER_MW = Expression(m.S_MNSP_OFFERS, rule=mnsp_total_offer_rule)
+
+        def mnsp_cost_function_rule(m, i, j):
+            """MNSP cost function"""
+
+            # TODO: Assumes interconnector treated as generator in each region. Need to check.
+            return sum(m.V_MNSP_OFFER[i, j, b] * m.MNSP_PRICE_BAND[i, j, b] for b in m.S_BANDS)
+
+        # MNSP cost functions
+        m.MNSP_COST_FUNCTION = Expression(m.S_MNSP_OFFERS, rule=mnsp_cost_function_rule)
 
         def lhs_terms_rule(m, i):
             """Get LHS expression for a given Generic Constraint"""
@@ -187,72 +227,103 @@ class NEMDEModel:
             return m.V_CV[i] * m.CVF[i]
 
         # Constraint violation penalty for inequality constraints
-        m.CONSTRAINT_VIOLATION_PENALTY = Expression(m.S_GENERIC_CONSTRAINTS, rule=constraint_violation_penalty_rule)
+        m.CV_PENALTY = Expression(m.S_GENERIC_CONSTRAINTS, rule=constraint_violation_penalty_rule)
 
         def constraint_violation_lhs_penalty_rule(m, i):
             """Constraint violation penalty for equality constraint"""
 
             return m.V_CV_LHS[i] * m.CVF[i]
 
-        # Constraint violation penalty for inequality constraints
-        m.CONSTRAINT_VIOLATION_LHS_PENALTY = Expression(m.S_GENERIC_CONSTRAINTS,
-                                                        rule=constraint_violation_lhs_penalty_rule)
+        # Constraint violation penalty for equality constraints
+        m.CV_LHS_PENALTY = Expression(m.S_GENERIC_CONSTRAINTS, rule=constraint_violation_lhs_penalty_rule)
 
         def constraint_violation_rhs_penalty_rule(m, i):
             """Constraint violation penalty for equality constraint"""
 
             return m.V_CV_RHS[i] * m.CVF[i]
 
-        # Constraint violation penalty for inequality constraints
-        m.CONSTRAINT_VIOLATION_RHS_PENALTY = Expression(m.S_GENERIC_CONSTRAINTS,
-                                                        rule=constraint_violation_rhs_penalty_rule)
+        # Constraint violation penalty for equality constraints
+        m.CV_RHS_PENALTY = Expression(m.S_GENERIC_CONSTRAINTS, rule=constraint_violation_rhs_penalty_rule)
+
+        def constraint_violation_ramp_down_penalty_rule(m, i):
+            """Penalty for violating ramp down constraint"""
+
+            return m.V_CV_RAMP_DOWN[i] * m.CVF_RAMP_RATE
+
+        # Penalty factor for ramp down rate violation
+        m.CV_RAMP_DOWN_PENALTY = Expression(m.S_TRADERS, rule=constraint_violation_ramp_down_penalty_rule)
+
+        def constraint_violation_ramp_up_penalty_rule(m, i):
+            """Penalty for violating ramp down constraint"""
+
+            return m.V_CV_RAMP_UP[i] * m.CVF_RAMP_RATE
+
+        # Penalty factor for ramp up rate violation
+        m.CV_RAMP_UP_PENALTY = Expression(m.S_TRADERS, rule=constraint_violation_ramp_up_penalty_rule)
 
         return m
 
     def define_constraints(self, m):
         """Define model constraints"""
 
-        def quantity_band_limit_rule(m, i, j, k, b):
+        def trader_quantity_band_limit_rule(m, i, j, k):
             """Band output must be non-negative and less than the max offered amount for that band"""
-            return m.V_PARTICIPANT_OFFERS[i, j, k, b] <= m.QUANTITY_BANDS[i, j, k, b]
 
-        # Bounds on quantity band variables
-        m.QUANTITY_BANDS_LIMIT = Constraint(m.S_PARTICIPANTS, m.S_BANDS, rule=quantity_band_limit_rule)
+            return m.V_TRADER_OFFER[i, j, k] <= m.TRADER_QUANTITY_BAND[i, j, k]
 
-        def max_available_limit_rule(m, i, j, k):
-            """Constraint max available output"""
-            return m.TOTAL_OFFER_MW[i, j, k] <= m.MAX_AVAILABLE[i, j, k]
+        # Bounds on quantity band variables for traders
+        m.TRADER_QUANTITY_BAND_LIMIT = Constraint(m.S_TRADER_OFFERS, m.S_BANDS, rule=trader_quantity_band_limit_rule)
+
+        def trader_max_available_limit_rule(m, i, j):
+            """Constrain max available output"""
+
+            # Check trader's semi-dispatch status
+            semi_dispatch = self.data.get_trader_semi_dispatch_value(i)
+
+            # Max available only applies to dispatchable plant (NEMDE records MaxAvail=0 for semi-dispatchable traders)
+            if semi_dispatch == 0:
+                return m.TRADER_TOTAL_OFFER_MW[i, j] <= m.TRADER_MAX_AVAILABLE[i, j] + 1
+            else:
+                return Constraint.Skip
 
         # Ensure dispatch is constrained by max available offer amount
-        m.MAX_AVAILABLE_LIMIT = Constraint(m.S_PARTICIPANTS, rule=max_available_limit_rule)
+        m.TRADER_MAX_AVAILABLE_LIMIT = Constraint(m.S_TRADER_OFFERS, rule=trader_max_available_limit_rule)
+
+        def mnsp_quantity_band_limit_rule(m, i, j, k):
+            """Band output must be non-negative and less than the max offered amount for that band"""
+
+            return m.V_MNSP_OFFER[i, j, k] <= m.MNSP_QUANTITY_BAND[i, j, k]
+
+        # Bounds on quantity band variables for MNSPs
+        m.MNSP_QUANTITY_BAND_LIMIT = Constraint(m.S_MNSP_OFFERS, m.S_BANDS, rule=mnsp_quantity_band_limit_rule)
+
+        def mnsp_max_available_limit_rule(m, i, j):
+            """Constrain max available output"""
+
+            return m.MNSP_TOTAL_OFFER_MW[i, j] <= m.MNSP_MAX_AVAILABLE[i, j]
+
+        # Ensure dispatch is constrained by max available offer amount
+        m.MNSP_MAX_AVAILABLE_LIMIT = Constraint(m.S_MNSP_OFFERS, rule=mnsp_max_available_limit_rule)
 
         def trader_var_link_rule(m, i, j):
             """Link generic constraint trader variables to objective function variables"""
 
-            # Get type of trader
-            trader_type = self.data.get_trader_type(i)
-
-            return m.TOTAL_OFFER_MW[trader_type, i, j] == m.V_TRADER[i, j]
+            return m.TRADER_TOTAL_OFFER_MW[i, j] == m.V_TRADER[i, j]
 
         # Link between total power output and quantity band output
         m.TRADER_VAR_LINK = Constraint(m.S_TRADER_VARS, rule=trader_var_link_rule)
 
-        def interconnector_var_link_rule(m, i):
-            """Link generic constraint interconnector variables to objective function variables"""
+        def mnsp_var_link_rule(m, i):
+            """Link generic constraint MNSP variables to objective function variables"""
 
-            if i in [j[1] for j in m.S_PARTICIPANT_INTERCONNECTORS]:
+            # From and to regions for a given MNSP
+            from_region = self.data.get_interconnector_from_region(i)
+            to_region = self.data.get_interconnector_to_region(i)
 
-                from_region = self.data.get_interconnector_from_region(i)
-                to_region = self.data.get_interconnector_to_region(i)
-
-                return (m.V_INTERCONNECTOR[i] == m.TOTAL_OFFER_MW['INTERCONNECTOR', i, to_region]
-                        - m.TOTAL_OFFER_MW['INTERCONNECTOR', i, from_region])
-
-            else:
-                return Constraint.Skip
+            return m.V_INTERCONNECTOR[i] == m.MNSP_TOTAL_OFFER_MW[i, to_region] - m.MNSP_TOTAL_OFFER_MW[i, from_region]
 
         # Link between total power output and quantity band output
-        m.INTERCONNECTOR_VAR_LINK = Constraint(m.S_INTERCONNECTOR_VARS, rule=interconnector_var_link_rule)
+        m.MNSP_VAR_LINK = Constraint(m.S_MNSPS, rule=mnsp_var_link_rule)
 
         def generic_constraint_rule(m, c):
             """NEMDE Generic Constraints"""
@@ -270,16 +341,91 @@ class NEMDEModel:
         # Generic constraints
         m.GENERIC_CONSTRAINT = Constraint(m.S_GENERIC_CONSTRAINTS, rule=generic_constraint_rule)
 
+        def trader_ramp_up_rate_limit_rule(m, i):
+            """Ramp up rate limit for ENOF offers"""
+
+            if (i, 'ENOF') in m.S_TRADER_OFFERS:
+                ramp_up_limit = self.data.get_trader_ramp_up_rate(i)
+                return (m.TRADER_TOTAL_OFFER_MW[i, 'ENOF'] - m.TRADER_INITIAL_MW[i]
+                        <= (ramp_up_limit / 12) + m.V_CV_RAMP_UP[i])
+            else:
+                return Constraint.Skip
+
+        # Ramp up rate limit
+        m.TRADER_RAMP_UP_RATE_LIMIT = Constraint(m.S_TRADERS, rule=trader_ramp_up_rate_limit_rule)
+
+        def trader_ramp_down_rate_limit_rule(m, i):
+            """Ramp down rate limit for ENOF offers"""
+
+            if (i, 'ENOF') in m.S_TRADER_OFFERS:
+                ramp_down_limit = self.data.get_trader_ramp_down_rate(i)
+                return (m.TRADER_TOTAL_OFFER_MW[i, 'ENOF'] - m.TRADER_INITIAL_MW[i] + m.V_CV_RAMP_DOWN[i]
+                        >= - ramp_down_limit / 12)
+            else:
+                return Constraint.Skip
+
+        # Ramp down rate limit
+        m.TRADER_RAMP_DOWN_RATE_LIMIT = Constraint(m.S_TRADERS, rule=trader_ramp_down_rate_limit_rule)
+
+        def trader_min_output_limit_rule(m, i):
+            """Minimum energy output for a given trader"""
+
+            # Get trader semi-dispatch status
+            semi_dispatch = self.data.get_trader_semi_dispatch_value(i)
+
+            try:
+                # Minimum output level
+                min_output = self.data.get_trader_initial_condition_min_mw(i)
+
+            # Not all traders will have a minimum energy level specified
+            except AttributeError:
+                min_output = None
+
+            if (min_output is not None) and ((i, 'ENOF') in m.S_TRADER_OFFERS) and (semi_dispatch == 0):
+                print(i, min_output)
+                return m.TRADER_TOTAL_OFFER_MW[i, 'ENOF'] >= min_output
+            else:
+                return Constraint.Skip
+
+        # Minimum output
+        # m.TRADER_MIN_OUTPUT_LIMIT = Constraint(m.S_TRADERS, rule=trader_min_output_limit_rule)
+
+        def trader_max_output_limit_rule(m, i):
+            """Maximum energy output for a given trader"""
+
+            # Get trader semi-dispatch status
+            semi_dispatch = self.data.get_trader_semi_dispatch_value(i)
+
+            try:
+                # Maximum output level
+                max_output = self.data.get_trader_initial_condition_max_mw(i)
+
+            # Not all traders will have a minimum energy level specified
+            except AttributeError:
+                max_output = None
+
+            if (max_output is not None) and ((i, 'ENOF') in m.S_TRADER_OFFERS) and (semi_dispatch == 0):
+                print(i, max_output)
+                return m.TRADER_TOTAL_OFFER_MW[i, 'ENOF'] <= max_output
+            else:
+                return Constraint.Skip
+
+        # Maximum output
+        # m.TRADER_MAX_OUTPUT_LIMIT = Constraint(m.S_TRADERS, rule=trader_max_output_limit_rule)
+
         return m
 
     def define_objective(self, m):
         """Define model objective"""
 
         # Total cost for energy and ancillary services
-        m.OBJECTIVE = Objective(expr=sum(m.COST_FUNCTION[u] for u in m.S_PARTICIPANTS)
-                                     + sum(m.CONSTRAINT_VIOLATION_PENALTY[c] for c in m.S_GENERIC_CONSTRAINTS)
-                                     + sum(m.CONSTRAINT_VIOLATION_RHS_PENALTY[c] for c in m.S_GENERIC_CONSTRAINTS)
-                                     + sum(m.CONSTRAINT_VIOLATION_LHS_PENALTY[c] for c in m.S_GENERIC_CONSTRAINTS),
+        m.OBJECTIVE = Objective(expr=sum(m.TRADER_COST_FUNCTION[t] for t in m.S_TRADER_OFFERS)
+                                     + sum(m.MNSP_COST_FUNCTION[t] for t in m.S_MNSP_OFFERS)
+                                     + sum(m.CV_PENALTY[c] for c in m.S_GENERIC_CONSTRAINTS)
+                                     + sum(m.CV_RHS_PENALTY[c] for c in m.S_GENERIC_CONSTRAINTS)
+                                     + sum(m.CV_LHS_PENALTY[c] for c in m.S_GENERIC_CONSTRAINTS)
+                                     + sum(m.CV_RAMP_DOWN_PENALTY[t] for t in m.S_TRADERS)
+                                     + sum(m.CV_RAMP_UP_PENALTY[t] for t in m.S_TRADERS),
                                 sense=minimize)
 
         return m
@@ -311,12 +457,13 @@ class NEMDEModel:
 
         return m, solve_status
 
-    def get_model_energy_output(self, m):
+    @staticmethod
+    def get_model_energy_output(m):
         """Extract energy output"""
 
         # Convert to DataFrame
-        df = pd.DataFrame({k: [v.expr()] for k, v in m.TOTAL_OFFER_MW.items()}).T
-        df.index.rename(['PARTICIPANT_TYPE', 'TRADER_ID', 'OFFER_TYPE'], inplace=True)
+        df = pd.DataFrame({k: [v.expr()] for k, v in m.TRADER_TOTAL_OFFER_MW.items()}).T
+        df.index.rename(['TRADER_ID', 'OFFER_TYPE'], inplace=True)
         df = df.rename(columns={0: 'output'})
 
         # Model output
@@ -324,25 +471,51 @@ class NEMDEModel:
 
         return df_m
 
-    def check_solution(self, m):
+    @staticmethod
+    def get_model_max_available_energy(m):
+        """Get max available energy output for all generators"""
+
+        # Convert to DataFrame
+        df = pd.DataFrame({k: [v] for k, v in m.TRADER_MAX_AVAILABLE.items()}).T
+        df.index.rename(['TRADER_ID', 'OFFER_TYPE'], inplace=True)
+        df = df.rename(columns={0: 'max_available'})
+
+        # Model output
+        df_m = (df.pivot_table(index='TRADER_ID', columns='OFFER_TYPE', values='max_available')
+                .astype(float, errors='ignore'))
+
+        return df_m
+
+    def check_energy_solution(self, m, model_key, observed_key):
         """Check model solution"""
 
         # Model energy output
-        df_m = nemde.get_model_energy_output(model)
+        df_m = self.get_model_energy_output(model)
 
         # Actual NEMDE output
-        df_o = nemde.data.get_trader_observed_dispatch_dataframe()
+        df_o = self.data.get_trader_observed_dispatch_dataframe()
 
         # Combine into single DataFrame
-        df_c = pd.concat([df_m['ENOF'], df_o['EnergyTarget']], axis=1, sort=True)
+        df_c = pd.concat([df_m[model_key], df_o[observed_key]], axis=1, sort=True)
 
-        # Mean squared error for energy output
-        mse = df_c.apply(lambda x: (x['ENOF'] - x['EnergyTarget']) ** 2, axis=1).mean()
+        # Compute difference between model and target
+        df_c['difference'] = df_c[model_key].subtract(df_c[observed_key])
+        df_c['abs_difference'] = df_c['difference'].abs()
+        df_c = df_c.sort_values(by='abs_difference', ascending=False)
+
+        # Get scheduled loads
+        scheduled = [i for i in df_c.index if self.data.get_trader_semi_dispatch_value(i) == 0]
+
+        # Mean squared error (squared difference between NEMDE target values and model values)
+        mse = df_c.loc[scheduled, :].apply(lambda x: (x[model_key] - x[observed_key]) ** 2, axis=1).mean()
         print('Energy MSE =', mse)
 
         # Compare model and observed energy output
-        ax = df_c.plot(x='ENOF', y='EnergyTarget', kind='scatter')
-        ax.plot([0, 600], [0, 600], color='r', alpha=0.8, linestyle='--')
+        ax = df_c.loc[scheduled, :].plot(x=model_key, y=observed_key, kind='scatter')
+
+        # Max value
+        max_value = df_c.loc[scheduled, [model_key, observed_key]].max().max()
+        ax.plot([0, max_value], [0, max_value], color='r', alpha=0.8, linestyle='--')
 
         plt.show()
 
@@ -360,4 +533,23 @@ if __name__ == '__main__':
     nemde.solve_model(model)
 
     # Check solution
-    energy = nemde.check_solution(model)
+    e = nemde.get_model_energy_output(model)
+    observed = nemde.data.get_trader_observed_dispatch_dataframe()
+
+    # Max available energy output
+    available = nemde.get_model_max_available_energy(model)
+
+    # All scheduled generators
+    scheduled_traders = [i for i in e.index if nemde.data.get_trader_semi_dispatch_value(i) == 0]
+
+    # Comparison between model and output energy target
+    energy = nemde.check_energy_solution(model, 'ENOF', 'EnergyTarget')
+    energy_scheduled = energy.loc[scheduled_traders, :]
+
+    # Raise services
+    R6S = nemde.check_energy_solution(model, 'R6SE', 'R6Target')
+    R60S = nemde.check_energy_solution(model, 'R60S', 'R60Target')
+    R5RE = nemde.check_energy_solution(model, 'R5RE', 'R5RegTarget')
+    R5MI = nemde.check_energy_solution(model, 'R5MI', 'R5Target')
+
+
