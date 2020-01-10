@@ -138,9 +138,13 @@ class NEMDEModel:
     def define_variables(self, m):
         """Define model variables"""
 
-        # Objective function variables
+        # Offers for each quantity band
         m.V_TRADER_OFFER = Var(m.S_TRADER_OFFERS, m.S_BANDS, within=NonNegativeReals)
         m.V_MNSP_OFFER = Var(m.S_MNSP_OFFERS, m.S_BANDS, within=NonNegativeReals)
+
+        # Total MW offer for each offer type
+        m.V_TRADER_TOTAL_OFFER = Var(m.S_TRADER_OFFERS, within=NonNegativeReals)
+        m.V_MNSP_TOTAL_OFFER = Var(m.S_MNSP_OFFERS, within=NonNegativeReals)
 
         # Generic constraint variables
         m.V_TRADER = Var(m.S_TRADER_VARS)
@@ -159,21 +163,13 @@ class NEMDEModel:
     def define_expressions(self, m):
         """Define model expressions"""
 
-        def trader_total_offer_rule(m, i, j):
-            """Total energy offered over all bands"""
-
-            return sum(m.V_TRADER_OFFER[i, j, b] for b in m.S_BANDS)
-
-        # Total offered energy for each trader and bid type
-        m.TRADER_TOTAL_OFFER_MW = Expression(m.S_TRADER_OFFERS, rule=trader_total_offer_rule)
-
         def trader_cost_function_rule(m, i, j):
             """Total cost associated with each offer"""
 
             # Scaling factor depending on participant type. Generator (+1), load (-1)
             trader_type = self.data.get_trader_type(i)
 
-            if ((trader_type == 'LOAD') or (trader_type == 'NORMALLY_ON_LOAD')) and (j == 'ENOF'):
+            if ((trader_type == 'LOAD') or (trader_type == 'NORMALLY_ON_LOAD')) and (j == 'LDOF'):
                 factor = -1
             else:
                 factor = 1
@@ -182,14 +178,6 @@ class NEMDEModel:
 
         # Trader cost functions
         m.TRADER_COST_FUNCTION = Expression(m.S_TRADER_OFFERS, rule=trader_cost_function_rule)
-
-        def mnsp_total_offer_rule(m, i, j):
-            """Total energy offered over all bands"""
-
-            return sum(m.V_MNSP_OFFER[i, j, b] for b in m.S_BANDS)
-
-        # Total offered energy for each MNSP
-        m.MNSP_TOTAL_OFFER_MW = Expression(m.S_MNSP_OFFERS, rule=mnsp_total_offer_rule)
 
         def mnsp_cost_function_rule(m, i, j):
             """MNSP cost function"""
@@ -266,6 +254,14 @@ class NEMDEModel:
     def define_constraints(self, m):
         """Define model constraints"""
 
+        def trader_total_offer_limit_rule(m, i, j):
+            """Link quantity band offers to total offer made by trader for each offer type"""
+
+            return m.V_TRADER_TOTAL_OFFER[i, j] == sum(m.V_TRADER_OFFER[i, j, k] for k in m.S_BANDS)
+
+        # Linking individual quantity band offers to total amount offered by trader
+        m.TRADER_TOTAL_OFFER_LIMIT = Constraint(m.S_TRADER_OFFERS, rule=trader_total_offer_limit_rule)
+
         def trader_quantity_band_limit_rule(m, i, j, k):
             """Band output must be non-negative and less than the max offered amount for that band"""
 
@@ -282,12 +278,20 @@ class NEMDEModel:
 
             # Max available only applies to dispatchable plant (NEMDE records MaxAvail=0 for semi-dispatchable traders)
             if semi_dispatch == 0:
-                return m.TRADER_TOTAL_OFFER_MW[i, j] <= m.TRADER_MAX_AVAILABLE[i, j] + 1
+                return m.V_TRADER_TOTAL_OFFER[i, j] <= m.TRADER_MAX_AVAILABLE[i, j]
             else:
                 return Constraint.Skip
 
         # Ensure dispatch is constrained by max available offer amount
         m.TRADER_MAX_AVAILABLE_LIMIT = Constraint(m.S_TRADER_OFFERS, rule=trader_max_available_limit_rule)
+
+        def mnsp_total_offer_limit_rule(m, i, j):
+            """Link quantity band offers to total offer made by MNSP for each offer type"""
+
+            return m.V_MNSP_TOTAL_OFFER[i, j] == sum(m.V_MNSP_OFFER[i, j, k] for k in m.S_BANDS)
+
+        # Linking individual quantity band offers to total amount offered by MNSP
+        m.MNSP_TOTAL_OFFER_LIMIT = Constraint(m.S_MNSP_OFFERS, rule=mnsp_total_offer_limit_rule)
 
         def mnsp_quantity_band_limit_rule(m, i, j, k):
             """Band output must be non-negative and less than the max offered amount for that band"""
@@ -300,7 +304,7 @@ class NEMDEModel:
         def mnsp_max_available_limit_rule(m, i, j):
             """Constrain max available output"""
 
-            return m.MNSP_TOTAL_OFFER_MW[i, j] <= m.MNSP_MAX_AVAILABLE[i, j]
+            return m.V_MNSP_TOTAL_OFFER[i, j] <= m.MNSP_MAX_AVAILABLE[i, j]
 
         # Ensure dispatch is constrained by max available offer amount
         m.MNSP_MAX_AVAILABLE_LIMIT = Constraint(m.S_MNSP_OFFERS, rule=mnsp_max_available_limit_rule)
@@ -308,7 +312,7 @@ class NEMDEModel:
         def trader_var_link_rule(m, i, j):
             """Link generic constraint trader variables to objective function variables"""
 
-            return m.TRADER_TOTAL_OFFER_MW[i, j] == m.V_TRADER[i, j]
+            return m.V_TRADER_TOTAL_OFFER[i, j] == m.V_TRADER[i, j]
 
         # Link between total power output and quantity band output
         m.TRADER_VAR_LINK = Constraint(m.S_TRADER_VARS, rule=trader_var_link_rule)
@@ -320,7 +324,7 @@ class NEMDEModel:
             from_region = self.data.get_interconnector_from_region(i)
             to_region = self.data.get_interconnector_to_region(i)
 
-            return m.V_INTERCONNECTOR[i] == m.MNSP_TOTAL_OFFER_MW[i, to_region] - m.MNSP_TOTAL_OFFER_MW[i, from_region]
+            return m.V_INTERCONNECTOR[i] == m.V_MNSP_TOTAL_OFFER[i, to_region] - m.V_MNSP_TOTAL_OFFER[i, from_region]
 
         # Link between total power output and quantity band output
         m.MNSP_VAR_LINK = Constraint(m.S_MNSPS, rule=mnsp_var_link_rule)
@@ -346,7 +350,7 @@ class NEMDEModel:
 
             if (i, 'ENOF') in m.S_TRADER_OFFERS:
                 ramp_up_limit = self.data.get_trader_ramp_up_rate(i)
-                return (m.TRADER_TOTAL_OFFER_MW[i, 'ENOF'] - m.TRADER_INITIAL_MW[i]
+                return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] - m.TRADER_INITIAL_MW[i]
                         <= (ramp_up_limit / 12) + m.V_CV_RAMP_UP[i])
             else:
                 return Constraint.Skip
@@ -359,7 +363,7 @@ class NEMDEModel:
 
             if (i, 'ENOF') in m.S_TRADER_OFFERS:
                 ramp_down_limit = self.data.get_trader_ramp_down_rate(i)
-                return (m.TRADER_TOTAL_OFFER_MW[i, 'ENOF'] - m.TRADER_INITIAL_MW[i] + m.V_CV_RAMP_DOWN[i]
+                return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] - m.TRADER_INITIAL_MW[i] + m.V_CV_RAMP_DOWN[i]
                         >= - ramp_down_limit / 12)
             else:
                 return Constraint.Skip
@@ -383,7 +387,8 @@ class NEMDEModel:
 
             if (min_output is not None) and ((i, 'ENOF') in m.S_TRADER_OFFERS) and (semi_dispatch == 0):
                 print(i, min_output)
-                return m.TRADER_TOTAL_OFFER_MW[i, 'ENOF'] >= min_output
+                # TODO: Add penalty violation constraint here
+                return m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] >= min_output
             else:
                 return Constraint.Skip
 
@@ -406,7 +411,7 @@ class NEMDEModel:
 
             if (max_output is not None) and ((i, 'ENOF') in m.S_TRADER_OFFERS) and (semi_dispatch == 0):
                 print(i, max_output)
-                return m.TRADER_TOTAL_OFFER_MW[i, 'ENOF'] <= max_output
+                return m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] <= max_output
             else:
                 return Constraint.Skip
 
@@ -430,6 +435,38 @@ class NEMDEModel:
 
         return m
 
+    def fix_interconnector_solution(self, m):
+        """Fix interconnector solution to observed values"""
+
+        # Interconnector solution for given case
+        interconnectors = self.data.get_interconnector_solution_dataframe()
+
+        # Fix solution for each interconnector
+        for index, row in interconnectors.iterrows():
+            m.V_INTERCONNECTOR[index].fix(row['Flow'])
+
+        return m
+
+    def fix_fcas_solution(self, m):
+        """Fix generator FCAS solution"""
+
+        # Trader solution
+        traders = self.data.get_trader_solution_dataframe()
+
+        # Raise service mapping between model and NEMDE output
+        raise_map = [('R6SE', 'R6Target'), ('R60S', 'R60Target'), ('R5MI', 'R5Target'), ('R5RE', 'R5RegTarget')]
+        lower_map = [('L6SE', 'L6Target'), ('L60S', 'L60Target'), ('L5MI', 'L5Target'), ('L5RE', 'L5RegTarget')]
+
+        # Fix FCAS solution based on observed NEMDE output
+        for index, row in traders.iterrows():
+
+            for i, j in raise_map + lower_map:
+
+                if (index, i) in m.S_TRADER_OFFERS:
+                    m.V_TRADER_TOTAL_OFFER[index, i].fix(row[j])
+
+        return m
+
     def construct_model(self, year, month, day, interval):
         """Construct model components"""
 
@@ -447,6 +484,10 @@ class NEMDEModel:
         m = self.define_constraints(m)
         m = self.define_objective(m)
 
+        # Fix solution (for testing purposes)
+        m = self.fix_interconnector_solution(m)
+        m = self.fix_fcas_solution(m)
+
         return m
 
     def solve_model(self, m):
@@ -462,7 +503,7 @@ class NEMDEModel:
         """Extract energy output"""
 
         # Convert to DataFrame
-        df = pd.DataFrame({k: [v.expr()] for k, v in m.TRADER_TOTAL_OFFER_MW.items()}).T
+        df = pd.DataFrame({k: [v.value] for k, v in m.V_TRADER_TOTAL_OFFER.items()}).T
         df.index.rename(['TRADER_ID', 'OFFER_TYPE'], inplace=True)
         df = df.rename(columns={0: 'output'})
 
@@ -470,6 +511,17 @@ class NEMDEModel:
         df_m = df.pivot_table(index='TRADER_ID', columns='OFFER_TYPE', values='output').astype(float, errors='ignore')
 
         return df_m
+
+    @staticmethod
+    def get_model_interconnector_flow(m):
+        """Extract energy output"""
+
+        # Convert to DataFrame
+        df = pd.DataFrame({k: [v.value] for k, v in m.V_INTERCONNECTOR.items()}).T
+        df.index.rename('INTERCONNECTOR_ID', inplace=True)
+        df = df.rename(columns={0: 'flow'})
+
+        return df
 
     @staticmethod
     def get_model_max_available_energy(m):
@@ -493,7 +545,7 @@ class NEMDEModel:
         df_m = self.get_model_energy_output(model)
 
         # Actual NEMDE output
-        df_o = self.data.get_trader_observed_dispatch_dataframe()
+        df_o = self.data.get_trader_solution_dataframe()
 
         # Combine into single DataFrame
         df_c = pd.concat([df_m[model_key], df_o[observed_key]], axis=1, sort=True)
@@ -508,7 +560,7 @@ class NEMDEModel:
 
         # Mean squared error (squared difference between NEMDE target values and model values)
         mse = df_c.loc[scheduled, :].apply(lambda x: (x[model_key] - x[observed_key]) ** 2, axis=1).mean()
-        print('Energy MSE =', mse)
+        print(f'{model_key} MSE =', mse)
 
         # Compare model and observed energy output
         ax = df_c.loc[scheduled, :].plot(x=model_key, y=observed_key, kind='scatter')
@@ -521,6 +573,35 @@ class NEMDEModel:
 
         return df_c
 
+    def check_interconnector_solution(self, m, model_key, observed_key):
+        """Compare model interconnector solution with observed interconnector flows from NEMDE"""
+
+        # Model solution
+        df_m = self.get_model_interconnector_flow(m)
+
+        # Observed interconnector flow
+        df_o = self.data.get_interconnector_solution_dataframe()
+
+        # Combine model and observed data into single DataFrame
+        df_c = pd.concat([df_m.loc[:, model_key], df_o.loc[:, observed_key]], axis=1, sort=True)
+
+        # Difference between model and interconnector solution
+        df_c['difference'] = df_c[model_key].subtract(df_c[observed_key])
+        df_c['abs_difference'] = df_c['difference'].abs()
+
+        # Compare model and observed energy output
+        ax = df_c.plot(x=model_key, y=observed_key, kind='scatter')
+
+        # Max and min values
+        max_value = df_c.loc[:, [model_key, observed_key]].max().max()
+        min_value = df_c.loc[:, [model_key, observed_key]].min().min()
+
+        ax.plot([min_value, max_value], [min_value, max_value], color='r', alpha=0.8, linestyle='--')
+
+        plt.show()
+
+        return df_c
+
 
 if __name__ == '__main__':
     # Construct model objective
@@ -528,13 +609,13 @@ if __name__ == '__main__':
     nemde = NEMDEModel(data_directory)
 
     # Create model
-    yr, mn, dy, inter = 2019, 10, 1, 1
+    yr, mn, dy, inter = 2019, 10, 10, 1
     model = nemde.construct_model(yr, mn, dy, inter)
     nemde.solve_model(model)
 
     # Check solution
     e = nemde.get_model_energy_output(model)
-    observed = nemde.data.get_trader_observed_dispatch_dataframe()
+    observed = nemde.data.get_trader_solution_dataframe()
 
     # Max available energy output
     available = nemde.get_model_max_available_energy(model)
@@ -544,12 +625,24 @@ if __name__ == '__main__':
 
     # Comparison between model and output energy target
     energy = nemde.check_energy_solution(model, 'ENOF', 'EnergyTarget')
-    energy_scheduled = energy.loc[scheduled_traders, :]
+
+    energy_scheduled = energy.loc[scheduled_traders, :].sort_values(by='abs_difference', ascending=False)
+    energy_scheduled['available'] = available.loc[scheduled_traders, 'ENOF']
 
     # Raise services
     R6S = nemde.check_energy_solution(model, 'R6SE', 'R6Target')
     R60S = nemde.check_energy_solution(model, 'R60S', 'R60Target')
-    R5RE = nemde.check_energy_solution(model, 'R5RE', 'R5RegTarget')
     R5MI = nemde.check_energy_solution(model, 'R5MI', 'R5Target')
+    R5RE = nemde.check_energy_solution(model, 'R5RE', 'R5RegTarget')
 
+    # Lower services
+    L6S = nemde.check_energy_solution(model, 'L6SE', 'L6Target')
+    L60S = nemde.check_energy_solution(model, 'L60S', 'L60Target')
+    L5MI = nemde.check_energy_solution(model, 'L5MI', 'L5Target')
+    L5RE = nemde.check_energy_solution(model, 'L5RE', 'L5RegTarget')
 
+    # Interconnector flow
+    flow = nemde.get_model_interconnector_flow(model)
+
+    # Compare model flow with interconnector solution
+    icon = nemde.check_interconnector_solution(model, 'flow', 'Flow')

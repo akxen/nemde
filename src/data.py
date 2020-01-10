@@ -6,10 +6,11 @@ import zipfile
 
 import xmltodict
 import xml.etree.ElementTree as ET
-# from lxml import etree as ET
 
-
+import numpy as np
 import pandas as pd
+
+import matplotlib.pyplot as plt
 
 
 class NEMDEData:
@@ -368,7 +369,7 @@ class NEMDEData:
 
         return unit_target.attrib
 
-    def get_trader_observed_dispatch_dataframe(self):
+    def get_trader_solution_dataframe(self):
         """Get observed dispatch for each trader and display in a Pandas DataFrame"""
 
         # Path to elements containing energy target information (only consider no intervention case for now)
@@ -469,13 +470,76 @@ class NEMDEData:
 
         return float(self.interval_data.find(path).get('RampRatePrice'))
 
+    def get_interconnector_observed_flow_value(self, interconnector_id):
+        """Get observed flow over a given interconnector"""
+
+        # Path to interconnector element
+        path = f".//NemSpdOutputs/InterconnectorSolution[@InterconnectorID='{interconnector_id}']"
+
+        return float(self.interval_data.find(path).get('Flow'))
+
+    def get_interconnector_solution_dataframe(self):
+        """Get interconnector solution in DataFrame format"""
+
+        # Path to interconnector solution elements. Only consider no intervention case for now.
+        path = f".//NemSpdOutputs/InterconnectorSolution[@Intervention='0']"
+
+        # All interconnectors
+        interconnectors = self.interval_data.findall(path)
+
+        # Extract solution information
+        df = pd.DataFrame([i.attrib for i in interconnectors]).set_index('InterconnectorID')
+
+        # Attempt to convert all columns to float
+        for c in df.columns:
+            df[c] = df[c].astype(float, errors='ignore')
+
+        return df
+
+    def get_trader_cost_function(self, trader_id, offer_type):
+        """Extract price and quantity band information for given trader and offer type and visualise bids"""
+
+        # Extract prices and quantities
+        prices = [self.get_trader_price_band_value(trader_id, offer_type, b) for b in range(1, 11)]
+        quantities = [self.get_trader_quantity_band_value(trader_id, offer_type, b) for b in range(1, 11)]
+
+        # Combine into single object
+        cost = list(zip(prices, quantities))
+
+        # Extract non-zero offers. Duplicate first price (for plotting step function)
+        y_price = [i[0] for i in cost if i[1] != 0]
+        y_price = [y_price[0]] + y_price
+
+        x_quantity = [i[1] for i in cost if i[1] != 0]
+        x_quantity = [0] + x_quantity
+        x_quantity = list(np.cumsum(x_quantity))
+
+        fig, ax = plt.subplots()
+        ax.step(x_quantity, y_price, where='pre')
+        ax.set_ylabel('Price ($/MWh)')
+        ax.set_xlabel('Offer (MW)')
+        ax.set_title(f'{trader_id} {offer_type}')
+        plt.show()
+
+        return prices, quantities
+
+    def get_region_initial_demand_value(self, region_id):
+        """Get region initial demand"""
+
+        # Path to elements containing region information
+        path = (f".//NemSpdInputs/RegionCollection/Region[@RegionID='{region_id}']/RegionInitialConditionCollection/"
+                f"RegionInitialCondition[@InitialConditionID='InitialDemand']")
+
+        return float(self.interval_data.find(path).get('Value'))
+
 
 if __name__ == '__main__':
-    data_directory = 'C:/Users/eee/Desktop/nemweb/Reports/Data_Archive'
+    data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
+                                  os.path.pardir, 'nemweb', 'Reports', 'Data_Archive')
 
     nemde = NEMDEData(data_directory)
 
-    yr, mt, dy, iv = 2019, 10, 1, 1
+    yr, mt, dy, iv = 2019, 10, 10, 1
     nemde.load_interval(yr, mt, dy, iv)
 
     trd_ids = nemde.get_trader_ids()
@@ -484,3 +548,9 @@ if __name__ == '__main__':
     int_id = nemde.get_interconnector_ids()
     mp_o_index = nemde.get_mnsp_offer_index()
     sd = nemde.get_trader_semi_dispatch_value('AGLHAL')
+
+    d = nemde.get_interconnector_solution_dataframe()
+
+    p, q = nemde.get_trader_cost_function('DALNTHL1', 'L6SE')
+
+    demand = [nemde.get_region_initial_demand_value(r) for r in ['SA1', 'VIC1', 'NSW1', 'QLD1', 'TAS1']]
