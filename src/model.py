@@ -40,6 +40,9 @@ class NEMDEModel:
         # Generic constraints
         m.S_GENERIC_CONSTRAINTS = Set(initialize=self.data.get_generic_constraint_index())
 
+        # NEM regions
+        m.S_REGIONS = Set(initialize=self.data.get_region_ids())
+
         # Generic constraints trader variables
         m.S_TRADER_VARS = Set(initialize=self.data.get_generic_constraint_trader_variables())
 
@@ -132,6 +135,15 @@ class NEMDEModel:
 
         # Ramp-rate constraint violation factor
         m.CVF_RAMP_RATE = Param(initialize=self.data.get_constraint_violation_ramp_rate_penalty())
+
+        def region_demand_rule(m, r):
+            """Get demand in each region. Using forecast demand for now."""
+            # TODO: investigate whether using "DemandForecast" / "ClearedDemand" / "FixedDemand" is most appropriate
+
+            return self.data.get_region_demand_forecast_value(r)
+
+        # Demand in each NEM region
+        m.DEMAND = Param(m.S_REGIONS, rule=region_demand_rule)
 
         return m
 
@@ -248,6 +260,49 @@ class NEMDEModel:
 
         # Penalty factor for ramp up rate violation
         m.CV_RAMP_UP_PENALTY = Expression(m.S_TRADERS, rule=constraint_violation_ramp_up_penalty_rule)
+
+        def region_generation_rule(m, r):
+            """Available energy offers in given region"""
+
+            return sum(m.V_TRADER_TOTAL_OFFER[i, j] for i, j in m.S_TRADER_OFFERS if (j == 'ENOF')
+                       and (self.data.get_trader_region_id(i) == r))
+
+        # Total generation dispatched in a given region
+        m.REGION_GENERATION = Expression(m.S_REGIONS, rule=region_generation_rule)
+
+        def region_load_rule(m, r):
+            """Available load offers in given region"""
+
+            return sum(m.V_TRADER_TOTAL_OFFER[i, j] for i, j in m.S_TRADER_OFFERS if (j == 'LDOF')
+                       and (self.data.get_trader_region_id(i) == r))
+
+        # Total load dispatched in a given region
+        m.REGION_LOAD = Expression(m.S_REGIONS, rule=region_load_rule)
+
+        def region_interconnector_injection_rule(m, r):
+            """Net injection associated with interconnector flows"""
+
+            # TODO: Use incidence matrix instead
+            if r == 'SA1':
+                return m.V_INTERCONNECTOR['V-SA'] + m.V_INTERCONNECTOR['V-S-MNSP1']
+
+            elif r == 'VIC1':
+                return - m.V_INTERCONNECTOR['V-SA'] - m.V_INTERCONNECTOR['V-S-MNSP1'] + m.V_INTERCONNECTOR['T-V-MNSP1'] - m.V_INTERCONNECTOR['VIC1-NSW1']
+
+            elif r == 'TAS1':
+                return - m.V_INTERCONNECTOR['T-V-MNSP1']
+
+            elif r == 'NSW1':
+                return m.V_INTERCONNECTOR['VIC1-NSW1'] - m.V_INTERCONNECTOR['NSW1-QLD1'] - m.V_INTERCONNECTOR['N-Q-MNSP1']
+
+            elif r == 'QLD1':
+                return m.V_INTERCONNECTOR['N-Q-MNSP1'] + m.V_INTERCONNECTOR['NSW1-QLD1']
+
+            else:
+                raise Exception(f'Unexpected region ID: {r}')
+
+        # Net injection from interconnector flows for each region
+        m.REGION_INTERCONNECTOR_INJECTION = Expression(m.S_REGIONS, rule=region_interconnector_injection_rule)
 
         return m
 
@@ -418,6 +473,15 @@ class NEMDEModel:
         # Maximum output
         # m.TRADER_MAX_OUTPUT_LIMIT = Constraint(m.S_TRADERS, rule=trader_max_output_limit_rule)
 
+        def region_power_balance_rule(m, r):
+            """Power balance in each NEM region"""
+
+            # Ensure power balances in each NEM region
+            return m.REGION_GENERATION[r] - m.DEMAND[r] - m.REGION_LOAD[r] + m.REGION_INTERCONNECTOR_INJECTION[r] == 0
+
+        # Region power balance constraint
+        m.REGION_POWER_BALANCE = Constraint(m.S_REGIONS, rule=region_power_balance_rule)
+
         return m
 
     def define_objective(self, m):
@@ -476,6 +540,9 @@ class NEMDEModel:
         # Initialise model
         m = ConcreteModel()
 
+        # Add component allowing dual variables to be imported
+        m.dual = Suffix(direction=Suffix.IMPORT)
+
         # Define model components
         m = self.define_sets(m)
         m = self.define_parameters(m)
@@ -485,8 +552,8 @@ class NEMDEModel:
         m = self.define_objective(m)
 
         # Fix solution (for testing purposes)
-        m = self.fix_interconnector_solution(m)
-        m = self.fix_fcas_solution(m)
+        # m = self.fix_interconnector_solution(m)
+        # m = self.fix_fcas_solution(m)
 
         return m
 
@@ -624,10 +691,11 @@ if __name__ == '__main__':
     scheduled_traders = [i for i in e.index if nemde.data.get_trader_semi_dispatch_value(i) == 0]
 
     # Comparison between model and output energy target
-    energy = nemde.check_energy_solution(model, 'ENOF', 'EnergyTarget')
+    enof = nemde.check_energy_solution(model, 'ENOF', 'EnergyTarget')
+    ldof = nemde.check_energy_solution(model, 'LDOF', 'EnergyTarget')
 
-    energy_scheduled = energy.loc[scheduled_traders, :].sort_values(by='abs_difference', ascending=False)
-    energy_scheduled['available'] = available.loc[scheduled_traders, 'ENOF']
+    enof_scheduled = enof.loc[scheduled_traders, :].sort_values(by='abs_difference', ascending=False)
+    enof_scheduled['available'] = available.loc[scheduled_traders, 'ENOF']
 
     # Raise services
     R6S = nemde.check_energy_solution(model, 'R6SE', 'R6Target')
@@ -646,3 +714,8 @@ if __name__ == '__main__':
 
     # Compare model flow with interconnector solution
     icon = nemde.check_interconnector_solution(model, 'flow', 'Flow')
+
+    # Dual results
+
+    # Region prices
+    prices = {r: model.dual[model.REGION_POWER_BALANCE[r]] for r in model.S_REGIONS}

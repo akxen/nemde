@@ -192,30 +192,30 @@ class NEMDEData:
 
         return var_ids
 
-    def get_trader_price_band_value(self, duid, offer_type, band):
+    def get_trader_price_band_value(self, trader_id, offer_type, band):
         """Get price band value for given unit, offer type, and price band"""
 
         # Path to element containing price band information for given unit and offer type
-        path = (f".//NemSpdInputs/TraderCollection/Trader[@TraderID='{duid}']/TradePriceStructureCollection/"
+        path = (f".//NemSpdInputs/TraderCollection/Trader[@TraderID='{trader_id}']/TradePriceStructureCollection/"
                 f"TradePriceStructure/TradeTypePriceStructureCollection/"
                 f"TradeTypePriceStructure[@TradeType='{offer_type}']")
 
         return float(self.interval_data.find(path).get(f'PriceBand{band}'))
 
-    def get_trader_quantity_band_value(self, duid, offer_type, band):
+    def get_trader_quantity_band_value(self, trader_id, offer_type, band):
         """Get quantity band value for given unit, offer type, and quantity band"""
 
         # Path to element containing price band information for given unit and offer type
-        path = (f".//NemSpdInputs/PeriodCollection/Period/TraderPeriodCollection/TraderPeriod[@TraderID='{duid}']"
+        path = (f".//NemSpdInputs/PeriodCollection/Period/TraderPeriodCollection/TraderPeriod[@TraderID='{trader_id}']"
                 f"/TradeCollection/Trade[@TradeType='{offer_type}']")
 
         return float(self.interval_data.find(path).get(f'BandAvail{band}'))
 
-    def get_trader_max_available_value(self, duid, offer_type):
+    def get_trader_max_available_value(self, trader_id, offer_type):
         """Get maximum amount that can be dispatch for a given generator and offer type"""
 
         # Path to element containing quantity band information for given unit and offer type
-        path = (f".//NemSpdInputs/PeriodCollection/Period/TraderPeriodCollection/TraderPeriod[@TraderID='{duid}']"
+        path = (f".//NemSpdInputs/PeriodCollection/Period/TraderPeriodCollection/TraderPeriod[@TraderID='{trader_id}']"
                 f"/TradeCollection/Trade[@TradeType='{offer_type}']")
 
         return float(self.interval_data.find(path).get('MaxAvail'))
@@ -531,6 +531,30 @@ class NEMDEData:
                 f"RegionInitialCondition[@InitialConditionID='InitialDemand']")
 
         return float(self.interval_data.find(path).get('Value'))
+
+    def get_region_demand_forecast_value(self, region_id):
+        """Get forecast demand for a given region"""
+
+        # Path to region information elements
+        path = f".//NemSpdInputs/PeriodCollection/Period/RegionPeriodCollection/RegionPeriod[@RegionID='{region_id}']"
+
+        return float(self.interval_data.find(path).get('DemandForecast'))
+
+    def get_region_ids(self):
+        """Get NEM region IDs"""
+
+        # Path to region information elements
+        path = f'.//NemSpdInputs/PeriodCollection/Period/RegionPeriodCollection/RegionPeriod'
+
+        return [i.get('RegionID') for i in self.interval_data.findall(path)]
+
+    def get_trader_region_id(self, trader_id):
+        """Get the NEM region to which a given trader belongs"""
+
+        # Path to trader elements
+        path = f".//NemSpdInputs/PeriodCollection/Period/TraderPeriodCollection/TraderPeriod[@TraderID='{trader_id}']"
+
+        return self.interval_data.find(path).get('RegionID')
 
 
 if __name__ == '__main__':
