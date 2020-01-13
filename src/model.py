@@ -1,5 +1,7 @@
 """Model used to simulate AEMO's National Electricity Market Dispatch Engine (NEMDE)"""
 
+import os
+
 import pandas as pd
 from pyomo.environ import *
 from pyomo.util.infeasible import log_infeasible_constraints
@@ -179,9 +181,7 @@ class NEMDEModel:
             """Total cost associated with each offer"""
 
             # Scaling factor depending on participant type. Generator (+1), load (-1)
-            trader_type = self.data.get_trader_type(i)
-
-            if ((trader_type == 'LOAD') or (trader_type == 'NORMALLY_ON_LOAD')) and (j == 'LDOF'):
+            if j == 'LDOF':
                 factor = -1
             else:
                 factor = 1
@@ -372,6 +372,15 @@ class NEMDEModel:
         # Link between total power output and quantity band output
         m.TRADER_VAR_LINK = Constraint(m.S_TRADER_VARS, rule=trader_var_link_rule)
 
+        def region_var_link_rule(m, i, j):
+            """Link total offer amount for each bid type to region variables"""
+
+            return sum(m.V_TRADER_TOTAL_OFFER[q, r] for q, r in m.S_TRADER_OFFERS
+                       if (self.data.get_trader_region_id(q) == i) and (r == j)) == m.V_REGION[i, j]
+
+        # Link between region variables and the trader components constituting those variables
+        m.REGION_VAR_LINK = Constraint(m.S_REGION_VARS, rule=region_var_link_rule)
+
         def mnsp_var_link_rule(m, i):
             """Link generic constraint MNSP variables to objective function variables"""
 
@@ -480,7 +489,84 @@ class NEMDEModel:
             return m.REGION_GENERATION[r] - m.DEMAND[r] - m.REGION_LOAD[r] + m.REGION_INTERCONNECTOR_INJECTION[r] == 0
 
         # Region power balance constraint
-        m.REGION_POWER_BALANCE = Constraint(m.S_REGIONS, rule=region_power_balance_rule)
+        # m.REGION_POWER_BALANCE = Constraint(m.S_REGIONS, rule=region_power_balance_rule)
+
+        def fcas_trapezium_1_rule(m, i, j):
+            """FCAS trapezium segment. Relates max available FCAS to MW output."""
+
+            if j in ['LDOF', 'ENOF']:
+                return Constraint.Skip
+            else:
+                # Enablement min
+                enablement_min = self.data.get_trader_fcas_enablement_min_value(i, j)
+
+                # Enablement lower breakpoint
+                low_breakpoint = self.data.get_trader_fcas_low_breakpoint_value(i, j)
+
+                # Max available
+                max_available = self.data.get_trader_max_available_value(i, j)
+
+                # Slope
+                try:
+                    slope = max_available / (low_breakpoint - enablement_min)
+                except ZeroDivisionError:
+                    return m.V_TRADER_TOTAL_OFFER[i, j] <= max_available
+
+                # Intercept
+                intercept = - slope * enablement_min
+                try:
+                    return m.V_TRADER_TOTAL_OFFER[i, j] <= (slope * m.V_TRADER_TOTAL_OFFER[i, 'ENOF']) + intercept
+                except KeyError:
+                    return m.V_TRADER_TOTAL_OFFER[i, j] <= (slope * m.V_TRADER_TOTAL_OFFER[i, 'LDOF']) + intercept
+
+        # First segment of FCAS trapezium linking FCAS to unit MW output
+        # m.FCAS_TRAPEZIUM_1 = Constraint(m.S_TRADER_OFFERS, rule=fcas_trapezium_1_rule)
+
+        def fcas_trapezium_2_rule(m, i, j):
+            """FCAS trapezium segment. Relates max available FCAS to MW output."""
+
+            if j in ['LDOF', 'ENOF']:
+                return Constraint.Skip
+            else:
+                # Max available
+                max_available = self.data.get_trader_max_available_value(i, j)
+
+                return m.V_TRADER_TOTAL_OFFER[i, j] <= max_available
+
+        # Second segment of FCAS trapezium linking FCAS to unit MW output
+        m.FCAS_TRAPEZIUM_2 = Constraint(m.S_TRADER_OFFERS, rule=fcas_trapezium_2_rule)
+
+        def fcas_trapezium_3_rule(m, i, j):
+            """FCAS trapezium segment. Relates max available FCAS to MW output."""
+
+            if j in ['LDOF', 'ENOF']:
+                return Constraint.Skip
+            else:
+                # Enablement max
+                enablement_max = self.data.get_trader_fcas_enablement_max_value(i, j)
+
+                # Enablement higher breakpoint
+                high_breakpoint = self.data.get_trader_fcas_high_breakpoint_value(i, j)
+
+                # Max available
+                max_available = self.data.get_trader_max_available_value(i, j)
+
+                # Slope
+                try:
+                    slope = - max_available / (enablement_max - high_breakpoint)
+                except ZeroDivisionError:
+                    return m.V_TRADER_TOTAL_OFFER[i, j] <= max_available
+
+                # Intercept
+                intercept = - slope * enablement_max
+
+                try:
+                    return m.V_TRADER_TOTAL_OFFER[i, j] <= (slope * m.V_TRADER_TOTAL_OFFER[i, 'ENOF']) + intercept
+                except KeyError:
+                    return m.V_TRADER_TOTAL_OFFER[i, j] <= (slope * m.V_TRADER_TOTAL_OFFER[i, 'LDOF']) + intercept
+
+        # Third segment of FCAS trapezium linking FCAS to unit MW output
+        # m.FCAS_TRAPEZIUM_3 = Constraint(m.S_TRADER_OFFERS, rule=fcas_trapezium_3_rule)
 
         return m
 
@@ -704,7 +790,7 @@ if __name__ == '__main__':
     R5RE = nemde.check_energy_solution(model, 'R5RE', 'R5RegTarget')
 
     # Lower services
-    L6S = nemde.check_energy_solution(model, 'L6SE', 'L6Target')
+    L6SE = nemde.check_energy_solution(model, 'L6SE', 'L6Target')
     L60S = nemde.check_energy_solution(model, 'L60S', 'L60Target')
     L5MI = nemde.check_energy_solution(model, 'L5MI', 'L5Target')
     L5RE = nemde.check_energy_solution(model, 'L5RE', 'L5RegTarget')
@@ -718,4 +804,12 @@ if __name__ == '__main__':
     # Dual results
 
     # Region prices
-    prices = {r: model.dual[model.REGION_POWER_BALANCE[r]] for r in model.S_REGIONS}
+    # prices = {r: model.dual[model.REGION_POWER_BALANCE[r]] for r in model.S_REGIONS}
+
+    with open(os.path.join(os.path.dirname(__file__), 'output', 'constraints.txt'), 'w') as f:
+        for k, v in model.GENERIC_CONSTRAINT.items():
+            to_write = f"{k}: {v.expr}\n"
+            f.write(to_write)
+
+    # for i in ['ENOF', 'L5MI', 'L5RE', 'L60S', 'L6SE', 'R5MI', 'R5RE', 'R60S', 'R6SE']:
+    #     nemde.data.get

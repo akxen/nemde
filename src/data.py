@@ -556,6 +556,42 @@ class NEMDEData:
 
         return self.interval_data.find(path).get('RegionID')
 
+    def get_trader_fcas_enablement_min_value(self, trader_id, offer_type):
+        """Get FCAS trapezium min enablement value"""
+
+        # Path to element containing price band information for given unit and offer type
+        path = (f".//NemSpdInputs/PeriodCollection/Period/TraderPeriodCollection/TraderPeriod[@TraderID='{trader_id}']"
+                f"/TradeCollection/Trade[@TradeType='{offer_type}']")
+
+        return float(self.interval_data.find(path).get(f'EnablementMin'))
+
+    def get_trader_fcas_enablement_max_value(self, trader_id, offer_type):
+        """Get FCAS trapezium max enablement value"""
+
+        # Path to element containing price band information for given unit and offer type
+        path = (f".//NemSpdInputs/PeriodCollection/Period/TraderPeriodCollection/TraderPeriod[@TraderID='{trader_id}']"
+                f"/TradeCollection/Trade[@TradeType='{offer_type}']")
+
+        return float(self.interval_data.find(path).get(f'EnablementMax'))
+
+    def get_trader_fcas_low_breakpoint_value(self, trader_id, offer_type):
+        """Get FCAS trapezium low breakpoint value"""
+
+        # Path to element containing price band information for given unit and offer type
+        path = (f".//NemSpdInputs/PeriodCollection/Period/TraderPeriodCollection/TraderPeriod[@TraderID='{trader_id}']"
+                f"/TradeCollection/Trade[@TradeType='{offer_type}']")
+
+        return float(self.interval_data.find(path).get(f'LowBreakpoint'))
+
+    def get_trader_fcas_high_breakpoint_value(self, trader_id, offer_type):
+        """Get FCAS trapezium high breakpoint value"""
+
+        # Path to element containing price band information for given unit and offer type
+        path = (f".//NemSpdInputs/PeriodCollection/Period/TraderPeriodCollection/TraderPeriod[@TraderID='{trader_id}']"
+                f"/TradeCollection/Trade[@TradeType='{offer_type}']")
+
+        return float(self.interval_data.find(path).get(f'HighBreakpoint'))
+
 
 if __name__ == '__main__':
     data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
