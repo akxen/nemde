@@ -592,6 +592,51 @@ class NEMDEData:
 
         return float(self.interval_data.find(path).get(f'HighBreakpoint'))
 
+    def get_trader_scada_ramp_up_rate_value(self, trader_id):
+        """Get AGC ramp-up capability"""
+
+        # Path to element containing price band information for given unit and offer type
+        path = (f".//NemSpdInputs/TraderCollection/Trader[@TraderID='{trader_id}']/TraderInitialConditionCollection/"
+                f"TraderInitialCondition/[@InitialConditionID='SCADARampUpRate']")
+
+        return float(self.interval_data.find(path).get('Value'))
+
+    def get_trader_scada_ramp_down_rate_value(self, trader_id):
+        """Get AGC ramp-down capability"""
+
+        # Path to element containing price band information for given unit and offer type
+        path = (f".//NemSpdInputs/TraderCollection/Trader[@TraderID='{trader_id}']/TraderInitialConditionCollection/"
+                f"TraderInitialCondition/[@InitialConditionID='SCADARampDnRate']")
+
+        return float(self.interval_data.find(path).get('Value'))
+
+    def get_trader_scada_agc_status_value(self, trader_id):
+        """Get AGC status"""
+
+        # Path to element containing price band information for given unit and offer type
+        path = (f".//NemSpdInputs/TraderCollection/Trader[@TraderID='{trader_id}']/TraderInitialConditionCollection/"
+                f"TraderInitialCondition/[@InitialConditionID='AGCStatus']")
+
+        return int(self.interval_data.find(path).get('Value'))
+
+    def get_trader_scada_agc_upper_limit_value(self, trader_id):
+        """Get AGC upper MW limit"""
+
+        # Path to element containing price band information for given unit and offer type
+        path = (f".//NemSpdInputs/TraderCollection/Trader[@TraderID='{trader_id}']/TraderInitialConditionCollection/"
+                f"TraderInitialCondition/[@InitialConditionID='HMW']")
+
+        return float(self.interval_data.find(path).get('Value'))
+
+    def get_trader_scada_agc_lower_limit_value(self, trader_id):
+        """Get AGC lower MW limit"""
+
+        # Path to element containing price band information for given unit and offer type
+        path = (f".//NemSpdInputs/TraderCollection/Trader[@TraderID='{trader_id}']/TraderInitialConditionCollection/"
+                f"TraderInitialCondition/[@InitialConditionID='LMW']")
+
+        return float(self.interval_data.find(path).get('Value'))
+
 
 if __name__ == '__main__':
     data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
@@ -614,3 +659,10 @@ if __name__ == '__main__':
     p, q = nemde.get_trader_cost_function('DALNTHL1', 'L6SE')
 
     demand = [nemde.get_region_initial_demand_value(r) for r in ['SA1', 'VIC1', 'NSW1', 'QLD1', 'TAS1']]
+
+    ru = nemde.get_trader_scada_ramp_up_rate_value('VP6')
+    rd = nemde.get_trader_scada_ramp_down_rate_value('VP6')
+    agc = nemde.get_trader_scada_agc_status_value('VP6')
+
+    agc_u = nemde.get_trader_scada_agc_upper_limit_value('VP6')
+    agc_l = nemde.get_trader_scada_agc_lower_limit_value('VP6')

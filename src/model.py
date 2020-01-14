@@ -172,6 +172,8 @@ class NEMDEModel:
         m.V_CV_RAMP_UP = Var(m.S_TRADERS, within=NonNegativeReals)
         m.V_CV_RAMP_DOWN = Var(m.S_TRADERS, within=NonNegativeReals)
 
+        m.V_CV_FCAS_JOINT_CAPACITY_DOWN = Var(m.S_TRADER_OFFERS, within=NonNegativeReals)
+
         return m
 
     def define_expressions(self, m):
@@ -287,13 +289,15 @@ class NEMDEModel:
                 return m.V_INTERCONNECTOR['V-SA'] + m.V_INTERCONNECTOR['V-S-MNSP1']
 
             elif r == 'VIC1':
-                return - m.V_INTERCONNECTOR['V-SA'] - m.V_INTERCONNECTOR['V-S-MNSP1'] + m.V_INTERCONNECTOR['T-V-MNSP1'] - m.V_INTERCONNECTOR['VIC1-NSW1']
+                return - m.V_INTERCONNECTOR['V-SA'] - m.V_INTERCONNECTOR['V-S-MNSP1'] + m.V_INTERCONNECTOR[
+                    'T-V-MNSP1'] - m.V_INTERCONNECTOR['VIC1-NSW1']
 
             elif r == 'TAS1':
                 return - m.V_INTERCONNECTOR['T-V-MNSP1']
 
             elif r == 'NSW1':
-                return m.V_INTERCONNECTOR['VIC1-NSW1'] - m.V_INTERCONNECTOR['NSW1-QLD1'] - m.V_INTERCONNECTOR['N-Q-MNSP1']
+                return m.V_INTERCONNECTOR['VIC1-NSW1'] - m.V_INTERCONNECTOR['NSW1-QLD1'] - m.V_INTERCONNECTOR[
+                    'N-Q-MNSP1']
 
             elif r == 'QLD1':
                 return m.V_INTERCONNECTOR['N-Q-MNSP1'] + m.V_INTERCONNECTOR['NSW1-QLD1']
@@ -303,6 +307,15 @@ class NEMDEModel:
 
         # Net injection from interconnector flows for each region
         m.REGION_INTERCONNECTOR_INJECTION = Expression(m.S_REGIONS, rule=region_interconnector_injection_rule)
+
+        def constraint_violation_joint_capacity_down_penalty_rule(m, i, j):
+            """Penalty for FCAS joint capacity constraint down violation"""
+
+            return 2278500 * m.V_CV_FCAS_JOINT_CAPACITY_DOWN[i, j]
+
+        # FCAS joint capacity constraint down violation penalty
+        m.CV_FCAS_JOINT_CAPACITY_DOWN_PENALTY = Expression(m.S_TRADER_OFFERS,
+                                                           rule=constraint_violation_joint_capacity_down_penalty_rule)
 
         return m
 
@@ -534,7 +547,7 @@ class NEMDEModel:
                 return m.V_TRADER_TOTAL_OFFER[i, j] <= max_available
 
         # Second segment of FCAS trapezium linking FCAS to unit MW output
-        m.FCAS_TRAPEZIUM_2 = Constraint(m.S_TRADER_OFFERS, rule=fcas_trapezium_2_rule)
+        # m.FCAS_TRAPEZIUM_2 = Constraint(m.S_TRADER_OFFERS, rule=fcas_trapezium_2_rule)
 
         def fcas_trapezium_3_rule(m, i, j):
             """FCAS trapezium segment. Relates max available FCAS to MW output."""
@@ -568,6 +581,216 @@ class NEMDEModel:
         # Third segment of FCAS trapezium linking FCAS to unit MW output
         # m.FCAS_TRAPEZIUM_3 = Constraint(m.S_TRADER_OFFERS, rule=fcas_trapezium_3_rule)
 
+        def fcas_joint_ramp_up_rule(m, i):
+            """FCAS-energy joint ramping constraint"""
+
+            # No constraint if unit does not have an energy offer
+            if (i, 'ENOF') not in m.S_TRADER_OFFERS:
+                return Constraint.Skip
+
+            # No constraint if no regulating service offer
+            if (i, 'R5RE') not in m.S_TRADER_OFFERS:
+                return Constraint.Skip
+
+            # Get AGC value
+            agc_status = self.data.get_trader_scada_agc_status_value(i)
+            if agc_status != 1:
+                return Constraint.Skip
+
+            # Initial MW
+            initial_mw = self.data.get_trader_initial_condition_mw(i)
+
+            # SCADA ramp capability
+            scada_ramp = self.data.get_trader_scada_ramp_up_rate_value(i)
+
+            # Only construct constraint if SCADA ramp rate greater than 0
+            if scada_ramp > 0:
+                return m.V_TRADER_TOTAL_OFFER[(i, 'ENOF')] + m.V_TRADER_TOTAL_OFFER[(i, 'R5RE')] <= initial_mw + (
+                            scada_ramp / 12)
+            else:
+                return Constraint.Skip
+
+        # FCAS joint ramp up constraint
+        m.FCAS_JOINT_RAMP_UP = Constraint(m.S_TRADERS, rule=fcas_joint_ramp_up_rule)
+
+        def fcas_joint_ramp_down_rule(m, i):
+            """FCAS-energy joint ramping constraint"""
+
+            # No constraint if unit does not have an energy offer
+            if (i, 'ENOF') not in m.S_TRADER_OFFERS:
+                return Constraint.Skip
+
+            # No constraint if no regulating service offer
+            if (i, 'L5RE') not in m.S_TRADER_OFFERS:
+                return Constraint.Skip
+
+            # Get AGC status
+            agc_status = self.data.get_trader_scada_agc_status_value(i)
+            if agc_status != 1:
+                return Constraint.Skip
+
+            # Initial MW
+            initial_mw = self.data.get_trader_initial_condition_mw(i)
+
+            # SCADA ramp capability
+            scada_ramp = self.data.get_trader_scada_ramp_down_rate_value(i)
+
+            # Only construct constraint if SCADA ramp rate greater than 0
+            if scada_ramp > 0:
+                return m.V_TRADER_TOTAL_OFFER[(i, 'ENOF')] - m.V_TRADER_TOTAL_OFFER[(i, 'L5RE')] >= initial_mw - (
+                            scada_ramp / 12)
+            else:
+                return Constraint.Skip
+
+        # FCAS joint ramp down constraint
+        m.FCAS_JOINT_RAMP_DOWN = Constraint(m.S_TRADERS, rule=fcas_joint_ramp_down_rule)
+
+        def fcas_energy_regulating_up_rule(m, i):
+            """Energy and regulating FCAS capacity constraint"""
+
+            if (i, 'ENOF') not in m.S_TRADER_OFFERS:
+                return Constraint.Skip
+
+            if (i, 'R5RE') not in m.S_TRADER_OFFERS:
+                return Constraint.Skip
+
+            # Get AGC status
+            agc_status = self.data.get_trader_scada_agc_status_value(i)
+            if agc_status != 1:
+                return Constraint.Skip
+
+            # Get enablement min, enablement max, high breakpoint, and max available
+            enablement_max = self.data.get_trader_fcas_enablement_max_value(i, 'R5RE')
+            high_breakpoint = self.data.get_trader_fcas_high_breakpoint_value(i, 'R5RE')
+            max_available = self.data.get_trader_max_available_value(i, 'R5RE')
+
+            # Only construct constraint if max available is positive
+            if max_available == 0:
+                return Constraint.Skip
+
+            # Coefficient used in constraint
+            coefficient = (enablement_max - high_breakpoint) / max_available
+
+            return m.V_TRADER_TOTAL_OFFER[(i, 'ENOF')] + (
+                        coefficient * m.V_TRADER_TOTAL_OFFER[(i, 'R5RE')]) <= enablement_max
+
+        # FCAS energy regulating capacity constraint up
+        m.FCAS_ENERGY_REGULATING_UP = Constraint(m.S_TRADERS, rule=fcas_energy_regulating_up_rule)
+
+        def fcas_energy_regulating_down_rule(m, i):
+            """Energy and regulating FCAS capacity constraint"""
+
+            if (i, 'ENOF') not in m.S_TRADER_OFFERS:
+                return Constraint.Skip
+
+            if (i, 'L5RE') not in m.S_TRADER_OFFERS:
+                return Constraint.Skip
+
+            # Get AGC status
+            agc_status = self.data.get_trader_scada_agc_status_value(i)
+            if agc_status != 1:
+                return Constraint.Skip
+
+            # Get enablement min, enablement max, high breakpoint, and max available
+            enablement_min = self.data.get_trader_fcas_enablement_min_value(i, 'L5RE')
+            low_breakpoint = self.data.get_trader_fcas_high_breakpoint_value(i, 'L5RE')
+            max_available = self.data.get_trader_max_available_value(i, 'L5RE')
+
+            # Only construct constraint if max available is positive
+            if max_available == 0:
+                return Constraint.Skip
+
+            # Coefficient used in constraint
+            coefficient = (low_breakpoint - enablement_min) / max_available
+
+            return m.V_TRADER_TOTAL_OFFER[(i, 'ENOF')] - (
+                        coefficient * m.V_TRADER_TOTAL_OFFER[(i, 'L5RE')]) >= enablement_min
+
+        # FCAS energy regulating capacity constraint down
+        m.FCAS_ENERGY_REGULATING_DOWN = Constraint(m.S_TRADERS, rule=fcas_energy_regulating_down_rule)
+
+        def fcas_joint_capacity_up_rule(m, i, j):
+            """Joint FCAS capacity constraint up"""
+
+            # Only consider generators for now
+            # TODO: consider loads also
+            if (i, 'ENOF') not in m.S_TRADER_OFFERS:
+                return Constraint.Skip
+
+            if (i, 'R5RE') not in m.S_TRADER_OFFERS:
+                return Constraint.Skip
+
+            # Only proceed if a raise capacity offer
+            if j not in ['R6SE', 'R60S', 'R5MI']:
+                return Constraint.Skip
+
+            # AGC status
+            agc_status = self.data.get_trader_scada_agc_status_value(i)
+
+            # Enablement max, high breakpoint, max available
+            initial_mw = self.data.get_trader_initial_condition_mw(i)
+            enablement_max = self.data.get_trader_fcas_enablement_max_value(i, j)
+            enablement_min = self.data.get_trader_fcas_enablement_min_value(i, j)
+            high_breakpoint = self.data.get_trader_fcas_high_breakpoint_value(i, j)
+            max_available = self.data.get_trader_max_available_value(i, j)
+
+            if (initial_mw < enablement_min) or (initial_mw > enablement_max):
+                return Constraint.Skip
+
+            # Trapezium slope
+            try:
+                coefficient = (enablement_max - high_breakpoint) / max_available
+            except ZeroDivisionError:
+                return Constraint.Skip
+
+            return (m.V_TRADER_TOTAL_OFFER[(i, 'ENOF')] + (coefficient * m.V_TRADER_TOTAL_OFFER[(i, j)])
+                    + (agc_status * m.V_TRADER_TOTAL_OFFER[(i, 'R5RE')]) <= enablement_max)
+
+        # FCAS joint capacity up constraint
+        m.FCAS_JOINT_CAPACITY_UP = Constraint(m.S_TRADER_OFFERS, rule=fcas_joint_capacity_up_rule)
+
+        def fcas_joint_capacity_down_rule(m, i, j):
+            """Joint FCAS capacity constraint down"""
+
+            # Only consider generators for now
+            # TODO: consider loads also
+            if (i, 'ENOF') not in m.S_TRADER_OFFERS:
+                return Constraint.Skip
+
+            if (i, 'L5RE') not in m.S_TRADER_OFFERS:
+                return Constraint.Skip
+
+            # Only proceed if a raise capacity offer
+            if j not in ['L6SE', 'L60S', 'L5MI']:
+                return Constraint.Skip
+
+            # AGC status
+            agc_status = self.data.get_trader_scada_agc_status_value(i)
+            agc_status = 1
+
+            # Enablement min, low breakpoint, max available
+            initial_mw = self.data.get_trader_initial_condition_mw(i)
+            enablement_min = self.data.get_trader_fcas_enablement_min_value(i, j)
+            enablement_max = self.data.get_trader_fcas_enablement_max_value(i, j)
+            low_breakpoint = self.data.get_trader_fcas_low_breakpoint_value(i, j)
+            max_available = self.data.get_trader_max_available_value(i, j)
+
+            if (initial_mw < enablement_min) or (initial_mw > enablement_max):
+                return Constraint.Skip
+
+            # Trapezium slope
+            try:
+                coefficient = (low_breakpoint - enablement_min) / max_available
+            except ZeroDivisionError:
+                return Constraint.Skip
+
+            return (m.V_TRADER_TOTAL_OFFER[(i, 'ENOF')] - (coefficient * m.V_TRADER_TOTAL_OFFER[(i, j)])
+                    - (agc_status * m.V_TRADER_TOTAL_OFFER[(i, 'L5RE')]) + m.V_CV_FCAS_JOINT_CAPACITY_DOWN[i, j]
+                    >= enablement_min)
+
+        # FCAS joint capacity down constraint
+        m.FCAS_JOINT_CAPACITY_DOWN = Constraint(m.S_TRADER_OFFERS, rule=fcas_joint_capacity_down_rule)
+
         return m
 
     def define_objective(self, m):
@@ -580,7 +803,8 @@ class NEMDEModel:
                                      + sum(m.CV_RHS_PENALTY[c] for c in m.S_GENERIC_CONSTRAINTS)
                                      + sum(m.CV_LHS_PENALTY[c] for c in m.S_GENERIC_CONSTRAINTS)
                                      + sum(m.CV_RAMP_DOWN_PENALTY[t] for t in m.S_TRADERS)
-                                     + sum(m.CV_RAMP_UP_PENALTY[t] for t in m.S_TRADERS),
+                                     + sum(m.CV_RAMP_UP_PENALTY[t] for t in m.S_TRADERS)
+                                     + sum(m.CV_FCAS_JOINT_CAPACITY_DOWN_PENALTY[t] for t in m.S_TRADER_OFFERS),
                                 sense=minimize)
 
         return m
@@ -784,7 +1008,7 @@ if __name__ == '__main__':
     enof_scheduled['available'] = available.loc[scheduled_traders, 'ENOF']
 
     # Raise services
-    R6S = nemde.check_energy_solution(model, 'R6SE', 'R6Target')
+    R6SE = nemde.check_energy_solution(model, 'R6SE', 'R6Target')
     R60S = nemde.check_energy_solution(model, 'R60S', 'R60Target')
     R5MI = nemde.check_energy_solution(model, 'R5MI', 'R5Target')
     R5RE = nemde.check_energy_solution(model, 'R5RE', 'R5RegTarget')
