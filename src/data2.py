@@ -18,6 +18,55 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 
+class MMSDMDataHandler:
+    def __init__(self, data_dir):
+        # Root folder containing MMSDM and NEMDE output files
+        self.data_dir = data_dir
+
+        # Loader containing NEMDE files
+        self.mmsdm_dir = os.path.join(data_dir, 'MMSDM', 'zipped')
+
+        # Summary of DUIDs (contains marginal loss factor information)
+        self.dudetailsummary = None
+
+    def load_file(self, year, month, name):
+        """Load NEMDE input / output file"""
+
+        z_1_name = f'MMSDM_{year}_{month:02}.zip'
+
+        print(os.listdir(self.mmsdm_dir))
+
+        with zipfile.ZipFile(os.path.join(self.mmsdm_dir, z_1_name)) as z_1:
+            z_2_name = f'MMSDM_{year}_{month:02}/MMSDM_Historical_Data_SQLLoader/DATA/PUBLIC_DVD_{name}_{year}{month:02}010000.zip'
+            with z_1.open(z_2_name) as z_2:
+                z_2_data = io.BytesIO(z_2.read())
+
+                with zipfile.ZipFile(z_2_data) as z_3:
+                    z_3_name = f'PUBLIC_DVD_{name}_{year}{month:02}010000.CSV'
+
+                    # Read into DataFrame. Skip first and last rows.
+                    df = pd.read_csv(z_3.open(z_3_name), skiprows=1)
+                    df = df.iloc[:-1]
+
+                    return df
+
+    def load_interval(self, year, month):
+        """Load data and bind to class attribute"""
+
+        # Summary of DUID details (contains marginal loss factor information)
+        self.dudetailsummary = self.load_file(year, month, 'DUDETAILSUMMARY')
+
+    def get_marginal_loss_factor(self, trader_id):
+        """Get marginal loss factor for a given trader"""
+
+        # Remove duplicates - keep the latest record
+        # TODO: May need to adjust this
+        df = self.dudetailsummary.drop_duplicates(subset=['DUID'], keep='last')
+
+        # Extract the transmission loss factor (Marginal Loss Factor) for given trader
+        return float(df.loc[df['DUID'] == trader_id, 'TRANSMISSIONLOSSFACTOR'])
+
+
 class NEMDEDataHandler:
     def __init__(self, data_dir):
         # Root folder containing MMSDM and NEMDE output files
@@ -37,7 +86,7 @@ class NEMDEDataHandler:
         print(os.listdir(self.nemde_dir))
 
         with zipfile.ZipFile(os.path.join(self.nemde_dir, z_1_name)) as z_1:
-            z_2_name = f'NEMDE_2019_{month:02}/NEMDE_Market_Data/NEMDE_Files/NemSpdOutputs_{year}{month:02}{day:02}_loaded.zip'
+            z_2_name = f'NEMDE_{year}_{month:02}/NEMDE_Market_Data/NEMDE_Files/NemSpdOutputs_{year}{month:02}{day:02}_loaded.zip'
             with z_1.open(z_2_name) as z_2:
                 z_2_data = io.BytesIO(z_2.read())
 
@@ -551,42 +600,46 @@ if __name__ == '__main__':
 
     # Object used to parse NEMDE file
     nemde_data = NEMDEDataHandler(data_directory)
+    mmsdm_data = MMSDMDataHandler(data_directory)
 
-    # Load interval
-    nemde_data.load_interval(2019, 10, 10, 1)
+    # # Load interval
+    # nemde_data.load_interval(2019, 10, 10, 1)
+    #
+    # # Testing methods
+    # region_index = nemde_data.get_region_index()
+    # trader_index = nemde_data.get_trader_index()
+    # trader_offer_index = nemde_data.get_trader_offer_index()
+    # interconnector_index = nemde_data.get_interconnector_index()
+    # mnsp_index = nemde_data.get_mnsp_index()
+    # mnsp_offer_index = nemde_data.get_mnsp_offer_index()
+    # generic_constraint_index = nemde_data.get_generic_constraint_index()
+    # generic_constraint_trader_variable_index = nemde_data.get_generic_constraint_trader_variable_index()
+    # generic_constraint_interconnector_variable_index = nemde_data.get_generic_constraint_interconnector_variable_index()
+    # generic_constraint_region_variable_index = nemde_data.get_generic_constraint_region_variable_index()
+    #
+    # constraint_attribute_value = nemde_data.get_generic_constraint_attribute('V_WEMENSF_19INV', 'Type')
+    # constraint_lhs_terms = nemde_data.get_generic_constraint_lhs_terms('V_WEMENSF_19INV')
+    # constraint_rhs = nemde_data.get_generic_constraint_solution_attribute('V_WEMENSF_19INV', 'RHS')
+    #
+    # trader_initial_mw = nemde_data.get_trader_initial_condition_attribute('AGLHAL', 'InitialMW')
+    #
+    # price_1 = nemde_data.get_trader_price_band_attribute('AGLHAL', 'ENOF', 'PriceBand1')
+    # quantity_1 = nemde_data.get_trader_quantity_band_attribute('AGLHAL', 'ENOF', 'BandAvail1')
+    #
+    # trader_r6 = nemde_data.get_trader_solution_attribute('AGLHAL', 'R6Target')
+    # icon_id = nemde_data.get_interconnector_attribute('N-Q-MNSP1', 'InterconnectorID')
+    # icon_initial_mw = nemde_data.get_interconnector_initial_condition_attribute('N-Q-MNSP1', 'InitialMW')
+    #
+    # icon_from_region = nemde_data.get_interconnector_period_attribute('N-Q-MNSP1', 'FromRegion')
+    # mnsp_p1 = nemde_data.get_mnsp_price_band_attribute('T-V-MNSP1', 'TAS1', 'PriceBand1')
+    # mnsp_q1 = nemde_data.get_mnsp_quantity_band_attribute('T-V-MNSP1', 'TAS1', 'BandAvail1')
+    #
+    # case_price = nemde_data.get_case_attribute('EnergyDeficitPrice')
+    # case_solution = nemde_data.get_case_solution_attribute('TotalObjective')
+    # period_solution = nemde_data.get_period_solution_attribute('TotalASProfileViolation')
+    #
+    # region_initial = nemde_data.get_region_initial_condition_attribute('NSW1', 'InitialDemand')
+    # region_solution = nemde_data.get_region_solution_attribute('NSW1', 'EnergyPrice')
 
-    # Testing methods
-    region_index = nemde_data.get_region_index()
-    trader_index = nemde_data.get_trader_index()
-    trader_offer_index = nemde_data.get_trader_offer_index()
-    interconnector_index = nemde_data.get_interconnector_index()
-    mnsp_index = nemde_data.get_mnsp_index()
-    mnsp_offer_index = nemde_data.get_mnsp_offer_index()
-    generic_constraint_index = nemde_data.get_generic_constraint_index()
-    generic_constraint_trader_variable_index = nemde_data.get_generic_constraint_trader_variable_index()
-    generic_constraint_interconnector_variable_index = nemde_data.get_generic_constraint_interconnector_variable_index()
-    generic_constraint_region_variable_index = nemde_data.get_generic_constraint_region_variable_index()
-
-    constraint_attribute_value = nemde_data.get_generic_constraint_attribute('V_WEMENSF_19INV', 'Type')
-    constraint_lhs_terms = nemde_data.get_generic_constraint_lhs_terms('V_WEMENSF_19INV')
-    constraint_rhs = nemde_data.get_generic_constraint_solution_attribute('V_WEMENSF_19INV', 'RHS')
-
-    trader_initial_mw = nemde_data.get_trader_initial_condition_attribute('AGLHAL', 'InitialMW')
-
-    price_1 = nemde_data.get_trader_price_band_attribute('AGLHAL', 'ENOF', 'PriceBand1')
-    quantity_1 = nemde_data.get_trader_quantity_band_attribute('AGLHAL', 'ENOF', 'BandAvail1')
-
-    trader_r6 = nemde_data.get_trader_solution_attribute('AGLHAL', 'R6Target')
-    icon_id = nemde_data.get_interconnector_attribute('N-Q-MNSP1', 'InterconnectorID')
-    icon_initial_mw = nemde_data.get_interconnector_initial_condition_attribute('N-Q-MNSP1', 'InitialMW')
-
-    icon_from_region = nemde_data.get_interconnector_period_attribute('N-Q-MNSP1', 'FromRegion')
-    mnsp_p1 = nemde_data.get_mnsp_price_band_attribute('T-V-MNSP1', 'TAS1', 'PriceBand1')
-    mnsp_q1 = nemde_data.get_mnsp_quantity_band_attribute('T-V-MNSP1', 'TAS1', 'BandAvail1')
-
-    case_price = nemde_data.get_case_attribute('EnergyDeficitPrice')
-    case_solution = nemde_data.get_case_solution_attribute('TotalObjective')
-    period_solution = nemde_data.get_period_solution_attribute('TotalASProfileViolation')
-
-    region_initial = nemde_data.get_region_initial_condition_attribute('NSW1', 'InitialDemand')
-    region_solution = nemde_data.get_region_solution_attribute('NSW1', 'EnergyPrice')
+    # Get all marginal loss factors
+    mmsdm_data.load_interval(2019, 10)
