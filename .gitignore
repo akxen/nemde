@@ -2,3 +2,4 @@
 *.pyc
 data/MMSDM_2019_10/*
 *.xlsx
+*.ipynb_checkpoints/*

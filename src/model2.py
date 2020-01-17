@@ -73,7 +73,15 @@ class NEMDEModel:
         def trader_price_band_rule(m, i, j, k):
             """Price bands for traders"""
 
-            return self.data.get_trader_price_band_attribute(i, j, f'PriceBand{k}') / self.mmsdm_data.get_marginal_loss_factor(i)
+            # NOTE: Including MLFs seem to lead to better results. May not be required.
+            mlf = self.mmsdm_data.get_marginal_loss_factor(i)
+
+            # if j == 'LDOF':
+            #     return self.data.get_trader_price_band_attribute(i, j, f'PriceBand{k}') * mlf
+            # else:
+            #     return self.data.get_trader_price_band_attribute(i, j, f'PriceBand{k}') / mlf
+
+            return self.data.get_trader_price_band_attribute(i, j, f'PriceBand{k}')
 
         # Price bands for traders (generators / loads)
         m.P_TRADER_PRICE_BAND = Param(m.S_TRADER_OFFERS, m.S_BANDS, rule=trader_price_band_rule)
@@ -89,7 +97,11 @@ class NEMDEModel:
         def trader_max_available_rule(m, i, j):
             """Max available energy output from given trader"""
 
-            return self.data.get_trader_quantity_band_attribute(i, j, 'MaxAvail')
+            # Use UIGF for max available ENOF for semi-dispatchable plant
+            if (self.data.get_trader_attribute(i, 'SemiDispatch') == 1) and (j == 'ENOF'):
+                return self.data.get_trader_period_attribute(i, 'UIGF')
+            else:
+                return self.data.get_trader_quantity_band_attribute(i, j, 'MaxAvail')
 
         # Max available output for given trader
         m.P_TRADER_MAX_AVAILABLE = Param(m.S_TRADER_OFFERS, rule=trader_max_available_rule)
@@ -136,9 +148,8 @@ class NEMDEModel:
 
         def region_demand_rule(m, r):
             """Get demand in each region. Using forecast demand for now."""
-            # TODO: investigate whether using "DemandForecast" / "ClearedDemand" / "FixedDemand" is most appropriate
 
-            return self.data.get_region_initial_condition_attribute(r, 'InitialDemand')
+            return self.data.get_region_period_attribute(r, 'DemandForecast')
 
         # Demand in each NEM region
         m.P_REGION_DEMAND = Param(m.S_REGIONS, rule=region_demand_rule)
@@ -232,6 +243,9 @@ class NEMDEModel:
         # Ramp rate constraint violation variables
         m.V_CV_TRADER_RAMP_UP = Var(m.S_TRADERS, within=NonNegativeReals)
         m.V_CV_TRADER_RAMP_DOWN = Var(m.S_TRADERS, within=NonNegativeReals)
+
+        # FCAS trapezium violation variables
+        m.V_CV_TRADER_FCAS_TRAPEZIUM = Var(m.S_TRADER_OFFERS, within=NonNegativeReals)
 
         # FCAS joint ramping constraint violation variables
         m.V_CV_TRADER_FCAS_JOINT_RAMPING_UP = Var(m.S_TRADER_OFFERS, within=NonNegativeReals)
@@ -365,6 +379,14 @@ class NEMDEModel:
         # Penalty factor for ramp down rate violation
         m.E_CV_TRADER_RAMP_DOWN_PENALTY = Expression(m.S_TRADERS, rule=trader_ramp_down_penalty_rule)
 
+        def trader_trapezium_penalty_rule(m, i, j):
+            """Penalty for violating FCAS trapezium bounds"""
+
+            return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_TRAPEZIUM[i, j]
+
+        # FCAS trapezium violation penalty
+        m.E_CV_TRADER_TRAPEZIUM_PENALTY = Expression(m.S_TRADER_OFFERS, rule=trader_trapezium_penalty_rule)
+
         def trader_joint_ramping_up_penalty_rule(m, i, j):
             """Penalty for FCAS joint capacity constraint up violation"""
 
@@ -462,6 +484,7 @@ class NEMDEModel:
                                                + sum(m.E_CV_TRADER_CAPACITY_PENALTY[i] for i in m.S_TRADER_OFFERS)
                                                + sum(m.E_CV_TRADER_RAMP_UP_PENALTY[i] for i in m.S_TRADERS)
                                                + sum(m.E_CV_TRADER_RAMP_DOWN_PENALTY[i] for i in m.S_TRADERS)
+                                               + sum(m.E_CV_TRADER_TRAPEZIUM_PENALTY[i] for i in m.S_TRADER_OFFERS)
                                                + sum(
             m.E_CV_TRADER_JOINT_RAMPING_UP_PENALTY[i] for i in m.S_TRADER_OFFERS)
                                                + sum(
@@ -620,14 +643,7 @@ class NEMDEModel:
         def trader_capacity_rule(m, i, j):
             """Constrain max available output"""
 
-            # Check trader's semi-dispatch status
-            semi_dispatch = self.data.get_trader_attribute(i, 'SemiDispatch')
-
-            # Max available only applies to dispatchable plant (NEMDE records MaxAvail=0 for semi-dispatchable traders)
-            if semi_dispatch == 0:
-                return m.V_TRADER_TOTAL_OFFER[i, j] <= m.P_TRADER_MAX_AVAILABLE[i, j] + m.V_CV_TRADER_CAPACITY[i, j]
-            else:
-                return Constraint.Skip
+            return m.V_TRADER_TOTAL_OFFER[i, j] <= m.P_TRADER_MAX_AVAILABLE[i, j] + m.V_CV_TRADER_CAPACITY[i, j]
 
         # Ensure dispatch is constrained by max available offer amount
         m.C_TRADER_CAPACITY = Constraint(m.S_TRADER_OFFERS, rule=trader_capacity_rule)
@@ -739,8 +755,7 @@ class NEMDEModel:
         def power_balance_rule(m, r):
             """Power balance for each region"""
 
-            return m.E_REGION_GENERATION[r] - m.E_REGION_LOAD[r] == m.P_REGION_DEMAND[r] + m.E_REGION_NET_FLOW[r] + \
-                   m.E_REGION_LOSS[r]
+            return m.E_REGION_GENERATION[r] - m.E_REGION_LOAD[r] == m.P_REGION_DEMAND[r] + m.E_REGION_NET_FLOW[r]
 
         # Power balance in each region
         # TODO: add interconnectors
@@ -1043,6 +1058,59 @@ class NEMDEModel:
     def define_fcas_constraints(self, m):
         """Define FCAS constraints"""
 
+        def as_profile_rule(m, i, j):
+            """Compute max available based on initial MW"""
+
+            if j not in ['R6SE', 'R60S', 'R5MI', 'R5RE', 'L6SE', 'L60S', 'L5MI', 'L5RE']:
+                return Constraint.Skip
+
+            # Scaled FCAS trapezium for regulation services. No scaling for contingency services
+            if j in ['R5RE', 'L5RE']:
+                # trapezium = self.get_scaled_fcas_trapezium(i, j)
+                trapezium = self.get_fcas_trapezium_offer(i, j)
+            else:
+                trapezium = self.get_fcas_trapezium_offer(i, j)
+
+            # Initial MW
+            initial_mw = self.data.get_trader_initial_condition_attribute(i, 'InitialMW')
+
+            # LHS trapezium slope
+            try:
+                slope_1 = trapezium['max_available'] / (trapezium['low_breakpoint'] - trapezium['enablement_min'])
+                constant_1 = - slope_1 * trapezium['enablement_min']
+                value_1 = (slope_1 * initial_mw) + constant_1
+            except ZeroDivisionError:
+                value_1 = trapezium['max_available']
+
+            # RHS trapezium slope
+            try:
+                slope_2 = - trapezium['max_available'] / (trapezium['enablement_max'] - trapezium['high_breakpoint'])
+                constant_2 = - slope_2 * trapezium['enablement_max']
+                value_2 = (slope_2 * initial_mw) + constant_2
+
+                if i == 'BW01':
+                    print(i, j, 'slope_2', slope_2)
+                    print(i, j, 'constant_2', constant_2)
+
+            except ZeroDivisionError:
+                value_2 = trapezium['max_available']
+
+            # Check if outside enablement min / max envelope
+            if (initial_mw < trapezium['enablement_min']) or (initial_mw > trapezium['enablement_max']):
+                max_value = 0
+            else:
+                max_value = min(value_1, value_2, trapezium['max_available'])
+
+            if i == 'BW01':
+                print(i, j, 'value 1', value_1)
+                print(i, j, 'value 2', value_2)
+                print(i, j, max_value)
+
+            return m.V_TRADER_TOTAL_OFFER[i, j] <= max_value + m.V_CV_TRADER_FCAS_TRAPEZIUM[i, j]
+
+        # Ancillary service profile violation
+        m.C_FCAS_TRAPEZIUM = Constraint(m.S_TRADER_OFFERS, rule=as_profile_rule)
+
         def joint_ramping_up_rule(m, i, j):
             """Joint energy and FCAS ramping constraints"""
 
@@ -1132,7 +1200,7 @@ class NEMDEModel:
             return (m.V_TRADER_TOTAL_OFFER[i, offer_map[trader_type]] - m.V_TRADER_TOTAL_OFFER[i, j]
                     + m.V_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, offer_map[trader_type]] >= initial_mw - ramp_rate)
 
-        # Joint ramp up constraint
+        # Joint ramp down constraint
         m.C_JOINT_RAMPING_DOWN = Constraint(m.S_TRADER_OFFERS, rule=joint_ramping_down_rule)
 
         def joint_capacity_up_rule(m, i, j):
@@ -1177,9 +1245,10 @@ class NEMDEModel:
             else:
                 return (m.V_TRADER_TOTAL_OFFER[i, offer_map[trader_type]] + (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
                         <= trapezium['enablement_max'] + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_UP[i, j])
+                # return Constraint.Skip
 
         # FCAS join capacity constraint up
-        m.C_JOINT_CAPACITY_UP = Constraint(m.S_TRADER_OFFERS, rule=joint_capacity_up_rule)
+        # m.C_JOINT_CAPACITY_UP = Constraint(m.S_TRADER_OFFERS, rule=joint_capacity_up_rule)
 
         def joint_capacity_down_rule(m, i, j):
             """Joint energy and FCAS contingency constraints"""
@@ -1225,7 +1294,7 @@ class NEMDEModel:
                         >= trapezium['enablement_min'] + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_DOWN[i, j])
 
         # FCAS join capacity constraint down
-        m.C_JOINT_CAPACITY_DOWN = Constraint(m.S_TRADER_OFFERS, rule=joint_capacity_down_rule)
+        # m.C_JOINT_CAPACITY_DOWN = Constraint(m.S_TRADER_OFFERS, rule=joint_capacity_down_rule)
 
         def joint_regulating_capacity_up_rule(m, i, j):
             """Joint energy and regulating FCAS constraints"""
@@ -1268,7 +1337,7 @@ class NEMDEModel:
                     <= trapezium['enablement_max'] + m.V_CV_JOINT_REGULATING_CAPACITY_UP[i, j])
 
         # FCAS joint regulating capacity up
-        m.C_JOINT_REGULATING_CAPACITY_UP = Constraint(m.S_TRADER_OFFERS, rule=joint_regulating_capacity_up_rule)
+        # m.C_JOINT_REGULATING_CAPACITY_UP = Constraint(m.S_TRADER_OFFERS, rule=joint_regulating_capacity_up_rule)
 
         def joint_regulating_capacity_down_rule(m, i, j):
             """Joint energy and regulating FCAS constraints"""
@@ -1311,7 +1380,7 @@ class NEMDEModel:
                     + m.V_CV_JOINT_REGULATING_CAPACITY_DOWN[i, j] >= trapezium['enablement_min'])
 
         # FCAS joint regulating capacity down
-        m.C_JOINT_REGULATING_CAPACITY_DOWN = Constraint(m.S_TRADER_OFFERS, rule=joint_regulating_capacity_down_rule)
+        # m.C_JOINT_REGULATING_CAPACITY_DOWN = Constraint(m.S_TRADER_OFFERS, rule=joint_regulating_capacity_down_rule)
 
         return m
 
@@ -1365,6 +1434,10 @@ class NEMDEModel:
         m = self.define_constraints(m)
         m = self.define_objective(m)
 
+        # Fix interconnector solution
+        # m = self.fix_interconnector_solution(m)
+        # m = self.fix_fcas_solution(m)
+
         return m
 
     def solve_model(self, m):
@@ -1374,6 +1447,43 @@ class NEMDEModel:
         solve_status = self.opt.solve(m, tee=self.tee, options=self.solver_options, keepfiles=self.keepfiles)
 
         return m, solve_status
+
+    def fix_interconnector_solution(self, m):
+        """Fix interconnector solution to observed values"""
+
+        # Fix solution for each interconnector
+        for i in m.S_INTERCONNECTORS:
+            observed_flow = self.data.get_interconnector_solution_attribute(i, 'Flow')
+            m.V_GC_INTERCONNECTOR[i].fix(observed_flow)
+
+        return m
+
+    def fix_fcas_solution(self, m):
+        """Fix generator FCAS solution"""
+
+        # Trader solution
+        traders = self.data.get_trader_index()
+
+        # Raise service mapping between model and NEMDE output
+        # raise_map = [('R6SE', 'R6Target'), ('R60S', 'R60Target'), ('R5MI', 'R5Target'), ('R5RE', 'R5RegTarget')]
+        raise_map = [('R60S', 'R60Target')]
+        # lower_map = [('L6SE', 'L6Target'), ('L60S', 'L60Target'), ('L5MI', 'L5Target'), ('L5RE', 'L5RegTarget')]
+        lower_map = []
+
+        # Fix FCAS solution based on observed NEMDE output
+        for trader in traders:
+
+            for i, j in raise_map + lower_map:
+
+                # Fix selected FCAS solution
+                if (trader, i) in m.S_TRADER_OFFERS:
+                    # FCAS solution
+                    fcas_solution = self.data.get_trader_solution_attribute(trader, j)
+
+                    # Fix variable to observed solution
+                    m.V_TRADER_TOTAL_OFFER[trader, i].fix(fcas_solution)
+
+        return m
 
     def save_generic_constraints(self, m):
         """Save generic constraints for later inspection"""
@@ -1408,7 +1518,7 @@ class NEMDESolution:
         all_traders = self.data.get_trader_index()
 
         # Get scheduled generators / loads
-        scheduled = [i for i in all_traders if self.data.get_trader_attribute(i, 'SemiDispatch') == 1]
+        scheduled = [i for i in all_traders if self.data.get_trader_attribute(i, 'SemiDispatch') == 0]
 
         return scheduled
 
@@ -1463,6 +1573,26 @@ class NEMDESolution:
         ax.plot([0, max_value], [0, max_value], color='r', alpha=0.8, linestyle='--')
 
         plt.show()
+
+        return df_c
+
+    def check_trader_solution(self, m, trader_id):
+        """Compare model and observed trader solution"""
+
+        # Model solution
+        e_mod = self.get_model_energy_output(m, 'V_TRADER_TOTAL_OFFER')
+
+        # Observed solution (from NEMDE)
+        e_obs = self.data.get_trader_solution_dataframe()
+
+        # Mapping between model and NEMDE keys
+        r = {'R6Target': 'R6SE', 'R60Target': 'R60S', 'R5Target': 'R5MI', 'R5RegTarget': 'R5RE',
+             'L6Target': 'L6SE', 'L60Target': 'L60S', 'L5Target': 'L5MI', 'L5RegTarget': 'L5RE',
+             'EnergyTarget': 'ENOF'}
+
+        # Combine into single DataFrame
+        df_c = pd.concat([e_mod.loc[trader_id].rename('model'), e_obs.loc[trader_id].rename(r).rename('observed')],
+                         axis=1, sort=True).loc[list(r.values()), :]
 
         return df_c
 
@@ -1535,3 +1665,14 @@ if __name__ == '__main__':
 
     # Write generic constraints
     nemde.save_generic_constraints(model)
+
+    raise_map = [('R6SE', 'R6Target'), ('R60S', 'R60Target'), ('R5MI', 'R5Target'), ('R5RE', 'R5RegTarget')]
+    lower_map = [('L6SE', 'L6Target'), ('L60S', 'L60Target'), ('L5MI', 'L5Target'), ('L5RE', 'L5RegTarget')]
+
+    # Model targets
+    # dfs = []
+    # for k in ['R6SE', 'R60S', 'R5MI', 'R5RE', 'L6SE', 'L60S', 'L5MI', 'L5RE']:
+    #     dfs.append(analysis.get_model_energy_output(model, k))
+    #
+    # Combine into single DataFrame
+    c = analysis.check_trader_solution(model, 'TUMUT3')

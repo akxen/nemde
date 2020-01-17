@@ -569,6 +569,17 @@ class NEMDEDataHandler:
 
         return self.parse_single_attribute(elements, attribute)
 
+    def get_region_period_attribute(self, region_id, attribute):
+        """Get region period attributes e.g. demand forecast"""
+
+        # Path to element containing region period information
+        path = f".//NemSpdInputs/PeriodCollection/Period/RegionPeriodCollection/RegionPeriod[@RegionID='{region_id}']"
+
+        # Matching elements
+        elements = self.interval_data.findall(path)
+
+        return self.parse_single_attribute(elements, attribute)
+
     def get_region_initial_condition_attribute(self, region_id, attribute):
         """Get region attributes"""
 
@@ -602,9 +613,9 @@ if __name__ == '__main__':
     nemde_data = NEMDEDataHandler(data_directory)
     mmsdm_data = MMSDMDataHandler(data_directory)
 
-    # # Load interval
-    # nemde_data.load_interval(2019, 10, 10, 1)
-    #
+    # Load interval
+    nemde_data.load_interval(2019, 10, 10, 1)
+
     # # Testing methods
     # region_index = nemde_data.get_region_index()
     # trader_index = nemde_data.get_trader_index()
