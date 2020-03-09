@@ -1493,6 +1493,14 @@ class NEMDEModel:
                 to_write = f"{k}: {v.expr}\n"
                 f.write(to_write)
 
+    def get_fcas_max_regulating_raise(self):
+        """Get max regulating raise FCAS"""
+        pass
+
+    def get_fcas_effective_rreg_max_available(self, trader_id, trade_type):
+        """Effective raise regulating FCAS max available"""
+        pass
+
 
 class NEMDESolution:
     def __init__(self, data_dir):
