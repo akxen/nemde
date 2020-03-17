@@ -1,4 +1,9 @@
-"""Classes used to extract data from NEMDE output files and extract and format relevant information for NEMDE model"""
+"""
+Processing data for NEMDE approximation
+
+Note: major speed-up observed when using 'find' instead of 'findall'. First method is less robust though (may have have
+duplicate values). Using 'find' for now though.
+"""
 
 import os
 import io
@@ -13,7 +18,56 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 
-class NEMDEData:
+class MMSDMDataHandler:
+    def __init__(self, data_dir):
+        # Root folder containing MMSDM and NEMDE output files
+        self.data_dir = data_dir
+
+        # Loader containing NEMDE files
+        self.mmsdm_dir = os.path.join(data_dir, 'MMSDM', 'zipped')
+
+        # Summary of DUIDs (contains marginal loss factor information)
+        self.dudetailsummary = None
+
+    def load_file(self, year, month, name):
+        """Load NEMDE input / output file"""
+
+        z_1_name = f'MMSDM_{year}_{month:02}.zip'
+
+        print(os.listdir(self.mmsdm_dir))
+
+        with zipfile.ZipFile(os.path.join(self.mmsdm_dir, z_1_name)) as z_1:
+            z_2_name = f'MMSDM_{year}_{month:02}/MMSDM_Historical_Data_SQLLoader/DATA/PUBLIC_DVD_{name}_{year}{month:02}010000.zip'
+            with z_1.open(z_2_name) as z_2:
+                z_2_data = io.BytesIO(z_2.read())
+
+                with zipfile.ZipFile(z_2_data) as z_3:
+                    z_3_name = f'PUBLIC_DVD_{name}_{year}{month:02}010000.CSV'
+
+                    # Read into DataFrame. Skip first and last rows.
+                    df = pd.read_csv(z_3.open(z_3_name), skiprows=1)
+                    df = df.iloc[:-1]
+
+                    return df
+
+    def load_interval(self, year, month):
+        """Load data and bind to class attribute"""
+
+        # Summary of DUID details (contains marginal loss factor information)
+        self.dudetailsummary = self.load_file(year, month, 'DUDETAILSUMMARY')
+
+    def get_marginal_loss_factor(self, trader_id):
+        """Get marginal loss factor for a given trader"""
+
+        # Remove duplicates - keep the latest record
+        # TODO: May need to adjust this
+        df = self.dudetailsummary.drop_duplicates(subset=['DUID'], keep='last')
+
+        # Extract the transmission loss factor (Marginal Loss Factor) for given trader
+        return float(df.loc[df['DUID'] == trader_id, 'TRANSMISSIONLOSSFACTOR'])
+
+
+class NEMDEDataHandler:
     def __init__(self, data_dir):
         # Root folder containing MMSDM and NEMDE output files
         self.data_dir = data_dir
@@ -32,7 +86,7 @@ class NEMDEData:
         print(os.listdir(self.nemde_dir))
 
         with zipfile.ZipFile(os.path.join(self.nemde_dir, z_1_name)) as z_1:
-            z_2_name = f'NEMDE_2019_{month:02}/NEMDE_Market_Data/NEMDE_Files/NemSpdOutputs_{year}{month:02}{day:02}_loaded.zip'
+            z_2_name = f'NEMDE_{year}_{month:02}/NEMDE_Market_Data/NEMDE_Files/NemSpdOutputs_{year}{month:02}{day:02}_loaded.zip'
             with z_1.open(z_2_name) as z_2:
                 z_2_data = io.BytesIO(z_2.read())
 
@@ -67,8 +121,51 @@ class NEMDEData:
 
         self.interval_data = self.get_nemde_xml(year, month, day, interval)
 
-    def get_trader_ids(self):
-        """Get index for market participant units based on price band information"""
+    @staticmethod
+    def assert_single_value(data):
+        """Check that only one value within list, else raise exception"""
+
+        assert len(data) == 1, f'Length of list != 1. List has {len(data)} elements'
+
+    @staticmethod
+    def assert_no_duplicates(data):
+        """Check no duplicates within list"""
+
+        assert len(data) > 0, 'List is empty'
+
+        assert (len(data) == len(set(data))), 'Duplicates within list'
+
+    def parse_single_attribute(self, data, attribute):
+        """Check that only one element exists. Extract attribute value and attempt float conversion."""
+
+        # Check there is only one value returned
+        self.assert_single_value(data)
+
+        # Attribute value
+        value = data[0].get(attribute)
+
+        # Try and convert to float if possible
+        try:
+            return float(value)
+        except ValueError:
+            return value
+
+    def get_region_index(self):
+        """Get index for all NEM regions"""
+
+        # Path to region information elements
+        path = f'.//NemSpdInputs/PeriodCollection/Period/RegionPeriodCollection/RegionPeriod'
+
+        # All region IDs
+        region_ids = [i.get('RegionID') for i in self.interval_data.findall(path)]
+
+        # Check for duplicate values
+        self.assert_no_duplicates(region_ids)
+
+        return region_ids
+
+    def get_trader_index(self):
+        """Get index used for all traders"""
 
         # Path to trader elements
         path = ".//NemSpdInputs/PeriodCollection/Period/TraderPeriodCollection/TraderPeriod"
@@ -79,10 +176,13 @@ class NEMDEData:
         # Construct index based on element attributes
         trader_ids = [t.get('TraderID') for t in traders]
 
+        # Check there are no duplicates
+        self.assert_no_duplicates(trader_ids)
+
         return trader_ids
 
     def get_trader_offer_index(self):
-        """Get index for market participant units based on price band information"""
+        """Get index for all trader offers"""
 
         # Path to trader elements
         path = ".//NemSpdInputs/PeriodCollection/Period/TraderPeriodCollection/TraderPeriod"
@@ -93,24 +193,13 @@ class NEMDEData:
         # Construct index based on element attributes
         trader_offer_ids = [(t.get('TraderID'), o.get('TradeType')) for t in traders for o in t.findall('.//Trade')]
 
+        # Check there are no duplicates
+        self.assert_no_duplicates(trader_offer_ids)
+
         return trader_offer_ids
 
-    def get_mnsp_ids(self):
-        """Get IDs of all Market Network Service Providers (interconnectors that bid into the market)"""
-
-        # Path to MNSP elements
-        path = ".//NemSpdInputs/PeriodCollection/Period/InterconnectorPeriodCollection/InterconnectorPeriod[@MNSP='1']"
-
-        # Get MNSP elements
-        mnsps = self.interval_data.findall(path)
-
-        # Extract MNSP IDs
-        mnsp_ids = [i.get('InterconnectorID') for i in mnsps]
-
-        return mnsp_ids
-
-    def get_interconnector_ids(self):
-        """Get all interconnector IDs"""
+    def get_interconnector_index(self):
+        """Get names for all interconnectors"""
 
         # Path to interconnector elements
         path = ".//NemSpdInputs/PeriodCollection/Period/InterconnectorPeriodCollection/InterconnectorPeriod"
@@ -121,10 +210,30 @@ class NEMDEData:
         # Extract interconnector IDs
         interconnector_ids = [i.get('InterconnectorID') for i in interconnectors]
 
+        # Check there are no duplicates
+        self.assert_no_duplicates(interconnector_ids)
+
         return interconnector_ids
 
+    def get_mnsp_index(self):
+        """Get index used for all Market Network Service Providers (MNSPs)"""
+
+        # Path to MNSP elements
+        path = ".//NemSpdInputs/PeriodCollection/Period/InterconnectorPeriodCollection/InterconnectorPeriod[@MNSP='1']"
+
+        # Get MNSP elements
+        mnsps = self.interval_data.findall(path)
+
+        # Extract MNSP IDs
+        mnsp_ids = [i.get('InterconnectorID') for i in mnsps]
+
+        # Check there are no duplicates
+        self.assert_no_duplicates(mnsp_ids)
+
+        return mnsp_ids
+
     def get_mnsp_offer_index(self):
-        """Get index for interconnectors that submit offers into the market. Using price band information."""
+        """Get index for all MNSP offers"""
 
         # Path to MNSP elements
         path = ".//NemSpdInputs/PeriodCollection/Period/InterconnectorPeriodCollection/InterconnectorPeriod[@MNSP='1']"
@@ -133,27 +242,37 @@ class NEMDEData:
         mnsps = self.interval_data.findall(path)
 
         # Construct MNSP offer index based on interconnector ID and region name (price bands for each region)
-        mnsp_offer_index = [(i.get('InterconnectorID'), o.get('RegionID'))
-                            for i in mnsps for o in i.findall('.//MNSPOffer')]
+        mnsp_offer = [(i.get('InterconnectorID'), o.get('RegionID')) for i in mnsps for o in i.findall('.//MNSPOffer')]
 
-        return mnsp_offer_index
+        # Check there are no duplicates
+        self.assert_no_duplicates(mnsp_offer)
 
-    def get_generic_constraint_index(self):
-        """Get index for each generic constraint"""
+        return mnsp_offer
+
+    def get_generic_constraint_index(self, intervention=0):
+        """
+        Get index for all generic constraints. Note: using constraint solution to identify constraints that were used
+        """
+
+        # Path to generic constraint solution objects
+        path = f".//NemSpdOutputs/ConstraintSolution/[@Intervention='{intervention}']"
 
         # All generic constraints. Only consider no intervention case for now.
-        constraints = self.interval_data.findall(".//NemSpdOutputs/ConstraintSolution/[@Intervention='0']")
+        constraints = self.interval_data.findall(path)
 
         # Extract constraint IDs
         constraint_ids = [c.get('ConstraintID') for c in constraints]
 
+        # Check there are no duplicates
+        self.assert_no_duplicates(constraint_ids)
+
         return constraint_ids
 
-    def get_generic_constraint_trader_variables(self):
-        """Get variable IDs associated with trader elements in Generic Constraints"""
+    def get_generic_constraint_trader_variable_index(self):
+        """Get index of all trader variables within generic constraints"""
 
         # Path to trader factor elements within generic constraints
-        # TODO: May need to consider intervention
+        # TODO: May need to consider intervention. Could define variables with respect solution tags instead.
         path = './/NemSpdInputs/GenericConstraintCollection/GenericConstraint/LHSFactorCollection/TraderFactor'
 
         # Extract all trader factor elements from generic constraints
@@ -162,10 +281,13 @@ class NEMDEData:
         # Construct ID for trader factor variables
         var_ids = list(set([(f.get('TraderID'), f.get('TradeType')) for f in factors]))
 
+        # Check there are no duplicates
+        self.assert_no_duplicates(var_ids)
+
         return var_ids
 
-    def get_generic_constraint_interconnector_variables(self):
-        """Get variable IDs associated with interconnector factors in Generic Constraints"""
+    def get_generic_constraint_interconnector_variable_index(self):
+        """Get index of all interconnector variables within generic constraints"""
 
         # Path to interconnector elements
         path = './/NemSpdInputs/GenericConstraintCollection/GenericConstraint/LHSFactorCollection/InterconnectorFactor'
@@ -176,10 +298,13 @@ class NEMDEData:
         # Construct ID for trader factor variables
         var_ids = list(set(f.get('InterconnectorID') for f in factors))
 
+        # Check there are no duplicates
+        self.assert_no_duplicates(var_ids)
+
         return var_ids
 
-    def get_generic_constraint_region_variables(self):
-        """Get variable IDs associated with region factors in Generic Constraints"""
+    def get_generic_constraint_region_variable_index(self):
+        """Get index of all region variables within generic constraints"""
 
         # Path to region elements
         path = './/NemSpdInputs/GenericConstraintCollection/GenericConstraint/LHSFactorCollection/RegionFactor'
@@ -192,146 +317,18 @@ class NEMDEData:
 
         return var_ids
 
-    def get_trader_price_band_value(self, trader_id, offer_type, band):
-        """Get price band value for given unit, offer type, and price band"""
-
-        # Path to element containing price band information for given unit and offer type
-        path = (f".//NemSpdInputs/TraderCollection/Trader[@TraderID='{trader_id}']/TradePriceStructureCollection/"
-                f"TradePriceStructure/TradeTypePriceStructureCollection/"
-                f"TradeTypePriceStructure[@TradeType='{offer_type}']")
-
-        return float(self.interval_data.find(path).get(f'PriceBand{band}'))
-
-    def get_trader_quantity_band_value(self, trader_id, offer_type, band):
-        """Get quantity band value for given unit, offer type, and quantity band"""
-
-        # Path to element containing price band information for given unit and offer type
-        path = (f".//NemSpdInputs/PeriodCollection/Period/TraderPeriodCollection/TraderPeriod[@TraderID='{trader_id}']"
-                f"/TradeCollection/Trade[@TradeType='{offer_type}']")
-
-        return float(self.interval_data.find(path).get(f'BandAvail{band}'))
-
-    def get_trader_max_available_value(self, trader_id, offer_type):
-        """Get maximum amount that can be dispatch for a given generator and offer type"""
-
-        # Path to element containing quantity band information for given unit and offer type
-        path = (f".//NemSpdInputs/PeriodCollection/Period/TraderPeriodCollection/TraderPeriod[@TraderID='{trader_id}']"
-                f"/TradeCollection/Trade[@TradeType='{offer_type}']")
-
-        return float(self.interval_data.find(path).get('MaxAvail'))
-
-    def get_mnsp_price_band_value(self, interconnector_id, region, band):
-        """Get price band value for given MNSP and price band"""
-
-        # Path to element containing price band information for given interconnector and region
-        path = (f".//NemSpdInputs/InterconnectorCollection/Interconnector[@InterconnectorID='{interconnector_id}']/"
-                f"MNSPPriceStructureCollection/MNSPPriceStructure/MNSPRegionPriceStructureCollection/"
-                f"MNSPRegionPriceStructure[@RegionID='{region}']")
-
-        return float(self.interval_data.find(path).get(f'PriceBand{band}'))
-
-    def get_mnsp_quantity_band_value(self, interconnector_id, region, band):
-        """Get quantity band value for given MNSP and quantity band"""
-
-        # Path to element containing quantity band information for given interconnector and region
-        path = (f".//NemSpdInputs/PeriodCollection/Period/InterconnectorPeriodCollection/"
-                f"InterconnectorPeriod[@InterconnectorID='{interconnector_id}']/MNSPOfferCollection"
-                f"/MNSPOffer[@RegionID='{region}']")
-
-        return float(self.interval_data.find(path).get(f'BandAvail{band}'))
-
-    def get_mnsp_max_available_value(self, interconnector, region):
-        """Get price band value for given MNSP and price band"""
-
-        # Path to element containing quantity band information for given interconnector and region
-        path = (f".//NemSpdInputs/PeriodCollection/Period/InterconnectorPeriodCollection/"
-                f"InterconnectorPeriod[@InterconnectorID='{interconnector}']/MNSPOfferCollection"
-                f"/MNSPOffer[@RegionID='{region}']")
-
-        return float(self.interval_data.find(path).get(f'MaxAvail'))
-
-    def get_generic_constraint_rhs_value(self, constraint_id):
-        """Get RHS value for generic constraint. Note: using constraint solution elements to extract this value."""
-
-        # Path to element containing generic constraint information for a given constraint ID
-        # Note: only consider no intervention case for now
-        path = f".//NemSpdOutputs/ConstraintSolution[@ConstraintID='{constraint_id}'][@Intervention='0']"
-
-        return float(self.interval_data.find(path).get('RHS'))
-
-    def get_generic_constraint_cvf_value(self, constraint_id):
-        """Get Constraint Violation Factor for generic constraint"""
+    def get_generic_constraint_attribute(self, constraint_id, attribute):
+        """High-level generic constraint information. E.g. constraint type, violation price, etc."""
 
         # Path to element containing generic constraint information for a given constraint ID
         path = f".//NemSpdInputs/GenericConstraintCollection/GenericConstraint[@ConstraintID='{constraint_id}']"
 
-        return float(self.interval_data.find(path).get('ViolationPrice'))
+        # Matching elements
+        elements = self.interval_data.findall(path)
 
-    def get_trader_types(self):
-        """Get types of traders"""
+        return self.parse_single_attribute(elements, attribute)
 
-        # Path to elements containing price band information. Also contains trader type for each unit.
-        path = './/NemSpdInputs/TraderCollection/Trader'
-
-        return list(set([u.get('TraderType') for u in self.interval_data.findall(path)]))
-
-    def get_trader_type(self, trader_id):
-        """Get type of trader for given trader ID"""
-
-        # Path to elements containing price band information. Also contains trader type for each unit.
-        path = f".//NemSpdInputs/TraderCollection/Trader[@TraderID='{trader_id}']"
-
-        return self.interval_data.find(path).get('TraderType')
-
-    @staticmethod
-    def get_interconnector_types():
-        """Assuming only one type of interconnector trader."""
-
-        return ['INTERCONNECTOR']
-
-    def get_participant_types(self):
-        """Get all trader and interconnector types"""
-
-        # All interconnector and participant types. Used to differentiate generators, loads, and interconnectors.
-        participant_types = self.get_trader_types() + self.get_interconnector_types()
-
-        return participant_types
-
-    def get_generic_constraint_types(self):
-        """Get types of generic constraints (GE, LE, EQ) e.g. an inequality or equality constraint"""
-
-        # Path to elements containing Generic Constraint information
-        path = './/NemSpdInputs/GenericConstraintCollection/GenericConstraint'
-
-        return list(set([c.get('Type') for c in self.interval_data.findall(path)]))
-
-    def get_generic_constraint_type(self, constraint_id):
-        """Get type of generic constraint (GE, LE, EQ) e.g. an inequality or equality constraint"""
-
-        # Path to elements containing Generic Constraint information
-        path = f".//NemSpdInputs/GenericConstraintCollection/GenericConstraint[@ConstraintID='{constraint_id}']"
-
-        return self.interval_data.find(path).get('Type')
-
-    def get_interconnector_from_region(self, interconnector):
-        """Get interconnector 'from' region"""
-
-        # Path to elements containing interconnector information
-        path = (f".//NemSpdInputs/PeriodCollection/Period/InterconnectorPeriodCollection/"
-                f"InterconnectorPeriod[@InterconnectorID='{interconnector}']")
-
-        return self.interval_data.find(path).get('FromRegion')
-
-    def get_interconnector_to_region(self, interconnector):
-        """Get interconnector 'to' region"""
-
-        # Path to elements containing interconnector information
-        path = (f".//NemSpdInputs/PeriodCollection/Period/InterconnectorPeriodCollection/"
-                f"InterconnectorPeriod[@InterconnectorID='{interconnector}']")
-
-        return self.interval_data.find(path).get('ToRegion')
-
-    def get_lhs_terms(self, constraint_id):
+    def get_generic_constraint_lhs_terms(self, constraint_id):
         """Get trader, interconnector, and region terms along with associated factors for a given constraint ID"""
 
         # Path to generic constraint
@@ -353,27 +350,108 @@ class NEMDEData:
                           constraint.findall('.//LHSFactorCollection/RegionFactor')}
 
         # Combine terms into a single dictionary
-        terms = {'trader_factors': trader_factors, 'interconnector_factors': interconnector_factors,
-                 'region_factors': region_factors}
+        terms = {'traders': trader_factors, 'interconnectors': interconnector_factors, 'regions': region_factors}
 
         return terms
 
-    def get_trader_observed_dispatch(self, trader_id):
-        """Get observed dispatch for each trader"""
+    def get_generic_constraint_solution_attribute(self, constraint_id, attribute, intervention=0):
+        """Get generic constraint solution information. E.g. marginal value."""
+
+        # Path to element containing generic constraint information for a given constraint ID
+        path = f".//NemSpdOutputs/ConstraintSolution[@ConstraintID='{constraint_id}'][@Intervention='{intervention}']"
+
+        # Matching elements
+        elements = self.interval_data.findall(path)
+
+        return self.parse_single_attribute(elements, attribute)
+
+    def get_trader_attribute(self, trader_id, attribute):
+        """Get high-level trader attributes e.g. fast start status, min loading etc."""
+
+        # Path to elements containing price band information. Also contains trader type for each unit.
+        path = f".//NemSpdInputs/TraderCollection/Trader[@TraderID='{trader_id}']"
+
+        # Trader elements
+        elements = self.interval_data.findall(path)
+
+        return self.parse_single_attribute(elements, attribute)
+
+    def get_trader_period_attribute(self, trader_id, attribute):
+        """Get high-level trader attributes e.g. fast start status, min loading etc."""
+
+        # Path to elements containing price band information. Also contains trader type for each unit.
+        path = f".//NemSpdInputs/PeriodCollection/Period/TraderPeriodCollection/TraderPeriod[@TraderID='{trader_id}']"
+
+        # Trader elements
+        # TODO: May need to use findall in order to check no duplicates returned
+        # elements = self.interval_data.findall(path)
+        elements = [self.interval_data.find(path)]
+
+        return self.parse_single_attribute(elements, attribute)
+
+    def get_trader_initial_condition_attribute(self, trader_id, attribute):
+        """Get trader initial condition information"""
+
+        # Path to elements containing trader information
+        path = (f".//NemSpdInputs/TraderCollection/Trader[@TraderID='{trader_id}']/TraderInitialConditionCollection/"
+                f"TraderInitialCondition[@InitialConditionID='{attribute}']")
+
+        # Matching elements
+        elements = self.interval_data.findall(path)
+
+        # Check only one element
+        self.assert_single_value(elements)
+
+        # Return AGC status as an int if specified as the attribute
+        if attribute == 'AGCStatus':
+            return int(elements[0].get('Value'))
+        else:
+            return float(elements[0].get('Value'))
+
+    def get_trader_price_band_attribute(self, trader_id, trade_type, attribute):
+        """Get price band information"""
+
+        # Path to element containing price band information for given unit and offer type
+        path = (f".//NemSpdInputs/TraderCollection/Trader[@TraderID='{trader_id}']/TradePriceStructureCollection/"
+                f"TradePriceStructure/TradeTypePriceStructureCollection/"
+                f"TradeTypePriceStructure[@TradeType='{trade_type}']")
+
+        # Matching elements
+        # TODO: May need to replace find with findall (more robust when handling duplicates)
+        # elements = self.interval_data.findall(path)
+        elements = [self.interval_data.find(path)]
+
+        return self.parse_single_attribute(elements, attribute)
+
+    def get_trader_quantity_band_attribute(self, trader_id, trade_type, attribute):
+        """Get trader quantity band information"""
+
+        # Path to element containing price band information for given unit and offer type
+        path = (f".//NemSpdInputs/PeriodCollection/Period/TraderPeriodCollection/TraderPeriod[@TraderID='{trader_id}']"
+                f"/TradeCollection/Trade[@TradeType='{trade_type}']")
+
+        # Matching elements
+        # elements = self.interval_data.findall(path)
+        elements = [self.interval_data.find(path)]
+
+        return self.parse_single_attribute(elements, attribute)
+
+    def get_trader_solution_attribute(self, trader_id, attribute, intervention=0):
+        """Get trader solution information (shows actual energy targets)"""
 
         # Path to elements containing energy target information (only consider no intervention case for now)
-        path = f".//NemSpdOutputs/TraderSolution[@Intervention='0'][@TraderID='{trader_id}']"
+        path = f".//NemSpdOutputs/TraderSolution[@TraderID='{trader_id}'][@Intervention='{intervention}']"
 
-        # Target energy output for a given unit
-        unit_target = self.interval_data.find(path)
+        # Matching elements
+        elements = self.interval_data.findall(path)
 
-        return unit_target.attrib
+        return self.parse_single_attribute(elements, attribute)
 
-    def get_trader_solution_dataframe(self):
+    def get_trader_solution_dataframe(self, intervention=0):
         """Get observed dispatch for each trader and display in a Pandas DataFrame"""
 
         # Path to elements containing energy target information (only consider no intervention case for now)
-        path = f".//NemSpdOutputs/TraderSolution[@Intervention='0']"
+        path = f".//NemSpdOutputs/TraderSolution[@Intervention='{intervention}']"
 
         # Construct DataFrame
         df = pd.DataFrame([i.attrib for i in self.interval_data.findall(path)]).set_index(['TraderID'])
@@ -384,285 +462,195 @@ class NEMDEData:
 
         return df
 
-    def get_trader_initial_condition_mw(self, trader_id):
-        """Get initial MW output for given trader"""
+    def get_interconnector_attribute(self, interconnector_id, attribute):
+        """Get high-level attribute for given interconnector e.g. FromRegionLF, ToRegionLF, etc"""
 
-        # Path to elements containing trader information
-        path = (f".//NemSpdInputs/TraderCollection/Trader[@TraderID='{trader_id}']/TraderInitialConditionCollection/"
-                f"TraderInitialCondition[@InitialConditionID='InitialMW']")
+        # Path to interconnector elements
+        path = f".//NemSpdInputs/InterconnectorCollection/Interconnector[@InterconnectorID='{interconnector_id}']"
 
-        # Get initial MW value
-        initial_mw = float(self.interval_data.find(path).get('Value'))
+        # Matching elements
+        elements = self.interval_data.findall(path)
 
-        # If value is less than 0, return 0
-        if initial_mw < 0:
-            return 0
-        else:
-            return initial_mw
+        return self.parse_single_attribute(elements, attribute)
 
-    def get_trader_ramp_up_rate(self, trader_id):
-        """Get ramp rate up (MW/h) for given trader"""
+    def get_interconnector_initial_condition_attribute(self, interconnector_id, attribute):
+        """Get interconnection initial condition information"""
 
-        # Path to elements containing trader information
-        path = (f".//NemSpdInputs/PeriodCollection/Period/TraderPeriodCollection/TraderPeriod[@TraderID='{trader_id}']"
-                f"/TradeCollection/Trade[@TradeType='ENOF']")
-
-        return float(self.interval_data.find(path).get('RampUpRate'))
-
-    def get_trader_ramp_down_rate(self, trader_id):
-        """Get ramp rate down (MW/h) for given trader"""
-
-        # Path to elements containing trader information
-        path = (f".//NemSpdInputs/PeriodCollection/Period/TraderPeriodCollection/TraderPeriod[@TraderID='{trader_id}']"
-                f"/TradeCollection/Trade[@TradeType='ENOF']")
-
-        return float(self.interval_data.find(path).get('RampDnRate'))
-
-    def get_trader_initial_condition_ramp_rate_down(self, trader_id):
-        """Get ramp rate up (MW/h) for given trader"""
-
-        # Path to elements containing trader information
-        path = (f".//NemSpdInputs/PeriodCollection/Period/TraderPeriodCollection/TraderPeriod[@TraderID='{trader_id}']"
-                f"/TradeCollection/Trade[@TradeType='ENOF']")
-
-        return float(self.interval_data.find(path).get('RampDnRate'))
-
-    def get_trader_initial_condition_max_mw(self, trader_id):
-        """Get ramp rate up (MW/h) for given trader"""
-
-        # Path to elements containing trader information
-        path = (f".//NemSpdInputs/TraderCollection/Trader[@TraderID='{trader_id}']/TraderInitialConditionCollection/"
-                f"TraderInitialCondition[@InitialConditionID='HMW']")
-
-        return float(self.interval_data.find(path).get('Value'))
-
-    def get_trader_initial_condition_min_mw(self, trader_id):
-        """Get ramp rate up (MW/h) for given trader"""
-
-        # Path to elements containing trader information
-        path = (f".//NemSpdInputs/TraderCollection/Trader[@TraderID='{trader_id}']/TraderInitialConditionCollection/"
-                f"TraderInitialCondition[@InitialConditionID='LMW']")
-
-        return float(self.interval_data.find(path).get('Value'))
-
-    def get_interconnector_initial_condition_mw(self, interconnector_id):
-        """Get initial flow over given interconnector"""
-
+        # Path to interconnector elements
         path = (f".//NemSpdInputs/InterconnectorCollection/Interconnector[@InterconnectorID='{interconnector_id}']/"
-                f"InterconnectorInitialConditionCollection"
-                f"/InterconnectorInitialCondition[@InitialConditionID='InitialMW']")
+                f"InterconnectorInitialConditionCollection/"
+                f"InterconnectorInitialCondition[@InitialConditionID='{attribute}']")
 
-        return float(self.interval_data.find(path).get('Value'))
+        # Matching elements
+        elements = self.interval_data.findall(path)
 
-    def get_trader_semi_dispatch_value(self, trader_id):
-        """Check if trader is semi dispatchable (1=is semi dispatchable, 0=not semi-dispatchable)"""
+        return self.parse_single_attribute(elements, 'Value')
 
-        # Path to trader information elements
-        path = f".//NemSpdInputs/TraderCollection/Trader[@TraderID='{trader_id}']"
+    def get_interconnector_period_attribute(self, interconnector_id, attribute):
+        """High-level attribute giving access to interconnector limits and 'from' and 'to' regions"""
 
-        return int(self.interval_data.find(path).get('SemiDispatch'))
+        # Path to MNSP elements
+        path = (f".//NemSpdInputs/PeriodCollection/Period/InterconnectorPeriodCollection/"
+                f"InterconnectorPeriod[@InterconnectorID='{interconnector_id}']")
 
-    def get_constraint_violation_ramp_rate_penalty(self):
-        """Get penalty factor associated with violating ramp-rate"""
+        # Matching elements
+        elements = self.interval_data.findall(path)
 
-        # Path to general case information
-        path = './/NemSpdInputs/Case'
+        return self.parse_single_attribute(elements, attribute)
 
-        return float(self.interval_data.find(path).get('RampRatePrice'))
-
-    def get_interconnector_observed_flow_value(self, interconnector_id):
-        """Get observed flow over a given interconnector"""
-
-        # Path to interconnector element
-        path = f".//NemSpdOutputs/InterconnectorSolution[@InterconnectorID='{interconnector_id}']"
-
-        return float(self.interval_data.find(path).get('Flow'))
-
-    def get_interconnector_solution_dataframe(self):
-        """Get interconnector solution in DataFrame format"""
+    def get_interconnector_solution_attribute(self, interconnector_id, attribute, intervention=0):
+        """Get interconnector solution information"""
 
         # Path to interconnector solution elements. Only consider no intervention case for now.
-        path = f".//NemSpdOutputs/InterconnectorSolution[@Intervention='0']"
+        path = (f".//NemSpdOutputs/"
+                f"InterconnectorSolution[@InterconnectorID='{interconnector_id}'][@Intervention='{intervention}']")
 
-        # All interconnectors
-        interconnectors = self.interval_data.findall(path)
+        # Matching elements
+        elements = self.interval_data.findall(path)
 
-        # Extract solution information
-        df = pd.DataFrame([i.attrib for i in interconnectors]).set_index('InterconnectorID')
+        return self.parse_single_attribute(elements, attribute)
 
-        # Attempt to convert all columns to float
-        for c in df.columns:
-            df[c] = df[c].astype(float, errors='ignore')
+    def get_mnsp_price_band_attribute(self, mnsp_id, region_id, attribute):
+        """Get price band information for given MNSP for a bids in a given region"""
 
-        return df
+        # Path to element containing price band information for given interconnector and region
+        path = (f".//NemSpdInputs/InterconnectorCollection/Interconnector[@InterconnectorID='{mnsp_id}']/"
+                f"MNSPPriceStructureCollection/MNSPPriceStructure/MNSPRegionPriceStructureCollection/"
+                f"MNSPRegionPriceStructure[@RegionID='{region_id}']")
 
-    def get_trader_cost_function(self, trader_id, offer_type):
-        """Extract price and quantity band information for given trader and offer type and visualise bids"""
+        # Matching elements
+        elements = self.interval_data.findall(path)
 
-        # Extract prices and quantities
-        prices = [self.get_trader_price_band_value(trader_id, offer_type, b) for b in range(1, 11)]
-        quantities = [self.get_trader_quantity_band_value(trader_id, offer_type, b) for b in range(1, 11)]
+        return self.parse_single_attribute(elements, attribute)
 
-        # Combine into single object
-        cost = list(zip(prices, quantities))
+    def get_mnsp_quantity_band_attribute(self, mnsp_id, region_id, attribute):
+        """Get price band information for given MNSP for a bids in a given region"""
 
-        # Extract non-zero offers. Duplicate first price (for plotting step function)
-        y_price = [i[0] for i in cost if i[1] != 0]
-        y_price = [y_price[0]] + y_price
+        # Path to element containing quantity band information for given interconnector and region
+        path = (f".//NemSpdInputs/PeriodCollection/Period/InterconnectorPeriodCollection/"
+                f"InterconnectorPeriod[@InterconnectorID='{mnsp_id}']/MNSPOfferCollection"
+                f"/MNSPOffer[@RegionID='{region_id}']")
 
-        x_quantity = [i[1] for i in cost if i[1] != 0]
-        x_quantity = [0] + x_quantity
-        x_quantity = list(np.cumsum(x_quantity))
+        # Matching elements
+        elements = self.interval_data.findall(path)
 
-        fig, ax = plt.subplots()
-        ax.step(x_quantity, y_price, where='pre')
-        ax.set_ylabel('Price ($/MWh)')
-        ax.set_xlabel('Offer (MW)')
-        ax.set_title(f'{trader_id} {offer_type}')
-        plt.show()
+        return self.parse_single_attribute(elements, attribute)
 
-        return prices, quantities
+    def get_case_attribute(self, attribute):
+        """Get case input attributes"""
 
-    def get_region_initial_demand_value(self, region_id):
-        """Get region initial demand"""
+        # Path to element containing case information
+        path = f".//NemSpdInputs/Case"
 
-        # Path to elements containing region information
-        path = (f".//NemSpdInputs/RegionCollection/Region[@RegionID='{region_id}']/RegionInitialConditionCollection/"
-                f"RegionInitialCondition[@InitialConditionID='InitialDemand']")
+        # Matching elements
+        elements = self.interval_data.findall(path)
 
-        return float(self.interval_data.find(path).get('Value'))
+        return self.parse_single_attribute(elements, attribute)
 
-    def get_region_demand_forecast_value(self, region_id):
-        """Get forecast demand for a given region"""
+    def get_case_solution_attribute(self, attribute):
+        """Get case solution information"""
 
-        # Path to region information elements
+        # Path to element containing case solution information
+        path = f".//NemSpdOutputs/CaseSolution"
+
+        # Matching elements
+        elements = self.interval_data.findall(path)
+
+        return self.parse_single_attribute(elements, attribute)
+
+    def get_period_solution_attribute(self, attribute):
+        """High-level period solution information"""
+
+        # Path to element containing period solution information
+        path = f".//NemSpdOutputs/PeriodSolution"
+
+        # Matching elements
+        elements = self.interval_data.findall(path)
+
+        return self.parse_single_attribute(elements, attribute)
+
+    def get_region_period_attribute(self, region_id, attribute):
+        """Get region period attributes e.g. demand forecast"""
+
+        # Path to element containing region period information
         path = f".//NemSpdInputs/PeriodCollection/Period/RegionPeriodCollection/RegionPeriod[@RegionID='{region_id}']"
 
-        return float(self.interval_data.find(path).get('DemandForecast'))
+        # Matching elements
+        elements = self.interval_data.findall(path)
 
-    def get_region_ids(self):
-        """Get NEM region IDs"""
+        return self.parse_single_attribute(elements, attribute)
 
-        # Path to region information elements
-        path = f'.//NemSpdInputs/PeriodCollection/Period/RegionPeriodCollection/RegionPeriod'
+    def get_region_initial_condition_attribute(self, region_id, attribute):
+        """Get region attributes"""
 
-        return [i.get('RegionID') for i in self.interval_data.findall(path)]
+        # Path to element containing case information
+        path = (f".//NemSpdInputs/RegionCollection/Region[@RegionID='{region_id}']/RegionInitialConditionCollection/"
+                f"RegionInitialCondition[@InitialConditionID='{attribute}']")
 
-    def get_trader_region_id(self, trader_id):
-        """Get the NEM region to which a given trader belongs"""
+        # Matching elements
+        elements = self.interval_data.findall(path)
 
-        # Path to trader elements
-        path = f".//NemSpdInputs/PeriodCollection/Period/TraderPeriodCollection/TraderPeriod[@TraderID='{trader_id}']"
+        return self.parse_single_attribute(elements, 'Value')
 
-        return self.interval_data.find(path).get('RegionID')
+    def get_region_solution_attribute(self, region_id, attribute, intervention=0):
+        """Get region solution information"""
 
-    def get_trader_fcas_enablement_min_value(self, trader_id, offer_type):
-        """Get FCAS trapezium min enablement value"""
+        # Path to element containing region solution information
+        path = f".//NemSpdOutputs/RegionSolution[@RegionID='{region_id}'][@Intervention='{intervention}']"
 
-        # Path to element containing price band information for given unit and offer type
-        path = (f".//NemSpdInputs/PeriodCollection/Period/TraderPeriodCollection/TraderPeriod[@TraderID='{trader_id}']"
-                f"/TradeCollection/Trade[@TradeType='{offer_type}']")
+        # Matching elements
+        elements = self.interval_data.findall(path)
 
-        return float(self.interval_data.find(path).get(f'EnablementMin'))
-
-    def get_trader_fcas_enablement_max_value(self, trader_id, offer_type):
-        """Get FCAS trapezium max enablement value"""
-
-        # Path to element containing price band information for given unit and offer type
-        path = (f".//NemSpdInputs/PeriodCollection/Period/TraderPeriodCollection/TraderPeriod[@TraderID='{trader_id}']"
-                f"/TradeCollection/Trade[@TradeType='{offer_type}']")
-
-        return float(self.interval_data.find(path).get(f'EnablementMax'))
-
-    def get_trader_fcas_low_breakpoint_value(self, trader_id, offer_type):
-        """Get FCAS trapezium low breakpoint value"""
-
-        # Path to element containing price band information for given unit and offer type
-        path = (f".//NemSpdInputs/PeriodCollection/Period/TraderPeriodCollection/TraderPeriod[@TraderID='{trader_id}']"
-                f"/TradeCollection/Trade[@TradeType='{offer_type}']")
-
-        return float(self.interval_data.find(path).get(f'LowBreakpoint'))
-
-    def get_trader_fcas_high_breakpoint_value(self, trader_id, offer_type):
-        """Get FCAS trapezium high breakpoint value"""
-
-        # Path to element containing price band information for given unit and offer type
-        path = (f".//NemSpdInputs/PeriodCollection/Period/TraderPeriodCollection/TraderPeriod[@TraderID='{trader_id}']"
-                f"/TradeCollection/Trade[@TradeType='{offer_type}']")
-
-        return float(self.interval_data.find(path).get(f'HighBreakpoint'))
-
-    def get_trader_scada_ramp_up_rate_value(self, trader_id):
-        """Get AGC ramp-up capability"""
-
-        # Path to element containing price band information for given unit and offer type
-        path = (f".//NemSpdInputs/TraderCollection/Trader[@TraderID='{trader_id}']/TraderInitialConditionCollection/"
-                f"TraderInitialCondition/[@InitialConditionID='SCADARampUpRate']")
-
-        return float(self.interval_data.find(path).get('Value'))
-
-    def get_trader_scada_ramp_down_rate_value(self, trader_id):
-        """Get AGC ramp-down capability"""
-
-        # Path to element containing price band information for given unit and offer type
-        path = (f".//NemSpdInputs/TraderCollection/Trader[@TraderID='{trader_id}']/TraderInitialConditionCollection/"
-                f"TraderInitialCondition/[@InitialConditionID='SCADARampDnRate']")
-
-        return float(self.interval_data.find(path).get('Value'))
-
-    def get_trader_scada_agc_status_value(self, trader_id):
-        """Get AGC status"""
-
-        # Path to element containing price band information for given unit and offer type
-        path = (f".//NemSpdInputs/TraderCollection/Trader[@TraderID='{trader_id}']/TraderInitialConditionCollection/"
-                f"TraderInitialCondition/[@InitialConditionID='AGCStatus']")
-
-        return int(self.interval_data.find(path).get('Value'))
-
-    def get_trader_scada_agc_upper_limit_value(self, trader_id):
-        """Get AGC upper MW limit"""
-
-        # Path to element containing price band information for given unit and offer type
-        path = (f".//NemSpdInputs/TraderCollection/Trader[@TraderID='{trader_id}']/TraderInitialConditionCollection/"
-                f"TraderInitialCondition/[@InitialConditionID='HMW']")
-
-        return float(self.interval_data.find(path).get('Value'))
-
-    def get_trader_scada_agc_lower_limit_value(self, trader_id):
-        """Get AGC lower MW limit"""
-
-        # Path to element containing price band information for given unit and offer type
-        path = (f".//NemSpdInputs/TraderCollection/Trader[@TraderID='{trader_id}']/TraderInitialConditionCollection/"
-                f"TraderInitialCondition/[@InitialConditionID='LMW']")
-
-        return float(self.interval_data.find(path).get('Value'))
+        return self.parse_single_attribute(elements, attribute)
 
 
 if __name__ == '__main__':
+    # Root directory containing NEMDE and MMSDM files
     data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
                                   os.path.pardir, 'nemweb', 'Reports', 'Data_Archive')
 
-    nemde = NEMDEData(data_directory)
+    # Object used to parse NEMDE file
+    nemde_data = NEMDEDataHandler(data_directory)
+    mmsdm_data = MMSDMDataHandler(data_directory)
 
-    yr, mt, dy, iv = 2019, 10, 10, 1
-    nemde.load_interval(yr, mt, dy, iv)
+    # Load interval
+    nemde_data.load_interval(2019, 10, 10, 1)
 
-    trd_ids = nemde.get_trader_ids()
-    trd_offer_index = nemde.get_trader_offer_index()
-    mp_id = nemde.get_mnsp_ids()
-    int_id = nemde.get_interconnector_ids()
-    mp_o_index = nemde.get_mnsp_offer_index()
-    sd = nemde.get_trader_semi_dispatch_value('AGLHAL')
+    # # Testing methods
+    # region_index = nemde_data.get_region_index()
+    # trader_index = nemde_data.get_trader_index()
+    # trader_offer_index = nemde_data.get_trader_offer_index()
+    # interconnector_index = nemde_data.get_interconnector_index()
+    # mnsp_index = nemde_data.get_mnsp_index()
+    # mnsp_offer_index = nemde_data.get_mnsp_offer_index()
+    # generic_constraint_index = nemde_data.get_generic_constraint_index()
+    # generic_constraint_trader_variable_index = nemde_data.get_generic_constraint_trader_variable_index()
+    # generic_constraint_interconnector_variable_index = nemde_data.get_generic_constraint_interconnector_variable_index()
+    # generic_constraint_region_variable_index = nemde_data.get_generic_constraint_region_variable_index()
+    #
+    # constraint_attribute_value = nemde_data.get_generic_constraint_attribute('V_WEMENSF_19INV', 'Type')
+    # constraint_lhs_terms = nemde_data.get_generic_constraint_lhs_terms('V_WEMENSF_19INV')
+    # constraint_rhs = nemde_data.get_generic_constraint_solution_attribute('V_WEMENSF_19INV', 'RHS')
+    #
+    # trader_initial_mw = nemde_data.get_trader_initial_condition_attribute('AGLHAL', 'InitialMW')
+    #
+    # price_1 = nemde_data.get_trader_price_band_attribute('AGLHAL', 'ENOF', 'PriceBand1')
+    # quantity_1 = nemde_data.get_trader_quantity_band_attribute('AGLHAL', 'ENOF', 'BandAvail1')
+    #
+    # trader_r6 = nemde_data.get_trader_solution_attribute('AGLHAL', 'R6Target')
+    # icon_id = nemde_data.get_interconnector_attribute('N-Q-MNSP1', 'InterconnectorID')
+    # icon_initial_mw = nemde_data.get_interconnector_initial_condition_attribute('N-Q-MNSP1', 'InitialMW')
+    #
+    # icon_from_region = nemde_data.get_interconnector_period_attribute('N-Q-MNSP1', 'FromRegion')
+    # mnsp_p1 = nemde_data.get_mnsp_price_band_attribute('T-V-MNSP1', 'TAS1', 'PriceBand1')
+    # mnsp_q1 = nemde_data.get_mnsp_quantity_band_attribute('T-V-MNSP1', 'TAS1', 'BandAvail1')
+    #
+    # case_price = nemde_data.get_case_attribute('EnergyDeficitPrice')
+    # case_solution = nemde_data.get_case_solution_attribute('TotalObjective')
+    # period_solution = nemde_data.get_period_solution_attribute('TotalASProfileViolation')
+    #
+    # region_initial = nemde_data.get_region_initial_condition_attribute('NSW1', 'InitialDemand')
+    # region_solution = nemde_data.get_region_solution_attribute('NSW1', 'EnergyPrice')
 
-    d = nemde.get_interconnector_solution_dataframe()
-
-    p, q = nemde.get_trader_cost_function('DALNTHL1', 'L6SE')
-
-    demand = [nemde.get_region_initial_demand_value(r) for r in ['SA1', 'VIC1', 'NSW1', 'QLD1', 'TAS1']]
-
-    ru = nemde.get_trader_scada_ramp_up_rate_value('VP6')
-    rd = nemde.get_trader_scada_ramp_down_rate_value('VP6')
-    agc = nemde.get_trader_scada_agc_status_value('VP6')
-
-    agc_u = nemde.get_trader_scada_agc_upper_limit_value('VP6')
-    agc_l = nemde.get_trader_scada_agc_lower_limit_value('VP6')
+    # Get all marginal loss factors
+    # mmsdm_data.load_interval(2019, 10)
