@@ -152,7 +152,7 @@ class FCASHandler:
         """Get FCAS solution"""
 
         # Map between names used in trader period to define offers and solution output
-        name_map = {'R6SE': 'R6Target', 'R5RE': 'R5RegTarget'}
+        name_map = {'R6SE': 'R6Target', 'R5RE': 'R5RegTarget', 'L5RE': 'L5RegTarget'}
 
         return self.data.get_trader_solution_attribute(trader_id, name_map[trade_type])
 
@@ -201,6 +201,58 @@ class FCASHandler:
 
         return ax
 
+    def plot_fcas_solution2(self, trader_id, trade_type, ax):
+        """Plot FCAS solution over FCAS trapezium"""
+
+        # FCAS trapezium
+        trapezium = self.get_fcas_trapezium_offer(trader_id, trade_type)
+
+        # FCAS and energy targets
+        fcas_target = self.get_fcas_solution(trader_id, trade_type)
+        energy_target = self.get_energy_target_solution(trader_id)
+
+        x_min, x_max = trapezium['enablement_min'], trapezium['enablement_max']
+        y_min, y_max = 0, trapezium['max_available'] + 1
+
+        # Plot energy and FCAS target
+        ax.plot([x_min, x_max], [fcas_target, fcas_target], color='r', linestyle='--')
+        ax.plot([energy_target, energy_target], [y_min, y_max], color='b', linestyle='--')
+
+        return ax
+
+    def get_scaled_fcas_trapezium(self, trader_id, trade_type):
+        """Get scaled FCAS trapezium"""
+
+        # Get unscaled FCAS offer
+        trapezium_1 = dict(self.get_fcas_trapezium_offer(trader_id, trade_type))
+
+        assert trade_type in ['R5RE', 'L5RE'], Exception(f'{trade_type}: can only scale regulating FCAS trapeziums')
+
+        # Only scale regulating FCAS offers
+        trapezium_2 = self.get_scaled_fcas_trapezium_agc_enablement_limits(trader_id, trapezium_1)
+        trapezium_3 = self.get_scaled_fcas_trapezium_agc_ramp_rates(trader_id, trade_type, trapezium_2)
+        trapezium_4 = self.get_scaled_fcas_trapezium_uigf(trader_id, trapezium_3)
+
+        return trapezium_4
+
+    def check_regulating_fcas_plots(self):
+        """Check FCAS trapezium scaling and corresponding energy / FCAS target solutions"""
+
+        for i, j in self.data.get_trader_offer_index():
+            try:
+                if j in ['R5RE', 'L5RE']:
+                    t1 = self.get_fcas_trapezium_offer(i, j)
+                    t2 = self.get_scaled_fcas_trapezium_agc_enablement_limits(i, t1)
+                    t3 = self.get_scaled_fcas_trapezium_agc_ramp_rates(i, j, t2)
+                    t4 = self.get_scaled_fcas_trapezium_uigf(i, t3)
+
+                    ax = self.plot_fcas(t1, t2, t3, t4)
+                    ax = self.plot_fcas_solution2(i, j, ax)
+                    ax.set_title(f'{i} - {j}')
+                    plt.show()
+            except Exception as e:
+                print(i, j, e)
+
 
 if __name__ == '__main__':
     # Root directory containing NEMDE and MMSDM files
@@ -215,32 +267,7 @@ if __name__ == '__main__':
     # Load interval
     fcas.data.load_interval(2019, 10, 10, 1)
 
-    # # g, o = 'BW01', 'R5RE'
-    # # g, o = 'GSTONE2', 'R5RE'
-    # g, o = 'HPRG1', 'R5RE'
-    #
-    # # Plot FCAS solution
-    # t1 = fcas.get_fcas_trapezium_offer(g, o)
-    # t2 = fcas.get_scaled_fcas_trapezium_agc_enablement_limits(g, t1)
-    # t3 = fcas.get_scaled_fcas_trapezium_agc_ramp_rates(g, o, t2)
-    # t4 = fcas.get_scaled_fcas_trapezium_uigf(g, t3)
-    #
-    # fcas.plot_fcas(t1, t2, t3, t4)
-    # plt.show()
+    # Scaled FCAS trapezium
+    scaled_trapezium = fcas.get_scaled_fcas_trapezium('BW01', 'R5RE')
 
-    for i, j in fcas.data.get_trader_offer_index():
-        try:
-            if j in ['R5RE', 'L5RE']:
-                t1 = fcas.get_fcas_trapezium_offer(i, j)
-                t2 = fcas.get_scaled_fcas_trapezium_agc_enablement_limits(i, t1)
-                t3 = fcas.get_scaled_fcas_trapezium_agc_ramp_rates(i, j, t2)
-                t4 = fcas.get_scaled_fcas_trapezium_uigf(i, t3)
-
-                ax = fcas.plot_fcas(t1, t2, t3, t4)
-                ax.set_title(f'{i} - {j}')
-                plt.show()
-        except Exception as e:
-            print(i, j, e)
-
-# BW01 R5RE
-# HPRG1 - R5RE
+    fcas.get_fcas_trapezium_offer('BALBL1', 'R5RE')

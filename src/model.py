@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 
 from data import NEMDEDataHandler
 from data import MMSDMDataHandler
+from fcas import FCASHandler
 
 
 class NEMDEModel:
@@ -22,6 +23,7 @@ class NEMDEModel:
 
         # Object used to extract MMSDM input information
         self.mmsdm_data = MMSDMDataHandler(data_dir)
+        self.fcas = FCASHandler(data_dir)
 
         # Solver options
         self.tee = True
@@ -1384,10 +1386,66 @@ class NEMDEModel:
 
         return m
 
+    @staticmethod
+    def get_slope(x1, x2, y1, y2):
+        """Compute slope. Return None if slope is undefined"""
+
+        try:
+            return (y2 - y1) / (x2 - x1)
+        except ZeroDivisionError:
+            return None
+
+    @staticmethod
+    def get_intercept(slope, x0, y0):
+        """Get y-axis intercept given slope and point"""
+
+        return y0 - (slope * x0)
+
     def define_fcas_constraints2(self, m):
         """FCAS constraints"""
 
+        def as_profile_1_rule(m, i, j):
+            """Constraint LHS component of FCAS trapeziums (line between enablement min and low breakpoint)"""
 
+            if j in ['ENOF', 'LDOF']:
+                return Constraint.Skip
+
+            elif j in ['R5RE', 'L5RE']:
+                trapezium = self.fcas.get_scaled_fcas_trapezium(i, j)
+            else:
+                trapezium = self.fcas.get_fcas_trapezium_offer(i, j)
+
+            # Get slope between enablement min and low breakpoint
+            x1, y1 = trapezium['enablement_min'], 0
+            x2, y2 = trapezium['low_breakpoint'], trapezium['max_available']
+
+            # Energy and AGC status
+            energy = self.data.get_trader_initial_condition_attribute(i, 'InitialMW')
+            agc_status = self.data.get_trader_initial_condition_attribute(i, 'AGCStatus')
+
+            # Check energy output in previous interval within enablement minutes (else trapped outside trapezium)
+            # TODO: check all FCAS conditions
+            if (energy < trapezium['enablement_min']) or (energy > trapezium['enablement_max']) or (agc_status == 0):
+                return Constraint.Skip
+
+            slope = self.get_slope(x1, x2, y1, y2)
+
+            if slope is not None:
+                y_intercept = self.get_intercept(slope, x1, y1)
+                try:
+                    return m.V_TRADER_TOTAL_OFFER[i, j] <= slope * m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + y_intercept
+
+                except KeyError:
+                    return m.V_TRADER_TOTAL_OFFER[i, j] <= slope * m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] + y_intercept
+
+            else:
+                # TODO: need to consider if vertical line
+                return Constraint.Skip
+
+        # AS profile constraint - between enablement min and low breakpoint
+        m.AS_PROFILE_1 = Constraint(m.S_TRADER_OFFERS, rule=as_profile_1_rule)
+
+        return m
 
     def define_constraints(self, m):
         """Define model constraints"""
@@ -1406,6 +1464,7 @@ class NEMDEModel:
 
         # Construct FCAS constraints
         # m = self.define_fcas_constraints(m)
+        m = self.define_fcas_constraints2(m)
 
         return m
 
@@ -1426,6 +1485,7 @@ class NEMDEModel:
 
         # Update data for specified interval
         self.data.load_interval(year, month, day, interval)
+        self.fcas.data.load_interval(year, month, day, interval)
         self.mmsdm_data.load_interval(year, month)
 
         # Initialise concrete model instance
