@@ -1401,16 +1401,98 @@ class NEMDEModel:
 
         return y0 - (slope * x0)
 
+    def get_fcas_availability(self, trader_id, trade_type):
+        """Check FCAS availability"""
+
+        # FCAS trapezium
+        if trade_type in ['R5RE', 'L5RE']:
+            trapezium = self.fcas.get_scaled_fcas_trapezium(trader_id, trade_type)
+        else:
+            trapezium = self.fcas.get_fcas_trapezium_offer(trader_id, trade_type)
+
+        # Max availability must be greater than 0
+        cond_1 = trapezium['max_available'] > 0
+
+        # Quantity greater than 0 for at least one quantity band for the given service
+        cond_2 = (max([self.data.get_trader_quantity_band_attribute(trader_id, trade_type, f'BandAvail{i}')
+                       for i in range(1, 11)])
+                  > 0)
+
+        # Energy availability >= enablement min for FCAS service
+        # print(trader_id, trade_type)
+
+        # TODO: Need to handle traders without energy offers
+        # Try and get max available for energy offers
+        try:
+            max_avail = self.data.get_trader_quantity_band_attribute(trader_id, 'ENOF', 'MaxAvail')
+        except AttributeError:
+            pass
+
+        # Try and get max available for load offers
+        try:
+            max_avail = self.data.get_trader_quantity_band_attribute(trader_id, 'LDOF', 'MaxAvail')
+        except AttributeError:
+            pass
+
+        # Try and use specified FCAS condition, but if energy offer doesn't exist, then set cond_3=True by default
+        try:
+            cond_3 = max_avail >= trapezium['enablement_min']
+        except NameError:
+            cond_3 = True
+
+        # cond_3 = max_avail >= trapezium['enablement_min']
+
+        # FCAS enablement max >= 0
+        cond_4 = trapezium['enablement_max'] >= 0
+
+        # Initial MW within enablement min and max
+        cond_5 = (trapezium['enablement_min']
+                  <= self.data.get_trader_initial_condition_attribute(trader_id, 'InitialMW')
+                  <= trapezium['enablement_max'])
+
+        # AGC is activate
+        # TODO: AGC criterion doesn't seem to apply to storage units
+        # if trader_id == ['DALNTH01']:
+        #     cond_6 = True
+        # else:
+        #     cond_6 = self.data.get_trader_initial_condition_attribute(trader_id, 'AGCStatus') == 1
+        cond_6 = True
+
+        return all([cond_1, cond_2, cond_3, cond_4, cond_5, cond_6])
+
     def define_fcas_constraints2(self, m):
         """FCAS constraints"""
 
-        def as_profile_1_rule(m, i, j):
-            """Constraint LHS component of FCAS trapeziums (line between enablement min and low breakpoint)"""
+        def fcas_available_rule(m, i, j):
+            """Set FCAS to zero if conditions not met"""
 
             if j in ['ENOF', 'LDOF']:
                 return Constraint.Skip
 
-            elif j in ['R5RE', 'L5RE']:
+            # Check energy output in previous interval within enablement minutes (else trapped outside trapezium)
+            if not self.get_fcas_availability(i, j):
+                # Set FCAS to 0 if unavailable
+                print(i, j)
+                return m.V_TRADER_TOTAL_OFFER[i, j] == 0
+            else:
+                return Constraint.Skip
+
+        # FCAS availability
+        m.FCAS_AVAILABILITY_RULE = Constraint(m.S_TRADER_OFFERS, rule=fcas_available_rule)
+
+        def as_profile_1_rule(m, i, j):
+            """Constraint LHS component of FCAS trapeziums (line between enablement min and low breakpoint)"""
+
+            # Only consider FCAS offers - ignore energy offers
+            if j in ['ENOF', 'LDOF']:
+                return Constraint.Skip
+
+            # Check FCAS is available
+            if not self.get_fcas_availability(i, j):
+                return Constraint.Skip
+
+            # Get FCAS trapezium
+            if j in ['R5RE', 'L5RE']:
                 trapezium = self.fcas.get_scaled_fcas_trapezium(i, j)
             else:
                 trapezium = self.fcas.get_fcas_trapezium_offer(i, j)
@@ -1418,16 +1500,6 @@ class NEMDEModel:
             # Get slope between enablement min and low breakpoint
             x1, y1 = trapezium['enablement_min'], 0
             x2, y2 = trapezium['low_breakpoint'], trapezium['max_available']
-
-            # Energy and AGC status
-            energy = self.data.get_trader_initial_condition_attribute(i, 'InitialMW')
-            agc_status = self.data.get_trader_initial_condition_attribute(i, 'AGCStatus')
-
-            # Check energy output in previous interval within enablement minutes (else trapped outside trapezium)
-            # TODO: check all FCAS conditions
-            if (energy < trapezium['enablement_min']) or (energy > trapezium['enablement_max']) or (agc_status == 0):
-                return Constraint.Skip
-
             slope = self.get_slope(x1, x2, y1, y2)
 
             if slope is not None:
@@ -1440,10 +1512,128 @@ class NEMDEModel:
 
             else:
                 # TODO: need to consider if vertical line
-                return Constraint.Skip
+                return m.V_TRADER_TOTAL_OFFER[i, j] <= trapezium['max_available']
 
         # AS profile constraint - between enablement min and low breakpoint
         m.AS_PROFILE_1 = Constraint(m.S_TRADER_OFFERS, rule=as_profile_1_rule)
+
+        def as_profile_2_rule(m, i, j):
+            """Top of FCAS trapezium"""
+
+            # Only consider FCAS offers - ignore energy offers
+            if j in ['ENOF', 'LDOF']:
+                return Constraint.Skip
+
+            # Check FCAS is available
+            if not self.get_fcas_availability(i, j):
+                return Constraint.Skip
+
+            # Get FCAS trapezium
+            if j in ['R5RE', 'L5RE']:
+                trapezium = self.fcas.get_scaled_fcas_trapezium(i, j)
+            else:
+                trapezium = self.fcas.get_fcas_trapezium_offer(i, j)
+
+            # Ensure FCAS is less than max FCAS available
+            return m.V_TRADER_TOTAL_OFFER[i, j] <= trapezium['max_available']
+
+        # AS profile constraint - between enablement min and low breakpoint
+        m.AS_PROFILE_2 = Constraint(m.S_TRADER_OFFERS, rule=as_profile_2_rule)
+
+        def as_profile_3_rule(m, i, j):
+            """Constraint LHS component of FCAS trapeziums (line between enablement min and low breakpoint)"""
+
+            # Only consider FCAS offers - ignore energy offers
+            if j in ['ENOF', 'LDOF']:
+                return Constraint.Skip
+
+            # Check FCAS is available
+            if not self.get_fcas_availability(i, j):
+                return Constraint.Skip
+
+            # Get FCAS trapezium
+            if j in ['R5RE', 'L5RE']:
+                trapezium = self.fcas.get_scaled_fcas_trapezium(i, j)
+            else:
+                trapezium = self.fcas.get_fcas_trapezium_offer(i, j)
+
+            # Get slope between enablement min and low breakpoint
+            x1, y1 = trapezium['high_breakpoint'], trapezium['max_available']
+            x2, y2 = trapezium['enablement_max'], 0
+            slope = self.get_slope(x1, x2, y1, y2)
+
+            if slope is not None:
+                y_intercept = self.get_intercept(slope, x1, y1)
+                try:
+                    return m.V_TRADER_TOTAL_OFFER[i, j] <= slope * m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + y_intercept
+
+                except KeyError:
+                    return m.V_TRADER_TOTAL_OFFER[i, j] <= slope * m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] + y_intercept
+
+            else:
+                # TODO: need to consider if vertical line
+                return m.V_TRADER_TOTAL_OFFER[i, j] <= trapezium['max_available']
+
+        # AS profile constraint - between enablement min and low breakpoint
+        m.AS_PROFILE_3 = Constraint(m.S_TRADER_OFFERS, rule=as_profile_3_rule)
+
+        def joint_ramp_up_rule(m, i, j):
+            """Joint ramping constraint for regulating FCAS"""
+
+            # Only consider raise regulation FCAS offers
+            if not (j == 'R5RE'):
+                return Constraint.Skip
+
+            # Check FCAS is available
+            if not self.get_fcas_availability(i, j):
+                return Constraint.Skip
+
+            # SCADA ramp-up - divide by 12 to get max ramp over 5 minutes (assuming SCADARampUpRate is MW/h)
+            scada_ramp = self.data.get_trader_initial_condition_attribute(i, 'SCADARampUpRate') / 12
+
+            # TODO: Check what to do if no SCADARampUpRate
+            if (not scada_ramp) or (scada_ramp <= 0):
+                return Constraint.Skip
+
+            # Initial MW
+            initial_mw = self.data.get_trader_initial_condition_attribute(i, 'InitialMW')
+
+            try:
+                return m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + m.V_TRADER_TOTAL_OFFER[i, 'R5RE'] <= initial_mw + scada_ramp
+            except:
+                return m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] + m.V_TRADER_TOTAL_OFFER[i, 'R5RE'] <= initial_mw + scada_ramp
+
+        # Joint ramp up constraint
+        m.JOINT_RAMP_UP = Constraint(m.S_TRADER_OFFERS, rule=joint_ramp_up_rule)
+
+        def joint_ramp_down_rule(m, i, j):
+            """Joint ramping constraint for regulating FCAS"""
+
+            # Only consider raise regulation FCAS offers
+            if not (j == 'L5RE'):
+                return Constraint.Skip
+
+            # Check FCAS is available
+            if not self.get_fcas_availability(i, j):
+                return Constraint.Skip
+
+            # SCADA ramp-up - divide by 12 to get max ramp over 5 minutes (assuming SCADARampDnRate is MW/h)
+            scada_ramp = self.data.get_trader_initial_condition_attribute(i, 'SCADARampDnRate') / 12
+
+            # TODO: Check what to do if no SCADARampUpRate
+            if (not scada_ramp) or (scada_ramp <= 0):
+                return Constraint.Skip
+
+            # Initial MW
+            initial_mw = self.data.get_trader_initial_condition_attribute(i, 'InitialMW')
+
+            try:
+                return m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] - m.V_TRADER_TOTAL_OFFER[i, 'L5RE'] >= initial_mw - scada_ramp
+            except:
+                return m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] - m.V_TRADER_TOTAL_OFFER[i, 'L5RE'] >= initial_mw - scada_ramp
+
+        # Joint ramp up constraint
+        m.JOINT_RAMP_DOWN = Constraint(m.S_TRADER_OFFERS, rule=joint_ramp_down_rule)
 
         return m
 
@@ -1739,8 +1929,8 @@ if __name__ == '__main__':
     # Write generic constraints
     nemde.save_generic_constraints(model)
 
-    raise_map = [('R6SE', 'R6Target'), ('R60S', 'R60Target'), ('R5MI', 'R5Target'), ('R5RE', 'R5RegTarget')]
-    lower_map = [('L6SE', 'L6Target'), ('L60S', 'L60Target'), ('L5MI', 'L5Target'), ('L5RE', 'L5RegTarget')]
+    # raise_map = [('R6SE', 'R6Target'), ('R60S', 'R60Target'), ('R5MI', 'R5Target'), ('R5RE', 'R5RegTarget')]
+    # lower_map = [('L6SE', 'L6Target'), ('L60S', 'L60Target'), ('L5MI', 'L5Target'), ('L5RE', 'L5RegTarget')]
 
     # Model targets
     # dfs = []
@@ -1749,3 +1939,5 @@ if __name__ == '__main__':
     #
     # Combine into single DataFrame
     c = analysis.check_trader_solution(model, 'TUMUT3')
+
+    nemde.get_fcas_availability('DALNTH01', 'R6SE')
