@@ -603,6 +603,47 @@ class NEMDEDataHandler:
 
         return self.parse_single_attribute(elements, attribute)
 
+    def get_constraint_scada_attribute_partial_id(self, spd_type, ems_id, spd_id_start, attribute):
+        """Get constraint SCADA attribute"""
+
+        # Path to element containing SCADA information
+        path = (f".//NemSpdInputs/ConstraintScadaDataCollection/ConstraintScadaData[@SpdType='{spd_type}']"
+                f"/ScadaValuesCollection/ScadaValues")
+
+        # Matching elements
+        elements = self.interval_data.findall(path)
+
+        # Get elements
+        print(spd_type, ems_id, spd_id_start, attribute)
+        els = [i for i in elements if (i.get('EMS_ID') == ems_id) and (i.get('SpdID').startswith(spd_id_start))]
+
+        return self.parse_single_attribute(els, attribute)
+
+    def get_non_scheduled_generators(self):
+        """Get non-scheduled generators"""
+
+        # Path to elements
+        path = f".//NemSpdInputs/PeriodCollection/Period/Non_Scheduled_Generator_Collection/Non_Scheduled_Generator"
+
+        # Matching elements
+        elements = self.interval_data.findall(path)
+
+        return [i.get('DUID') for i in elements]
+
+    def get_non_scheduled_generator_dispatch(self, duid, attribute):
+        """Get non-scheduled generator dispatch"""
+
+        # Path to elements
+        path = (f".//NemSpdInputs/PeriodCollection/Period/Non_Scheduled_Generator_Collection"
+                f"/Non_Scheduled_Generator[@DUID='{duid}']")
+
+        # Matching elements
+        elements = self.interval_data.findall(path)
+
+        return self.parse_single_attribute(elements, attribute)
+
+
+
 
 if __name__ == '__main__':
     # Root directory containing NEMDE and MMSDM files
@@ -615,6 +656,11 @@ if __name__ == '__main__':
 
     # Load interval
     nemde_data.load_interval(2019, 10, 10, 1)
+    a = nemde_data.get_non_scheduled_generators()
+    b = nemde_data.get_non_scheduled_generator_dispatch('BARCSF1', 'MW')
+
+    # a = nemde_data.get_constraint_scada_attribute_partial_id('A', 'INER', '220_GEN_INERTIA', 'Value')
+    # a = nemde_data.get_constraint_scada_attribute_partial_id('A', 'INER', '220_GEN_', 'Grouping_ID')
 
     # # Testing methods
     # region_index = nemde_data.get_region_index()

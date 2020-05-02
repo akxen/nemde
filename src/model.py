@@ -37,6 +37,9 @@ class NEMDEModel:
         # Market participants (generators and loads)
         m.S_TRADERS = Set(initialize=self.data.get_trader_index())
 
+        # Non-scheduled generators
+        m.S_NON_SCHEDULED_GENERATORS = Set(initialize=self.data.get_non_scheduled_generators())
+
         # Market Network Service Providers (interconnectors that bid into the market)
         m.S_MNSPS = Set(initialize=self.data.get_mnsp_index())
 
@@ -76,8 +79,8 @@ class NEMDEModel:
             """Price bands for traders"""
 
             # NOTE: Including MLFs seem to lead to better results. May not be required.
-            mlf = self.mmsdm_data.get_marginal_loss_factor(i)
-
+            # mlf = self.mmsdm_data.get_marginal_loss_factor(i)
+            #
             # if j == 'LDOF':
             #     return self.data.get_trader_price_band_attribute(i, j, f'PriceBand{k}') * mlf
             # else:
@@ -538,6 +541,34 @@ class NEMDEModel:
         # Total generation dispatched in a given region
         m.E_REGION_GENERATION = Expression(m.S_REGIONS, rule=region_generation_rule)
 
+        def region_non_scheduled_generation_rule(m, r):
+            """Non-scheduled generation rule"""
+
+            # Initialise non-scheduled generation
+            non_scheduled_generation = 0
+
+            for g in m.S_NON_SCHEDULED_GENERATORS:
+                try:
+                    # Region ID
+                    region = self.data.get_constraint_scada_attribute_partial_id('T', 'MW', f'{g}.', 'Grouping_ID')
+
+                    if region != r:
+                        continue
+
+                    # Generator dispatch
+                    dispatch = self.data.get_non_scheduled_generator_dispatch(g, 'MW')
+
+                    # Update dispatch for given region
+                    non_scheduled_generation += dispatch
+
+                except Exception as e:
+                    print(e)
+
+            return non_scheduled_generation
+
+        # Total non-scheduled generation
+        m.E_NON_SCHEDULED_GENERATION = Expression(m.S_REGIONS, rule=region_non_scheduled_generation_rule)
+
         def region_load_rule(m, r):
             """Available load offers in given region"""
 
@@ -773,7 +804,9 @@ class NEMDEModel:
         def power_balance_rule(m, r):
             """Power balance for each region"""
 
-            return m.E_REGION_GENERATION[r] - m.E_REGION_LOAD[r] == m.P_REGION_DEMAND[r] + m.E_REGION_NET_FLOW[r]
+            return (m.E_REGION_GENERATION[r] - m.E_REGION_LOAD[r]
+                    + m.E_NON_SCHEDULED_GENERATION[r]
+                    == m.P_REGION_DEMAND[r] + m.E_REGION_NET_FLOW[r])
 
         # Power balance in each region
         # TODO: add interconnectors
@@ -1624,8 +1657,10 @@ class NEMDEModel:
             try:
                 return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + m.V_TRADER_TOTAL_OFFER[i, 'R5RE'] <= initial_mw + scada_ramp
                         + m.V_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, j])
+
+            # TODO: check structure of constraint when considering loads
             except:
-                return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] + m.V_TRADER_TOTAL_OFFER[i, 'R5RE'] <= initial_mw + scada_ramp
+                return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] + m.V_TRADER_TOTAL_OFFER[i, 'L5RE'] <= initial_mw + scada_ramp
                         + m.V_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, j])
 
         # Joint ramp up constraint
@@ -1655,8 +1690,10 @@ class NEMDEModel:
             try:
                 return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] - m.V_TRADER_TOTAL_OFFER[i, 'L5RE']
                         + m.V_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, j] >= initial_mw - scada_ramp)
+
+            # TODO: check structure of constraint when considering loads
             except:
-                return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] - m.V_TRADER_TOTAL_OFFER[i, 'L5RE']
+                return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] - m.V_TRADER_TOTAL_OFFER[i, 'R5RE']
                         + m.V_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, j] >= initial_mw - scada_ramp)
 
         # Joint ramp up constraint
@@ -1695,11 +1732,11 @@ class NEMDEModel:
                 pass
 
             try:
-                # return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] + (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
-                #         + (raise_available * m.V_TRADER_TOTAL_OFFER[i, 'R5RE'])
-                #         <= trapezium['enablement_max'] + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_UP[i, j])
+                return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] + (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
+                        + (raise_available * m.V_TRADER_TOTAL_OFFER[i, 'L5RE'])
+                        <= trapezium['enablement_max'] + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_UP[i, j])
 
-                return Constraint.Skip
+                # return Constraint.Skip
             except:
                 return Constraint.Skip
 
@@ -1745,10 +1782,10 @@ class NEMDEModel:
 
             # TODO: Check if LDOF should have positive or negative coefficient
             try:
-                # return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] - (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
-                #         - (lower_available * m.V_TRADER_TOTAL_OFFER[i, 'L5RE'])
-                #         + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_DOWN[i, j] >= trapezium['enablement_min'])
-                return Constraint.Skip
+                return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] - (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
+                        - (lower_available * m.V_TRADER_TOTAL_OFFER[i, 'R5RE'])
+                        + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_DOWN[i, j] >= trapezium['enablement_min'])
+                # return Constraint.Skip
             except:
                 return Constraint.Skip
 
@@ -1842,7 +1879,7 @@ class NEMDEModel:
 
         # Construct FCAS constraints
         # m = self.define_fcas_constraints(m)
-        m = self.define_fcas_constraints2(m)
+        # m = self.define_fcas_constraints2(m)
 
         return m
 
@@ -1878,8 +1915,9 @@ class NEMDEModel:
         m = self.define_objective(m)
 
         # Fix interconnector solution
-        # m = self.fix_interconnector_solution(m)
-        # m = self.fix_fcas_solution(m)
+        m = self.fix_interconnector_solution(m)
+        m = self.fix_fcas_solution(m)
+        # m = self.fix_energy_solution(m)
 
         return m
 
@@ -1925,6 +1963,27 @@ class NEMDEModel:
 
                     # Fix variable to observed solution
                     m.V_TRADER_TOTAL_OFFER[trader, i].fix(fcas_solution)
+
+        return m
+
+    def fix_energy_solution(self, m):
+        """Fix generator energy solution"""
+
+        # Trader solution
+        traders = self.data.get_trader_index()
+
+        # Fix energy solution based on observed NEMDE output
+        for trader in traders:
+
+            # Energy solution
+            if ((trader, 'ENOF') in m.S_TRADER_OFFERS) or ((trader, 'LDOF') in m.S_TRADER_OFFERS):
+                energy_solution = self.data.get_trader_solution_attribute(trader, 'EnergyTarget')
+
+            if (trader, 'ENOF') in m.S_TRADER_OFFERS:
+                m.V_TRADER_TOTAL_OFFER[trader, 'ENOF'].fix(energy_solution)
+
+            if (trader, 'LDOF') in m.S_TRADER_OFFERS:
+                m.V_TRADER_TOTAL_OFFER[trader, 'LDOF'].fix(energy_solution)
 
         return m
 
@@ -2090,6 +2149,28 @@ class NEMDESolution:
                 except:
                     pass
 
+    def check_interconnector_solution(self, m):
+        """Fix interconnector solution to observed values"""
+
+        fig, ((ax1, ax2), (ax3, ax4), (ax5, ax6)) = plt.subplots(nrows=3, ncols=2)
+
+        # Fix solution for each interconnector
+        for i, j in zip(m.S_INTERCONNECTORS, [ax1, ax2, ax3, ax4, ax5, ax6]):
+            observed_flow = self.data.get_interconnector_solution_attribute(i, 'Flow')
+            model_flow = m.V_GC_INTERCONNECTOR[i].value
+
+            # Interconnector limits
+            min_flow = self.data.get_interconnector_period_attribute(i, 'LowerLimit')
+            max_flow = self.data.get_interconnector_period_attribute(i, 'UpperLimit')
+
+            j.scatter([model_flow], [observed_flow])
+            j.plot([-min_flow, max_flow], [-min_flow, max_flow], linewidth=0.9, linestyle='--', alpha=0.8)
+            j.set_title(i)
+
+        plt.show()
+
+        return m
+
 
 if __name__ == '__main__':
     # Data directory
@@ -2142,3 +2223,20 @@ if __name__ == '__main__':
     duid = 'MEADOWBK'
     analysis.check_trader_solution(model, duid)
     analysis.print_fcas_constraints(model, duid)
+
+    # Check interconnector solution
+    analysis.check_interconnector_solution(model)
+
+    def sa_v_loss(flow):
+        """Loss equation for V-SA interconnector"""
+        vic_demand = nemde.data.get_region_period_attribute('VIC1', 'DemandForecast')
+        sa_demand = nemde.data.get_region_period_attribute('SA1', 'DemandForecast')
+        return (0.0138 + (1.3598E-06 * vic_demand) + (-1.3290E-05 * sa_demand))*flow + (1.4761E-04*(flow**2))
+
+
+    interconnectors = ['N-Q-MNSP1', 'NSW1-QLD1', 'T-V-MNSP1', 'V-S-MNSP1', 'V-SA', 'VIC1-NSW1']
+    total_loss = sum(nemde.data.get_interconnector_solution_attribute(i, 'Losses') for i in interconnectors)
+
+    gen_surplus = enof['difference'].sum()
+    load_surplus = ldof['difference'].sum()
+
