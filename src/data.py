@@ -642,7 +642,130 @@ class NEMDEDataHandler:
 
         return self.parse_single_attribute(elements, attribute)
 
+    # TODO: can delete this method
+    def get_trader_solutions(self):
+        """Get trader solution"""
 
+        # Path to elements
+        path = f".//NemSpdOutputs/TraderSolution"
+
+        # Matching elements
+        elements = self.interval_data.findall(path)
+
+        return elements
+
+    def get_total_generation(self):
+        """Compute total generation based on energy target for each trader"""
+
+        total = 0
+        for i, j in self.get_trader_offer_index():
+            if j == 'ENOF':
+                total += self.get_trader_solution_attribute(i, 'EnergyTarget')
+
+        return total
+
+    def get_total_load(self):
+        """Compute total load based on energy target for each trader"""
+
+        total = 0
+        for i, j in self.get_trader_offer_index():
+            if j == 'LDOF':
+                total += self.get_trader_solution_attribute(i, 'EnergyTarget')
+
+        return total
+
+    def get_total_losses(self):
+        """Get total losses for each interconnector"""
+
+        total = 0
+        for i in self.get_interconnector_index():
+            total += self.get_interconnector_solution_attribute(i, 'Losses')
+
+        return total
+
+    def get_total_cleared_demand(self):
+        """Total cleared demand from region solution"""
+
+        total = 0
+        for i in self.get_region_index():
+            total += self.get_region_solution_attribute(i, 'ClearedDemand')
+
+        return total
+
+    def get_total_forecast_demand(self):
+        """Total forecast demand for each regions"""
+
+        total = 0
+        for i in self.get_region_index():
+            total += self.get_region_period_attribute(i, 'DemandForecast')
+
+        return total
+
+    def get_total_generator_initial_mw(self):
+        """Get total initial MW for generators"""
+
+        total = 0
+        for i, j in self.get_trader_offer_index():
+            if j == 'ENOF':
+                total += self.get_trader_initial_condition_attribute(i, 'InitialMW')
+
+        return total
+
+    def get_total_load_initial_mw(self):
+        """Get total initial MW for loads"""
+
+        total = 0
+        for i, j in self.get_trader_offer_index():
+            if j == 'LDOF':
+                total += self.get_trader_initial_condition_attribute(i, 'InitialMW')
+
+        return total
+
+    def get_sa_demand(self):
+        """Get interconnector ID"""
+
+        total_generator_initial_mw = 0
+        for i, j in self.get_trader_offer_index():
+            # Get region
+            generator_region_id = self.get_trader_period_attribute(i, 'RegionID')
+
+            # Get initial MW for generators
+            if (j == 'ENOF') and (generator_region_id == 'SA1'):
+                total_generator_initial_mw += self.get_trader_initial_condition_attribute(i, 'InitialMW')
+
+        total_load_initial_mw = 0
+        for i, j in self.get_trader_offer_index():
+            # Get region
+            load_region_id = self.get_trader_period_attribute(i, 'RegionID')
+
+            # Get semi-dispatch status
+            semi_dispatch = self.get_trader_attribute(i, 'SemiDispatch')
+
+            # Get initial MW for loads (scheduled loads)
+            if (j == 'LDOF') and (load_region_id == 'SA1') and (semi_dispatch == 0):
+                total_load_initial_mw += self.get_trader_initial_condition_attribute(i, 'InitialMW')
+
+        # Flow into region
+        v_sa_flow = self.get_interconnector_solution_attribute('V-SA', 'Flow')
+        v_mnsp_flow = self.get_interconnector_solution_attribute('V-S-MNSP1', 'Flow')
+
+        # Losses
+        v_sa_losses = self.get_interconnector_solution_attribute('V-SA', 'Losses')
+        sa_v_sa_losses = abs(v_sa_losses) * (1 - 0.73)
+
+        v_mnsp_losses = self.get_interconnector_solution_attribute('V-S-MNSP1', 'Losses')
+        sa_v_mnsp_losses = abs(v_mnsp_losses) * (1 - 0.73)
+
+        # Demand forecast
+        demand_forecast = self.get_region_period_attribute('SA1', 'DF')
+
+        # Aggregate dispatch error
+        ade = self.get_region_initial_condition_attribute('SA1', 'ADE')
+
+        total_demand = (total_generator_initial_mw - total_load_initial_mw + v_sa_flow + v_mnsp_flow - sa_v_sa_losses
+                        - sa_v_mnsp_losses + demand_forecast + ade)
+
+        return total_demand
 
 
 if __name__ == '__main__':
@@ -656,8 +779,31 @@ if __name__ == '__main__':
 
     # Load interval
     nemde_data.load_interval(2019, 10, 10, 1)
-    a = nemde_data.get_non_scheduled_generators()
-    b = nemde_data.get_non_scheduled_generator_dispatch('BARCSF1', 'MW')
+
+    sa_total_demand = nemde_data.get_sa_demand()
+    sa_cleared_demand = nemde_data.get_region_solution_attribute('SA1', 'ClearedDemand')
+    sa_initial_demand = nemde_data.get_region_initial_condition_attribute('SA1', 'InitialDemand')
+    sa_demand_forecast = nemde_data.get_region_period_attribute('SA1', 'DemandForecast')
+    sa_ade = nemde_data.get_region_initial_condition_attribute('SA1', 'ADE')
+
+    # total_generation = nemde_data.get_total_generation()
+    # total_load = nemde_data.get_total_load()
+    # total_losses = nemde_data.get_total_losses()
+    # total_cleared_demand = nemde_data.get_total_cleared_demand()
+    # total_forecast_demand = nemde_data.get_total_forecast_demand()
+    #
+    # total_generator_initial_mw = nemde_data.get_total_generator_initial_mw()
+    # total_load_initial_mw = nemde_data.get_total_load_initial_mw()
+
+
+
+    # total_load + total_cleared_demand
+
+    # a = nemde_data.get_trader_solutions()
+    # len(set([i[0] for i in nemde_data.get_trader_offer_index()]))
+
+    # a = nemde_data.get_non_scheduled_generators()
+    # b = nemde_data.get_non_scheduled_generator_dispatch('BARCSF1', 'MW')
 
     # a = nemde_data.get_constraint_scada_attribute_partial_id('A', 'INER', '220_GEN_INERTIA', 'Value')
     # a = nemde_data.get_constraint_scada_attribute_partial_id('A', 'INER', '220_GEN_', 'Grouping_ID')
@@ -695,7 +841,7 @@ if __name__ == '__main__':
     # case_solution = nemde_data.get_case_solution_attribute('TotalObjective')
     # period_solution = nemde_data.get_period_solution_attribute('TotalASProfileViolation')
     #
-    # region_initial = nemde_data.get_region_initial_condition_attribute('NSW1', 'InitialDemand')
+    region_initial = nemde_data.get_region_initial_condition_attribute('NSW1', 'InitialDemand')
     # region_solution = nemde_data.get_region_solution_attribute('NSW1', 'EnergyPrice')
 
     # Get all marginal loss factors
