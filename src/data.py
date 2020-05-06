@@ -767,6 +767,99 @@ class NEMDEDataHandler:
 
         return total_demand
 
+    def get_sa_total_generation(self):
+        """Total generation in SA"""
+
+        total = 0
+        for i, j in self.get_trader_offer_index():
+            # Get region
+            generator_region_id = self.get_trader_period_attribute(i, 'RegionID')
+
+            # Get initial MW for generators
+            if (j == 'ENOF') and (generator_region_id == 'SA1'):
+                total += self.get_trader_solution_attribute(i, 'EnergyTarget')
+
+        return total
+
+    def get_sa_total_load(self):
+        """Total load in SA"""
+
+        total = 0
+        for i, j in self.get_trader_offer_index():
+            # Get region
+            load_region_id = self.get_trader_period_attribute(i, 'RegionID')
+
+            # Get initial MW for generators
+            if (j == 'LDOF') and (load_region_id == 'SA1'):
+                total += self.get_trader_solution_attribute(i, 'EnergyTarget')
+
+        return total
+
+    def get_sa_total_scheduled_load(self):
+        """Total scheduled load"""
+
+        total = 0
+        for i, j in self.get_trader_offer_index():
+            # Get region
+            load_region_id = self.get_trader_period_attribute(i, 'RegionID')
+
+            # Get semi-dispatch status
+            semi_dispatch = self.get_trader_attribute(i, 'SemiDispatch')
+
+            # Get initial MW for loads (scheduled loads)
+            if (j == 'LDOF') and (load_region_id == 'SA1') and (semi_dispatch == 0):
+                total += self.get_trader_solution_attribute(i, 'EnergyTarget')
+
+        return total
+
+    def get_sa_total_semi_scheduled_load(self):
+        """Total semi-scheduled load"""
+
+        total = 0
+        for i, j in self.get_trader_offer_index():
+            # Get region
+            load_region_id = self.get_trader_period_attribute(i, 'RegionID')
+
+            # Get semi-dispatch status
+            semi_dispatch = self.get_trader_attribute(i, 'SemiDispatch')
+
+            # Get initial MW for loads (scheduled loads)
+            if (j == 'LDOF') and (load_region_id == 'SA1') and (semi_dispatch == 1):
+                total += self.get_trader_solution_attribute(i, 'EnergyTarget')
+
+        return total
+
+    def get_sa_generator_total_initial_mw(self):
+        """Total initial MW for scheduled and semi-scheduled generators"""
+
+        total = 0
+        for i, j in self.get_trader_offer_index():
+            # Get region
+            load_region_id = self.get_trader_period_attribute(i, 'RegionID')
+
+            # Get initial MW for loads (scheduled loads)
+            if (j == 'ENOF') and (load_region_id == 'SA1'):
+                total += self.get_trader_initial_condition_attribute(i, 'InitialMW')
+
+        return total
+
+    def get_sa_scheduled_load_total_initial_mw(self):
+        """Total initial MW for scheduled and semi-scheduled generators"""
+
+        total = 0
+        for i, j in self.get_trader_offer_index():
+            # Get region
+            load_region_id = self.get_trader_period_attribute(i, 'RegionID')
+
+            # Get semi-dispatch status
+            semi_dispatch = self.get_trader_attribute(i, 'SemiDispatch')
+
+            # Get initial MW for loads (scheduled loads)
+            if (j == 'LDOF') and (load_region_id == 'SA1') and (semi_dispatch == 0):
+                total += self.get_trader_initial_condition_attribute(i, 'InitialMW')
+
+        return total
+
 
 if __name__ == '__main__':
     # Root directory containing NEMDE and MMSDM files
@@ -785,6 +878,33 @@ if __name__ == '__main__':
     sa_initial_demand = nemde_data.get_region_initial_condition_attribute('SA1', 'InitialDemand')
     sa_demand_forecast = nemde_data.get_region_period_attribute('SA1', 'DemandForecast')
     sa_ade = nemde_data.get_region_initial_condition_attribute('SA1', 'ADE')
+    sa_df = nemde_data.get_region_period_attribute('SA1', 'DF')
+    sa_total_generation = nemde_data.get_sa_total_generation()
+    sa_total_load = nemde_data.get_sa_total_load()
+    sa_total_scheduled_load = nemde_data.get_sa_total_scheduled_load()
+    sa_total_semi_scheduled_load = nemde_data.get_sa_total_semi_scheduled_load()
+    sa_total_generator_initial_mw = nemde_data.get_sa_generator_total_initial_mw()
+    sa_total_scheduled_load_initial_mw = nemde_data.get_sa_scheduled_load_total_initial_mw()
+
+    values = [('cleared demand', sa_cleared_demand),
+              ('initial demand', sa_initial_demand),
+              ('demand forecast', sa_demand_forecast),
+              ('ADE', sa_ade),
+              ('DF', sa_df),
+              ('total generation', sa_total_generation),
+              ('total load', sa_total_load),
+              ('total scheduled load', sa_total_scheduled_load),
+              ('total semi-scheduled load', sa_total_semi_scheduled_load),
+              ('V-SA initial flow', nemde_data.get_interconnector_initial_condition_attribute('V-SA', 'InitialMW')),
+              ('V-S-MNSP1 initial flow', nemde_data.get_interconnector_initial_condition_attribute('V-S-MNSP1', 'InitialMW')),
+              ('V-SA loss', nemde_data.get_interconnector_solution_attribute('V-SA', 'Losses')),
+              ('V-S-MNSP1 loss', nemde_data.get_interconnector_solution_attribute('V-S-MNSP1', 'Losses')),
+              ('V-SA loss - SA share', nemde_data.get_interconnector_solution_attribute('V-SA', 'Losses') * (1 - 0.73)),
+              ('V-S-MNSP1 loss - SA share', nemde_data.get_interconnector_solution_attribute('V-S-MNSP1', 'Losses') * (1 - 0.73)),
+              ('total generator initial MW', sa_total_generator_initial_mw),
+              ('total scheduled load initial MW', sa_total_scheduled_load_initial_mw)]
+
+    df = pd.DataFrame(values).set_index(0)
 
     # total_generation = nemde_data.get_total_generation()
     # total_load = nemde_data.get_total_load()
