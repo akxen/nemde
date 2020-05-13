@@ -7,11 +7,15 @@ duplicate values). Using 'find' for now though.
 
 import os
 import io
+import json
+import math
 import zipfile
+import collections
 
 import xmltodict
 import xml.etree.ElementTree as ET
 
+from scipy import integrate
 import numpy as np
 import pandas as pd
 
@@ -86,7 +90,13 @@ class NEMDEDataHandler:
         print(os.listdir(self.nemde_dir))
 
         with zipfile.ZipFile(os.path.join(self.nemde_dir, z_1_name)) as z_1:
-            z_2_name = f'NEMDE_{year}_{month:02}/NEMDE_Market_Data/NEMDE_Files/NemSpdOutputs_{year}{month:02}{day:02}_loaded.zip'
+            if f'NEMDE_{year}_{month:02}/NEMDE_Market_Data/' in z_1.namelist():
+                z_2_name = f'NEMDE_{year}_{month:02}/NEMDE_Market_Data/NEMDE_Files/NemSpdOutputs_{year}{month:02}{day:02}_loaded.zip'
+            elif f'{month:02}/' in z_1.namelist():
+                z_2_name = f'{month:02}/NEMDE_Market_Data/NEMDE_Files/NemSpdOutputs_{year}{month:02}{day:02}_loaded.zip'
+            else:
+                raise Exception('Unexpected NEMDE directory structure')
+
             with z_1.open(z_2_name) as z_2:
                 z_2_data = io.BytesIO(z_2.read())
 
@@ -474,7 +484,7 @@ class NEMDEDataHandler:
         return self.parse_single_attribute(elements, attribute)
 
     def get_interconnector_initial_condition_attribute(self, interconnector_id, attribute):
-        """Get interconnection initial condition information"""
+        """Get interconnector initial condition information"""
 
         # Path to interconnector elements
         path = (f".//NemSpdInputs/InterconnectorCollection/Interconnector[@InterconnectorID='{interconnector_id}']/"
@@ -485,6 +495,34 @@ class NEMDEDataHandler:
         elements = self.interval_data.findall(path)
 
         return self.parse_single_attribute(elements, 'Value')
+
+    def get_interconnector_loss_model_attribute(self, interconnector_id, attribute):
+        """Get interconnector loss model attributes"""
+
+        # Path to interconnector elements
+        path = (f".//NemSpdInputs/InterconnectorCollection/Interconnector[@InterconnectorID='{interconnector_id}']/"
+                f"LossModelCollection/LossModel")
+
+        # Matching elements
+        elements = self.interval_data.findall(path)
+
+        return self.parse_single_attribute(elements, attribute)
+
+    def get_interconnector_loss_model_segments(self, interconnector_id):
+        """Get segments corresponding to interconnector loss model"""
+
+        path = (f".//NemSpdInputs/InterconnectorCollection/Interconnector[@InterconnectorID='{interconnector_id}']/"
+                f"LossModelCollection/LossModel/SegmentCollection/Segment")
+
+        # Matching elements
+        elements = self.interval_data.findall(path)
+
+        segments = []
+        for e in elements:
+            segment = {i: int(j) if i == 'Limit' else float(j) for i, j in e.attrib.items()}
+            segments.append(segment)
+
+        return segments
 
     def get_interconnector_period_attribute(self, interconnector_id, attribute):
         """High-level attribute giving access to interconnector limits and 'from' and 'to' regions"""
@@ -711,154 +749,278 @@ class NEMDEDataHandler:
 
         return total
 
-    def get_total_load_initial_mw(self):
+    def get_total_scheduled_load_initial_mw(self):
         """Get total initial MW for loads"""
 
         total = 0
         for i, j in self.get_trader_offer_index():
-            if j == 'LDOF':
+            # Get semi-dispatch status
+            semi_dispatch = self.get_trader_attribute(i, 'SemiDispatch')
+
+            # Get initial MW for loads (scheduled loads)
+            if (j == 'LDOF') and (semi_dispatch == 0):
                 total += self.get_trader_initial_condition_attribute(i, 'InitialMW')
 
         return total
 
-    def get_sa_demand(self):
-        """Get interconnector ID"""
+    def get_total_scheduled_load_target_mw(self):
+        """Get total initial MW for loads"""
 
-        total_generator_initial_mw = 0
+        total = 0
         for i, j in self.get_trader_offer_index():
-            # Get region
-            generator_region_id = self.get_trader_period_attribute(i, 'RegionID')
-
-            # Get initial MW for generators
-            if (j == 'ENOF') and (generator_region_id == 'SA1'):
-                total_generator_initial_mw += self.get_trader_initial_condition_attribute(i, 'InitialMW')
-
-        total_load_initial_mw = 0
-        for i, j in self.get_trader_offer_index():
-            # Get region
-            load_region_id = self.get_trader_period_attribute(i, 'RegionID')
-
             # Get semi-dispatch status
             semi_dispatch = self.get_trader_attribute(i, 'SemiDispatch')
 
             # Get initial MW for loads (scheduled loads)
-            if (j == 'LDOF') and (load_region_id == 'SA1') and (semi_dispatch == 0):
-                total_load_initial_mw += self.get_trader_initial_condition_attribute(i, 'InitialMW')
-
-        # Flow into region
-        v_sa_flow = self.get_interconnector_solution_attribute('V-SA', 'Flow')
-        v_mnsp_flow = self.get_interconnector_solution_attribute('V-S-MNSP1', 'Flow')
-
-        # Losses
-        v_sa_losses = self.get_interconnector_solution_attribute('V-SA', 'Losses')
-        sa_v_sa_losses = abs(v_sa_losses) * (1 - 0.73)
-
-        v_mnsp_losses = self.get_interconnector_solution_attribute('V-S-MNSP1', 'Losses')
-        sa_v_mnsp_losses = abs(v_mnsp_losses) * (1 - 0.73)
-
-        # Demand forecast
-        demand_forecast = self.get_region_period_attribute('SA1', 'DF')
-
-        # Aggregate dispatch error
-        ade = self.get_region_initial_condition_attribute('SA1', 'ADE')
-
-        total_demand = (total_generator_initial_mw - total_load_initial_mw + v_sa_flow + v_mnsp_flow - sa_v_sa_losses
-                        - sa_v_mnsp_losses + demand_forecast + ade)
-
-        return total_demand
-
-    def get_sa_total_generation(self):
-        """Total generation in SA"""
-
-        total = 0
-        for i, j in self.get_trader_offer_index():
-            # Get region
-            generator_region_id = self.get_trader_period_attribute(i, 'RegionID')
-
-            # Get initial MW for generators
-            if (j == 'ENOF') and (generator_region_id == 'SA1'):
+            if (j == 'LDOF') and (semi_dispatch == 0):
                 total += self.get_trader_solution_attribute(i, 'EnergyTarget')
 
         return total
 
-    def get_sa_total_load(self):
-        """Total load in SA"""
+    def get_total_demand_forecast(self):
+        """Total demand forecast increment across all regions"""
 
         total = 0
-        for i, j in self.get_trader_offer_index():
-            # Get region
-            load_region_id = self.get_trader_period_attribute(i, 'RegionID')
-
-            # Get initial MW for generators
-            if (j == 'LDOF') and (load_region_id == 'SA1'):
-                total += self.get_trader_solution_attribute(i, 'EnergyTarget')
+        for i in self.get_region_index():
+            total += self.get_region_period_attribute(i, 'DF')
 
         return total
 
-    def get_sa_total_scheduled_load(self):
-        """Total scheduled load"""
+    def get_total_ade(self):
+        """Get total aggregate dispatch error"""
+
+        total = 0
+        for i in self.get_region_index():
+            total += self.get_region_initial_condition_attribute(i, 'ADE')
+
+        return total
+
+    def get_region_generator_initial_mw(self, region_id):
+        """Total initial MW for a given region"""
 
         total = 0
         for i, j in self.get_trader_offer_index():
             # Get region
-            load_region_id = self.get_trader_period_attribute(i, 'RegionID')
+            trader_region_id = self.get_trader_period_attribute(i, 'RegionID')
+
+            # Get initial MW for generators
+            if (j == 'ENOF') and (trader_region_id == region_id):
+                total += self.get_trader_initial_condition_attribute(i, 'InitialMW')
+                # value = self.get_trader_initial_condition_attribute(i, 'InitialMW')
+                # if value > 0:
+                #     total += value
+
+        return total
+
+    def get_region_scheduled_load_initial_mw(self, region_id):
+        """Total initial MW for a given region"""
+
+        total = 0
+        for i, j in self.get_trader_offer_index():
+            # Get region
+            trader_region_id = self.get_trader_period_attribute(i, 'RegionID')
 
             # Get semi-dispatch status
             semi_dispatch = self.get_trader_attribute(i, 'SemiDispatch')
 
-            # Get initial MW for loads (scheduled loads)
-            if (j == 'LDOF') and (load_region_id == 'SA1') and (semi_dispatch == 0):
-                total += self.get_trader_solution_attribute(i, 'EnergyTarget')
-
-        return total
-
-    def get_sa_total_semi_scheduled_load(self):
-        """Total semi-scheduled load"""
-
-        total = 0
-        for i, j in self.get_trader_offer_index():
-            # Get region
-            load_region_id = self.get_trader_period_attribute(i, 'RegionID')
-
-            # Get semi-dispatch status
-            semi_dispatch = self.get_trader_attribute(i, 'SemiDispatch')
-
-            # Get initial MW for loads (scheduled loads)
-            if (j == 'LDOF') and (load_region_id == 'SA1') and (semi_dispatch == 1):
-                total += self.get_trader_solution_attribute(i, 'EnergyTarget')
-
-        return total
-
-    def get_sa_generator_total_initial_mw(self):
-        """Total initial MW for scheduled and semi-scheduled generators"""
-
-        total = 0
-        for i, j in self.get_trader_offer_index():
-            # Get region
-            load_region_id = self.get_trader_period_attribute(i, 'RegionID')
-
-            # Get initial MW for loads (scheduled loads)
-            if (j == 'ENOF') and (load_region_id == 'SA1'):
+            # Get initial MW for generators
+            if (j == 'LDOF') and (trader_region_id == region_id) and (semi_dispatch == 0):
                 total += self.get_trader_initial_condition_attribute(i, 'InitialMW')
 
         return total
 
-    def get_sa_scheduled_load_total_initial_mw(self):
-        """Total initial MW for scheduled and semi-scheduled generators"""
+    def get_region_scheduled_load_target_mw(self, region_id):
+        """Total target MW for a given region"""
 
         total = 0
         for i, j in self.get_trader_offer_index():
             # Get region
-            load_region_id = self.get_trader_period_attribute(i, 'RegionID')
+            trader_region_id = self.get_trader_period_attribute(i, 'RegionID')
 
             # Get semi-dispatch status
             semi_dispatch = self.get_trader_attribute(i, 'SemiDispatch')
 
-            # Get initial MW for loads (scheduled loads)
-            if (j == 'LDOF') and (load_region_id == 'SA1') and (semi_dispatch == 0):
-                total += self.get_trader_initial_condition_attribute(i, 'InitialMW')
+            # Get initial MW for generators
+            if (j == 'LDOF') and (trader_region_id == region_id) and (semi_dispatch == 0):
+                total += self.get_trader_solution_attribute(i, 'EnergyTarget')
 
         return total
+
+    def get_region_initial_net_import(self, region_id):
+        """Compute net import into region from interconnectors"""
+
+        total = 0
+        for i in self.get_interconnector_index():
+            from_region = self.get_interconnector_period_attribute(i, 'FromRegion')
+            to_region = self.get_interconnector_period_attribute(i, 'ToRegion')
+
+            if region_id == from_region:
+                total -= self.get_interconnector_initial_condition_attribute(i, 'InitialMW')
+            elif region_id == to_region:
+                total += self.get_interconnector_initial_condition_attribute(i, 'InitialMW')
+            else:
+                pass
+
+        return total
+
+    def get_region_target_net_import(self, region_id):
+        """Compute net import into region from interconnectors"""
+
+        total = 0
+        for i in self.get_interconnector_index():
+            from_region = self.get_interconnector_period_attribute(i, 'FromRegion')
+            to_region = self.get_interconnector_period_attribute(i, 'ToRegion')
+
+            if region_id == from_region:
+                total -= self.get_interconnector_solution_attribute(i, 'Flow')
+            elif region_id == to_region:
+                total += self.get_interconnector_solution_attribute(i, 'Flow')
+            else:
+                pass
+
+        return total
+
+    def get_region_target_net_allocated_losses(self, region_id):
+        """Compute net import into region from interconnectors"""
+
+        total = 0
+        for i in self.get_interconnector_index():
+            from_region = self.get_interconnector_period_attribute(i, 'FromRegion')
+            to_region = self.get_interconnector_period_attribute(i, 'ToRegion')
+            loss_share = nemde_data.get_interconnector_loss_model_attribute(i, 'LossShare')
+
+            if region_id == from_region:
+                total += self.get_interconnector_solution_attribute(i, 'Losses') * loss_share
+            elif region_id == to_region:
+                total += self.get_interconnector_solution_attribute(i, 'Losses') * (1 - loss_share)
+            else:
+                pass
+
+        return total
+
+    def get_region_summary(self, region_id):
+        """Summarise region information"""
+
+        values = {
+            'region id': region_id,
+            'generator initial MW': self.get_region_generator_initial_mw(region_id),
+            'scheduled load initial MW': self.get_region_scheduled_load_initial_mw(region_id),
+            'DF': self.get_region_period_attribute(region_id, 'DF'),
+            'ADE': self.get_region_initial_condition_attribute(region_id, 'ADE'),
+            'initial net import': self.get_region_initial_net_import(region_id),
+            'target net import': self.get_region_target_net_import(region_id),
+            'target allocated losses': self.get_region_target_net_allocated_losses(region_id),
+            'fixed demand': self.get_region_solution_attribute(region_id, 'FixedDemand'),
+            'cleared demand': self.get_region_solution_attribute(region_id, 'ClearedDemand'),
+            'target scheduled load': self.get_region_scheduled_load_target_mw(region_id),
+        }
+
+        total_demand = (
+                values['generator initial MW'] - values['scheduled load initial MW'] + values['initial net import']
+                - values['target allocated losses'] + values['DF'] + values['ADE']
+        )
+
+        values['total demand'] = total_demand
+        values['total demand - fixed demand'] = values['total demand'] - values['fixed demand']
+
+        return values
+
+    def get_interconnector_summary(self, interconnector_id):
+        """Summary of interconnector information"""
+
+        # Extract interconnector information
+        initial = self.get_interconnector_initial_condition_attribute(interconnector_id, 'InitialMW')
+        target = self.get_interconnector_solution_attribute(interconnector_id, 'Flow')
+        loss = self.get_interconnector_solution_attribute(interconnector_id, 'Losses')
+
+        # Summarise values in a single dictionary
+        values = {
+            'interconnector id': interconnector_id,
+            'initial MW': initial,
+            'target MW': target,
+            'difference': initial - target,
+            'target loss': loss
+        }
+
+        return values
+
+    def get_nem_summary(self):
+        """Summary statistics for entire NEM"""
+
+        # Summarise values in single dictionary
+        values = {'total fixed demand': sum(self.get_region_solution_attribute(i, 'FixedDemand')
+                                            for i in nemde_data.get_region_index()),
+                  'total cleared demand': sum(self.get_region_solution_attribute(i, 'ClearedDemand')
+                                              for i in self.get_region_index()),
+                  'total generation': sum(self.get_trader_solution_attribute(i, 'EnergyTarget')
+                                          for i, j in nemde_data.get_trader_offer_index()
+                                          if j == 'ENOF'),
+                  'total scheduled load': sum(self.get_trader_solution_attribute(i, 'EnergyTarget')
+                                              for i, j in nemde_data.get_trader_offer_index()
+                                              if (j == 'LDOF') and (self.get_trader_attribute(i, 'SemiDispatch') == 0)),
+                  'total losses': nemde_data.get_total_losses(),
+                  }
+
+        return values
+
+    @staticmethod
+    def get_nsw_qld_mlf(nsw_qld_flow, qld_demand, nsw_demand):
+        """
+        Compute inter-regional loss factor for NSW1-QLD1 from function
+
+        Parameters
+        ----------
+            nsw_qld_flow : Flow over NSW1-QLD1
+            qld_demand : Queensland demand
+            nsw_demand : New South Wales demand
+
+        Returns
+        -------
+            mlf : Inter-regional loss factor
+
+        """
+
+        # Inter regional loss factor
+        mlf = 0.9529 + (1.9617E-04 * nsw_qld_flow) + (1.0044E-05 * qld_demand) + (-3.5146E-07 * nsw_demand)
+
+        return mlf
+
+    @staticmethod
+    def get_nsw_qld_loss(nsw_qld_flow, qld_demand, nsw_demand):
+        """
+        Compute total loss over NSW1-QLD1 interconnector
+
+        Parameters
+        ----------
+            nsw_qld_flow : Flow over NSW1-QLD1
+            qld_demand : Queensland demand
+            nsw_demand : New South Wales demand
+
+        Returns
+        -------
+            loss : Total loss over interconnector
+
+        """
+
+        # Total loss over interconnector for given flow + region loading
+        loss = (((-0.0471 + 1.0044E-05 * qld_demand + -3.5146E-07 * nsw_demand) * nsw_qld_flow)
+                + (9.8083E-05 * (nsw_qld_flow ** 2)))
+
+        return loss
+
+    @staticmethod
+    def get_estimated_loss(nsw_qld_flow, qld_demand, nsw_demand):
+        """Estimated loss for initial MW"""
+
+        # Coefficients for quadratic equation
+        a = 9.8083E-05
+        b = (1 - 0.0471) + (1.0044E-05 * qld_demand) + (-3.5146E-07 * nsw_demand)
+        c = -nsw_qld_flow
+
+        x_up = (-b + math.sqrt((b**2) - (4 * a * c))) / (2 * a)
+        x_dn = (-b - math.sqrt((b**2) - (4 * a * c))) / (2 * a)
+
+        return x_up, x_dn
 
 
 if __name__ == '__main__':
@@ -873,96 +1035,67 @@ if __name__ == '__main__':
     # Load interval
     nemde_data.load_interval(2019, 10, 10, 1)
 
-    sa_total_demand = nemde_data.get_sa_demand()
-    sa_cleared_demand = nemde_data.get_region_solution_attribute('SA1', 'ClearedDemand')
-    sa_initial_demand = nemde_data.get_region_initial_condition_attribute('SA1', 'InitialDemand')
-    sa_demand_forecast = nemde_data.get_region_period_attribute('SA1', 'DemandForecast')
-    sa_ade = nemde_data.get_region_initial_condition_attribute('SA1', 'ADE')
-    sa_df = nemde_data.get_region_period_attribute('SA1', 'DF')
-    sa_total_generation = nemde_data.get_sa_total_generation()
-    sa_total_load = nemde_data.get_sa_total_load()
-    sa_total_scheduled_load = nemde_data.get_sa_total_scheduled_load()
-    sa_total_semi_scheduled_load = nemde_data.get_sa_total_semi_scheduled_load()
-    sa_total_generator_initial_mw = nemde_data.get_sa_generator_total_initial_mw()
-    sa_total_scheduled_load_initial_mw = nemde_data.get_sa_scheduled_load_total_initial_mw()
+    # Interconnector information
+    target_losses = nemde_data.get_interconnector_solution_attribute('NSW1-QLD1', 'Losses')
+    target_flow = nemde_data.get_interconnector_solution_attribute('NSW1-QLD1', 'Flow')
+    irf = nemde_data.get_interconnector_solution_attribute('NSW1-QLD1', 'InterRegionalLossFactor')
+    initial_mw = nemde_data.get_interconnector_initial_condition_attribute('NSW1-QLD1', 'InitialMW')
 
-    values = [('cleared demand', sa_cleared_demand),
-              ('initial demand', sa_initial_demand),
-              ('demand forecast', sa_demand_forecast),
-              ('ADE', sa_ade),
-              ('DF', sa_df),
-              ('total generation', sa_total_generation),
-              ('total load', sa_total_load),
-              ('total scheduled load', sa_total_scheduled_load),
-              ('total semi-scheduled load', sa_total_semi_scheduled_load),
-              ('V-SA initial flow', nemde_data.get_interconnector_initial_condition_attribute('V-SA', 'InitialMW')),
-              ('V-S-MNSP1 initial flow', nemde_data.get_interconnector_initial_condition_attribute('V-S-MNSP1', 'InitialMW')),
-              ('V-SA loss', nemde_data.get_interconnector_solution_attribute('V-SA', 'Losses')),
-              ('V-S-MNSP1 loss', nemde_data.get_interconnector_solution_attribute('V-S-MNSP1', 'Losses')),
-              ('V-SA loss - SA share', nemde_data.get_interconnector_solution_attribute('V-SA', 'Losses') * (1 - 0.73)),
-              ('V-S-MNSP1 loss - SA share', nemde_data.get_interconnector_solution_attribute('V-S-MNSP1', 'Losses') * (1 - 0.73)),
-              ('total generator initial MW', sa_total_generator_initial_mw),
-              ('total scheduled load initial MW', sa_total_scheduled_load_initial_mw)]
+    # Initial demand
+    Qd_initial = nemde_data.get_region_initial_condition_attribute('QLD1', 'InitialDemand')
+    Nd_initial = nemde_data.get_region_initial_condition_attribute('NSW1', 'InitialDemand')
 
-    df = pd.DataFrame(values).set_index(0)
+    NQt = nemde_data.get_interconnector_solution_attribute('NSW1-QLD1', 'Flow')
+    Qd = nemde_data.get_region_solution_attribute('QLD1', 'ClearedDemand')
+    Nd = nemde_data.get_region_solution_attribute('NSW1', 'ClearedDemand')
 
-    # total_generation = nemde_data.get_total_generation()
-    # total_load = nemde_data.get_total_load()
-    # total_losses = nemde_data.get_total_losses()
-    # total_cleared_demand = nemde_data.get_total_cleared_demand()
-    # total_forecast_demand = nemde_data.get_total_forecast_demand()
+    # Initial QLD loss
+    qld_initial_loss = nemde_data.get_estimated_loss(initial_mw, Qd_initial, Nd_initial)
+
+    # Inter-regional loss factor and loss obtained from functions
+    function_mlf = nemde_data.get_nsw_qld_mlf(target_flow, Qd, Nd)
+    function_loss = nemde_data.get_nsw_qld_loss(target_flow, Qd, Nd)
+
+    # Linearised loss factor
+    s = nemde_data.get_interconnector_loss_model_segments('NSW1-QLD1')
+    seg = [(i['Limit'], i['Factor']) for i in s]
+
+    x, y = [i[0] for i in seg], [i[1] for i in seg]
+    y_1 = [nemde_data.get_nsw_qld_mlf(i, Qd, Nd) - 1 for i in x]
+    fig, ax = plt.subplots()
+    ax.step(x, y, where='pre', alpha=0.8, linewidth=0.7),
+    ax.step(x, y_1, where='pre', color='r', alpha=0.8, linewidth=0.7)
+    ax.set_xlim([-50, 10])
+    ax.set_ylim([-0.05, 0.05])
+    plt.show()
+
+    # Slope
+    slope = (s[-1]['Factor'] - s[0]['Factor']) / (s[-1]['Limit'] - s[0]['Limit'])
+    intercept = s[-1]['Factor'] - (slope * s[-1]['Limit'])
+    y_lin = [(slope * i) + intercept for i in x]
+
+    fig, ax = plt.subplots()
+    ax.plot(x, y)
+    ax.plot(x, y_lin, color='r', linewidth=0.7, alpha=0.8)
+    ax.plot([target_flow, target_flow], [min(y), max(y)])
+    ax.plot([target_flow + target_losses, target_flow + target_losses], [min(y), max(y)], color='b')
+    ax.plot([min(x), max(x)], [irf - 1, irf - 1], color='k', linewidth=0.7)
+    plt.show()
+
+    # for d_id in range(1, 10):
+    #     nemde_data.load_interval(2019, 10, 10, d_id)
+    #     print('d_id', d_id)
+    #     # nemde_data.load_interval(2010, 7, 10, 278)
     #
-    # total_generator_initial_mw = nemde_data.get_total_generator_initial_mw()
-    # total_load_initial_mw = nemde_data.get_total_load_initial_mw()
-
-
-
-    # total_load + total_cleared_demand
-
-    # a = nemde_data.get_trader_solutions()
-    # len(set([i[0] for i in nemde_data.get_trader_offer_index()]))
-
-    # a = nemde_data.get_non_scheduled_generators()
-    # b = nemde_data.get_non_scheduled_generator_dispatch('BARCSF1', 'MW')
-
-    # a = nemde_data.get_constraint_scada_attribute_partial_id('A', 'INER', '220_GEN_INERTIA', 'Value')
-    # a = nemde_data.get_constraint_scada_attribute_partial_id('A', 'INER', '220_GEN_', 'Grouping_ID')
-
-    # # Testing methods
-    # region_index = nemde_data.get_region_index()
-    # trader_index = nemde_data.get_trader_index()
-    # trader_offer_index = nemde_data.get_trader_offer_index()
-    # interconnector_index = nemde_data.get_interconnector_index()
-    # mnsp_index = nemde_data.get_mnsp_index()
-    # mnsp_offer_index = nemde_data.get_mnsp_offer_index()
-    # generic_constraint_index = nemde_data.get_generic_constraint_index()
-    # generic_constraint_trader_variable_index = nemde_data.get_generic_constraint_trader_variable_index()
-    # generic_constraint_interconnector_variable_index = nemde_data.get_generic_constraint_interconnector_variable_index()
-    # generic_constraint_region_variable_index = nemde_data.get_generic_constraint_region_variable_index()
+    #     # Region summary
+    #     for r_id in nemde_data.get_region_index():
+    #         print(json.dumps(nemde_data.get_region_summary(r_id), indent=4))
+    #         print('\n')
     #
-    # constraint_attribute_value = nemde_data.get_generic_constraint_attribute('V_WEMENSF_19INV', 'Type')
-    # constraint_lhs_terms = nemde_data.get_generic_constraint_lhs_terms('V_WEMENSF_19INV')
-    # constraint_rhs = nemde_data.get_generic_constraint_solution_attribute('V_WEMENSF_19INV', 'RHS')
+    #     # Interconnector summary
+    #     for i_id in nemde_data.get_interconnector_index():
+    #         print(json.dumps(nemde_data.get_interconnector_summary(i_id), indent=4))
     #
-    # trader_initial_mw = nemde_data.get_trader_initial_condition_attribute('AGLHAL', 'InitialMW')
-    #
-    # price_1 = nemde_data.get_trader_price_band_attribute('AGLHAL', 'ENOF', 'PriceBand1')
-    # quantity_1 = nemde_data.get_trader_quantity_band_attribute('AGLHAL', 'ENOF', 'BandAvail1')
-    #
-    # trader_r6 = nemde_data.get_trader_solution_attribute('AGLHAL', 'R6Target')
-    # icon_id = nemde_data.get_interconnector_attribute('N-Q-MNSP1', 'InterconnectorID')
-    # icon_initial_mw = nemde_data.get_interconnector_initial_condition_attribute('N-Q-MNSP1', 'InitialMW')
-    #
-    # icon_from_region = nemde_data.get_interconnector_period_attribute('N-Q-MNSP1', 'FromRegion')
-    # mnsp_p1 = nemde_data.get_mnsp_price_band_attribute('T-V-MNSP1', 'TAS1', 'PriceBand1')
-    # mnsp_q1 = nemde_data.get_mnsp_quantity_band_attribute('T-V-MNSP1', 'TAS1', 'BandAvail1')
-    #
-    # case_price = nemde_data.get_case_attribute('EnergyDeficitPrice')
-    # case_solution = nemde_data.get_case_solution_attribute('TotalObjective')
-    # period_solution = nemde_data.get_period_solution_attribute('TotalASProfileViolation')
-    #
-    region_initial = nemde_data.get_region_initial_condition_attribute('NSW1', 'InitialDemand')
-    # region_solution = nemde_data.get_region_solution_attribute('NSW1', 'EnergyPrice')
-
-    # Get all marginal loss factors
-    # mmsdm_data.load_interval(2019, 10)
+    #     # NEM summary
+    #     print(json.dumps(nemde_data.get_nem_summary(), indent=4))
+    #     print('\n')
