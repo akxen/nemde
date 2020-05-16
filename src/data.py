@@ -880,6 +880,27 @@ class NEMDEDataHandler:
 
         return total
 
+    def get_region_initial_net_allocated_losses(self, region_id):
+        """Compute net import into region from interconnectors"""
+
+        total = 0
+        for i in self.get_interconnector_index():
+            from_region = self.get_interconnector_period_attribute(i, 'FromRegion')
+            to_region = self.get_interconnector_period_attribute(i, 'ToRegion')
+            loss_share = self.get_interconnector_loss_model_attribute(i, 'LossShare')
+            initial_flow = self.get_interconnector_initial_condition_attribute(i, 'InitialMW')
+            estimated_losses = self.get_interconnector_loss_estimate(i, initial_flow)
+
+            if region_id == from_region:
+                total += estimated_losses * loss_share
+
+            elif region_id == to_region:
+                total += estimated_losses * (1 - loss_share)
+            else:
+                pass
+
+        return total
+
     def get_region_target_net_allocated_losses(self, region_id):
         """Compute net import into region from interconnectors"""
 
@@ -908,6 +929,7 @@ class NEMDEDataHandler:
             'DF': self.get_region_period_attribute(region_id, 'DF'),
             'ADE': self.get_region_initial_condition_attribute(region_id, 'ADE'),
             'initial net import': self.get_region_initial_net_import(region_id),
+            'initial allocated losses': self.get_region_initial_net_allocated_losses(region_id),
             'target net import': self.get_region_target_net_import(region_id),
             'target allocated losses': self.get_region_target_net_allocated_losses(region_id),
             'fixed demand': self.get_region_solution_attribute(region_id, 'FixedDemand'),
@@ -917,8 +939,28 @@ class NEMDEDataHandler:
 
         total_demand = (
                 values['generator initial MW'] - values['scheduled load initial MW'] + values['initial net import']
-                - values['target allocated losses'] + values['DF'] + values['ADE']
+                - values['initial allocated losses'] + values['DF'] + values['ADE']
         )
+
+        # Adjust for Basslink MLF between Loy Yang and RRN
+        if region_id == 'VIC1':
+            # Flow over Basslink
+            basslink_flow = self.get_interconnector_initial_condition_attribute('T-V-MNSP1', 'InitialMW')
+
+            # Import into VIC
+            if basslink_flow > 40:
+                mlf = self.get_interconnector_attribute('T-V-MNSP1', 'ToRegionLFImport')
+            elif basslink_flow < -40:
+                mlf = self.get_interconnector_attribute('T-V-MNSP1', 'ToRegionLFExport')
+            else:
+                raise Exception('No go zone for Basslink')
+
+            if basslink_flow > 0:
+                demand_adjustment = (basslink_flow - self.get_interconnector_loss_estimate('T-V-MNSP1', basslink_flow)) * (1 - mlf)
+            else:
+                demand_adjustment = (basslink_flow + self.get_interconnector_loss_estimate('T-V-MNSP1', basslink_flow)) * (1 - mlf)
+
+            total_demand -= demand_adjustment
 
         values['total demand'] = total_demand
         values['total demand - fixed demand'] = values['total demand'] - values['fixed demand']
@@ -931,7 +973,9 @@ class NEMDEDataHandler:
         # Extract interconnector information
         initial = self.get_interconnector_initial_condition_attribute(interconnector_id, 'InitialMW')
         target = self.get_interconnector_solution_attribute(interconnector_id, 'Flow')
-        loss = self.get_interconnector_solution_attribute(interconnector_id, 'Losses')
+        target_losses = self.get_interconnector_solution_attribute(interconnector_id, 'Losses')
+        estimated_losses = self.get_interconnector_loss_estimate(interconnector_id, initial)
+        constant_losses = self.get_interconnector_demand_constant_loss(interconnector_id)
 
         # Summarise values in a single dictionary
         values = {
@@ -939,7 +983,9 @@ class NEMDEDataHandler:
             'initial MW': initial,
             'target MW': target,
             'difference': initial - target,
-            'target loss': loss
+            'initial loss': estimated_losses,
+            'target loss': target_losses,
+            'demand constant loss': constant_losses,
         }
 
         return values
@@ -1022,6 +1068,136 @@ class NEMDEDataHandler:
 
         return x_up, x_dn
 
+    def check_dispatch_interval_results(self):
+        """Extract results from several dispatch intervals and print relevant statistics"""
+
+        for d_id in range(1, 2):
+            self.load_interval(2019, 10, 10, d_id)
+            print('d_id', d_id)
+
+            # Region summary
+            for r_id in self.get_region_index():
+                print(json.dumps(self.get_region_summary(r_id), indent=4))
+                print('\n')
+
+            # Interconnector summary
+            for i_id in self.get_interconnector_index():
+                print(json.dumps(self.get_interconnector_summary(i_id), indent=4))
+
+            # # NEM summary
+            # print(json.dumps(self.get_nem_summary(), indent=4))
+            # print('\n')
+
+    def get_interconnector_loss_estimate(self, interconnector_id, flow):
+        """Estimate interconnector loss - numerically integrating loss model segments"""
+
+        # Check loss model
+        segments = self.get_interconnector_loss_model_segments(interconnector_id)
+
+        # First segment
+        start = -self.get_interconnector_loss_model_attribute(interconnector_id, 'LossLowerLimit')
+
+        # Format segments with start, end, and factor
+        new_segments = []
+        for s in segments:
+            segment = {'start': start, 'end': s['Limit'], 'factor': s['Factor']}
+            start = s['Limit']
+            new_segments.append(segment)
+
+        # Initialise total in
+        total_area = 0
+        for s in new_segments:
+            if flow > 0:
+                # Only want segments to right of origin
+                if s['end'] < 0:
+                    proportion = 0
+
+                # Only want segments that are less than or equal to flow
+                elif s['start'] > flow:
+                    proportion = 0
+
+                # Take positive part of segment if segment crosses origin
+                elif (s['start'] < 0) and (s['end'] > 0):
+                    # Part of segment that is positive
+                    positive_proportion = s['end'] / (s['end'] - s['start'])
+
+                    # Flow proportion (if flow close to zero)
+                    flow_proportion = flow / (s['end'] - s['start'])
+
+                    # Take min value
+                    proportion = min(positive_proportion, flow_proportion)
+
+                # If flow within segment
+                elif (flow > s['start']) and (flow < s['end']):
+                    # Segment proportion
+                    proportion = (flow - s['start']) / (s['end'] - s['start'])
+
+                # Use full segment if flow greater than end of segment - use full segment
+                elif flow > s['end']:
+                    proportion = 1
+
+                else:
+                    raise Exception('Unhandled case')
+
+                # Compute block area
+                area = (s['end'] - s['start']) * s['factor'] * proportion
+
+                # Update total area
+                total_area += area
+
+            # Flow is <= 0
+            else:
+                # Only want segments to left of origin
+                if s['start'] >= 0:
+                    proportion = 0
+
+                # Only want segments that are >= flow
+                elif s['end'] < flow:
+                    proportion = 0
+
+                # Take negative part of segment if segment crosses origin
+                elif (s['start'] < 0) and (s['end'] > 0):
+                    # Part of segment that is negative
+                    negative_proportion = - s['start'] / (s['end'] - s['start'])
+
+                    # Flow proportion (if flow close to zero)
+                    flow_proportion = -flow / (s['end'] - s['start'])
+
+                    # Take min value
+                    proportion = min(negative_proportion, flow_proportion)
+
+                # If flow within segment
+                elif (flow >= s['start']) and (flow <= s['end']):
+                    # Segment proportion
+                    proportion = -1 * (flow - s['end']) / (s['end'] - s['start'])
+
+                # Use full segment if flow less than start of segment - use full segment
+                elif flow <= s['start']:
+                    proportion = 1
+
+                else:
+                    raise Exception('Unhandled case')
+
+                # Compute block area
+                area = -1 * (s['end'] - s['start']) * s['factor'] * proportion
+
+                # Update total area
+                total_area += area
+
+        # if interconnector_id in ['T-V-MNSP1', 'N-Q-MNSP1']:
+        #     print(interconnector_id, total_area)
+
+        return total_area
+
+    def get_interconnector_demand_constant_loss(self, interconnector_id):
+        """Compute loss based on interconnector demand constant"""
+
+        constant = self.get_interconnector_period_attribute(interconnector_id, 'LossDemandConstant')
+        flow = self.get_interconnector_initial_condition_attribute(interconnector_id, 'InitialMW')
+        loss = constant * abs(flow)
+
+        return loss
+
 
 if __name__ == '__main__':
     # Root directory containing NEMDE and MMSDM files
@@ -1035,67 +1211,20 @@ if __name__ == '__main__':
     # Load interval
     nemde_data.load_interval(2019, 10, 10, 1)
 
-    # Interconnector information
-    target_losses = nemde_data.get_interconnector_solution_attribute('NSW1-QLD1', 'Losses')
-    target_flow = nemde_data.get_interconnector_solution_attribute('NSW1-QLD1', 'Flow')
-    irf = nemde_data.get_interconnector_solution_attribute('NSW1-QLD1', 'InterRegionalLossFactor')
-    initial_mw = nemde_data.get_interconnector_initial_condition_attribute('NSW1-QLD1', 'InitialMW')
+    # for i in nemde_data.get_interconnector_index():
+    #     true_loss = nemde_data.get_interconnector_solution_attribute(i, 'Losses')
+    #     i_flow = nemde_data.get_interconnector_solution_attribute(i, 'Flow')
+    #     i_estimated_loss = nemde_data.get_interconnector_loss_estimate(i, i_flow)
+    #     print(i, 'difference:', true_loss - i_estimated_loss)
 
-    # Initial demand
-    Qd_initial = nemde_data.get_region_initial_condition_attribute('QLD1', 'InitialDemand')
-    Nd_initial = nemde_data.get_region_initial_condition_attribute('NSW1', 'InitialDemand')
+    nemde_data.check_dispatch_interval_results()
 
-    NQt = nemde_data.get_interconnector_solution_attribute('NSW1-QLD1', 'Flow')
-    Qd = nemde_data.get_region_solution_attribute('QLD1', 'ClearedDemand')
-    Nd = nemde_data.get_region_solution_attribute('NSW1', 'ClearedDemand')
+    total_generation = 0
+    for i, j in nemde_data.get_trader_offer_index():
+        r_id = nemde_data.get_trader_period_attribute(i, 'RegionID')
 
-    # Initial QLD loss
-    qld_initial_loss = nemde_data.get_estimated_loss(initial_mw, Qd_initial, Nd_initial)
-
-    # Inter-regional loss factor and loss obtained from functions
-    function_mlf = nemde_data.get_nsw_qld_mlf(target_flow, Qd, Nd)
-    function_loss = nemde_data.get_nsw_qld_loss(target_flow, Qd, Nd)
-
-    # Linearised loss factor
-    s = nemde_data.get_interconnector_loss_model_segments('NSW1-QLD1')
-    seg = [(i['Limit'], i['Factor']) for i in s]
-
-    x, y = [i[0] for i in seg], [i[1] for i in seg]
-    y_1 = [nemde_data.get_nsw_qld_mlf(i, Qd, Nd) - 1 for i in x]
-    fig, ax = plt.subplots()
-    ax.step(x, y, where='pre', alpha=0.8, linewidth=0.7),
-    ax.step(x, y_1, where='pre', color='r', alpha=0.8, linewidth=0.7)
-    ax.set_xlim([-50, 10])
-    ax.set_ylim([-0.05, 0.05])
-    plt.show()
-
-    # Slope
-    slope = (s[-1]['Factor'] - s[0]['Factor']) / (s[-1]['Limit'] - s[0]['Limit'])
-    intercept = s[-1]['Factor'] - (slope * s[-1]['Limit'])
-    y_lin = [(slope * i) + intercept for i in x]
-
-    fig, ax = plt.subplots()
-    ax.plot(x, y)
-    ax.plot(x, y_lin, color='r', linewidth=0.7, alpha=0.8)
-    ax.plot([target_flow, target_flow], [min(y), max(y)])
-    ax.plot([target_flow + target_losses, target_flow + target_losses], [min(y), max(y)], color='b')
-    ax.plot([min(x), max(x)], [irf - 1, irf - 1], color='k', linewidth=0.7)
-    plt.show()
-
-    # for d_id in range(1, 10):
-    #     nemde_data.load_interval(2019, 10, 10, d_id)
-    #     print('d_id', d_id)
-    #     # nemde_data.load_interval(2010, 7, 10, 278)
-    #
-    #     # Region summary
-    #     for r_id in nemde_data.get_region_index():
-    #         print(json.dumps(nemde_data.get_region_summary(r_id), indent=4))
-    #         print('\n')
-    #
-    #     # Interconnector summary
-    #     for i_id in nemde_data.get_interconnector_index():
-    #         print(json.dumps(nemde_data.get_interconnector_summary(i_id), indent=4))
-    #
-    #     # NEM summary
-    #     print(json.dumps(nemde_data.get_nem_summary(), indent=4))
-    #     print('\n')
+        if (j == 'ENOF') and (r_id == 'QLD1'):
+            initial_mw = nemde_data.get_trader_initial_condition_attribute(i, 'InitialMW')
+            print(i, j, initial_mw)
+            total_generation += initial_mw
+    print('total generation', total_generation)
