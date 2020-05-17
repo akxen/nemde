@@ -19,6 +19,9 @@ from scipy import integrate
 import numpy as np
 import pandas as pd
 
+import matplotlib
+matplotlib.use('TkAgg')
+
 import matplotlib.pyplot as plt
 
 
@@ -935,6 +938,10 @@ class NEMDEDataHandler:
             'fixed demand': self.get_region_solution_attribute(region_id, 'FixedDemand'),
             'cleared demand': self.get_region_solution_attribute(region_id, 'ClearedDemand'),
             'target scheduled load': self.get_region_scheduled_load_target_mw(region_id),
+
+            # TODO: remove later
+            'N-Q-MNSP1 InitialMW': self.get_interconnector_initial_condition_attribute('N-Q-MNSP1', 'InitialMW'),
+            'NSW1-QLD1 InitialMW': self.get_interconnector_initial_condition_attribute('NSW1-QLD1', 'InitialMW'),
         }
 
         total_demand = (
@@ -956,14 +963,20 @@ class NEMDEDataHandler:
                 raise Exception('No go zone for Basslink')
 
             if basslink_flow > 0:
-                demand_adjustment = (basslink_flow - self.get_interconnector_loss_estimate('T-V-MNSP1', basslink_flow)) * (1 - mlf)
+                demand_adjustment = (basslink_flow - self.get_interconnector_loss_estimate('T-V-MNSP1',
+                                                                                           basslink_flow)) * (1 - mlf)
             else:
-                demand_adjustment = (basslink_flow + self.get_interconnector_loss_estimate('T-V-MNSP1', basslink_flow)) * (1 - mlf)
+                demand_adjustment = (basslink_flow + self.get_interconnector_loss_estimate('T-V-MNSP1',
+                                                                                           basslink_flow)) * (1 - mlf)
 
             total_demand -= demand_adjustment
 
         values['total demand'] = total_demand
         values['total demand - fixed demand'] = values['total demand'] - values['fixed demand']
+
+        # values['demand generator discrepancy ratio'] = values['total demand - fixed demand'] / values['generator initial MW']
+        # values['demand interconnector discrepancy ratio'] = values['total demand - fixed demand'] / values['initial net import']
+        # values['demand fixed demand discrepancy ratio'] = values['total demand - fixed demand'] / values['fixed demand']
 
         return values
 
@@ -974,7 +987,8 @@ class NEMDEDataHandler:
         initial = self.get_interconnector_initial_condition_attribute(interconnector_id, 'InitialMW')
         target = self.get_interconnector_solution_attribute(interconnector_id, 'Flow')
         target_losses = self.get_interconnector_solution_attribute(interconnector_id, 'Losses')
-        estimated_losses = self.get_interconnector_loss_estimate(interconnector_id, initial)
+        estimated_initial_losses = self.get_interconnector_loss_estimate(interconnector_id, initial)
+        estimated_target_losses = self.get_interconnector_loss_estimate(interconnector_id, target)
         constant_losses = self.get_interconnector_demand_constant_loss(interconnector_id)
 
         # Summarise values in a single dictionary
@@ -983,8 +997,9 @@ class NEMDEDataHandler:
             'initial MW': initial,
             'target MW': target,
             'difference': initial - target,
-            'initial loss': estimated_losses,
+            'estimated initial loss': estimated_initial_losses,
             'target loss': target_losses,
+            'estimated target loss': estimated_target_losses,
             'demand constant loss': constant_losses,
         }
 
@@ -1063,30 +1078,38 @@ class NEMDEDataHandler:
         b = (1 - 0.0471) + (1.0044E-05 * qld_demand) + (-3.5146E-07 * nsw_demand)
         c = -nsw_qld_flow
 
-        x_up = (-b + math.sqrt((b**2) - (4 * a * c))) / (2 * a)
-        x_dn = (-b - math.sqrt((b**2) - (4 * a * c))) / (2 * a)
+        x_up = (-b + math.sqrt((b ** 2) - (4 * a * c))) / (2 * a)
+        x_dn = (-b - math.sqrt((b ** 2) - (4 * a * c))) / (2 * a)
 
         return x_up, x_dn
 
     def check_dispatch_interval_results(self):
         """Extract results from several dispatch intervals and print relevant statistics"""
 
-        for d_id in range(1, 2):
+        region_results_container = []
+        for d_id in range(1, 6):
             self.load_interval(2019, 10, 10, d_id)
             print('d_id', d_id)
 
             # Region summary
-            for r_id in self.get_region_index():
-                print(json.dumps(self.get_region_summary(r_id), indent=4))
+            # for r_id in self.get_region_index():
+            for r_id in ['QLD1']:
+                region_results = self.get_region_summary(r_id)
+                region_results_container.append({d_id: region_results})
+
+                print(json.dumps(region_results, indent=4))
                 print('\n')
 
-            # Interconnector summary
-            for i_id in self.get_interconnector_index():
-                print(json.dumps(self.get_interconnector_summary(i_id), indent=4))
+            # # Interconnector summary
+            # # for i_id in self.get_interconnector_index():
+            # for i_id in ['NSW1-QLD1', 'N-Q-MNSP1']:
+            #     print(json.dumps(self.get_interconnector_summary(i_id), indent=4))
 
             # # NEM summary
             # print(json.dumps(self.get_nem_summary(), indent=4))
             # print('\n')
+
+        return region_results_container
 
     def get_interconnector_loss_estimate(self, interconnector_id, flow):
         """Estimate interconnector loss - numerically integrating loss model segments"""
@@ -1096,6 +1119,9 @@ class NEMDEDataHandler:
 
         # First segment
         start = -self.get_interconnector_loss_model_attribute(interconnector_id, 'LossLowerLimit')
+
+        # Loss demand constant
+        loss_demand_constant = self.get_interconnector_period_attribute(interconnector_id, 'LossDemandConstant')
 
         # Format segments with start, end, and factor
         new_segments = []
@@ -1198,6 +1224,71 @@ class NEMDEDataHandler:
 
         return loss
 
+    def check_qld_demand(self):
+        """Check QLD total demand calculation inputs"""
+
+        generator_initial_mws = []
+        generator_target_mws = []
+        scheduled_load_initial_mws = []
+        scheduled_load_target_mws = []
+
+        for i, j in self.get_trader_offer_index():
+            region_id = self.get_trader_period_attribute(i, 'RegionID')
+
+            if (j == 'ENOF') and (region_id == 'QLD1'):
+                initial_mw = nemde_data.get_trader_initial_condition_attribute(i, 'InitialMW')
+                generator_initial_mws.append((i, j, initial_mw))
+
+                target_mw = nemde_data.get_trader_solution_attribute(i, 'EnergyTarget')
+                generator_target_mws.append((i, j, target_mw))
+
+            if (j == 'LDOF') and (region_id == 'QLD1'):
+                initial_mw = nemde_data.get_trader_initial_condition_attribute(i, 'InitialMW')
+                scheduled_load_initial_mws.append((i, j, initial_mw))
+
+                target_mw = nemde_data.get_trader_solution_attribute(i, 'EnergyTarget')
+                scheduled_load_target_mws.append((i, j, target_mw))
+
+        terranora_initialmw = self.get_interconnector_initial_condition_attribute('N-Q-MNSP1', 'InitialMW')
+        nsw_qld_initialmw = self.get_interconnector_initial_condition_attribute('NSW1-QLD1', 'InitialMW')
+
+        # Demand forecast and aggregate dispatch error
+        values = {
+            'DF': self.get_region_period_attribute('QLD1', 'DF'),
+            'ADE': self.get_region_initial_condition_attribute('QLD1', 'ADE'),
+            'N-Q-MNSP1 InitialMW': terranora_initialmw,
+            'NSW1-QLD1 InitialMW': nsw_qld_initialmw,
+            'N-Q-MNSP1 initial loss': self.get_interconnector_loss_estimate('N-Q-MNSP1', terranora_initialmw),
+            'NSW1-QLD1 initial loss': self.get_interconnector_loss_estimate('NSW1-QLD1', nsw_qld_initialmw),
+            'N-Q-MNSP1 initial LossShare': self.get_interconnector_loss_model_attribute('N-Q-MNSP1', 'LossShare'),
+            'NSW1-QLD1 initial LossShare': self.get_interconnector_loss_model_attribute('NSW1-QLD1', 'LossShare'),
+            'QLD1 FixedDemand': self.get_region_solution_attribute('QLD1', 'FixedDemand'),
+            'QLD1 NetExport': self.get_region_solution_attribute('QLD1', 'NetExport'),
+            'QLD1 ClearedDemand': self.get_region_solution_attribute('QLD1', 'ClearedDemand'),
+            'N-Q-MNSP1 target Flow': self.get_interconnector_solution_attribute('N-Q-MNSP1', 'Flow'),
+            'N-Q-MNSP1 target Losses': self.get_interconnector_solution_attribute('N-Q-MNSP1', 'Losses'),
+            'NSW1-QLD1 target Flow': self.get_interconnector_solution_attribute('NSW1-QLD1', 'Flow'),
+            'NSW1-QLD1 target Losses': self.get_interconnector_solution_attribute('NSW1-QLD1', 'Losses'),
+            'N-Q-MNSP1 LossDemandConstant': self.get_interconnector_period_attribute('N-Q-MNSP1', 'LossDemandConstant'),
+            'NSW1-QLD1 LossDemandConstant': self.get_interconnector_period_attribute('NSW1-QLD1', 'LossDemandConstant'),
+            'QLD1 InitialDemand': self.get_region_initial_condition_attribute('QLD1', 'InitialDemand'),
+            }
+
+        # Save to csv
+        (pd.DataFrame(generator_initial_mws, columns=['TraderID', 'TradeType', 'InitialMW']).set_index('TraderID')
+         .to_csv('output/qld_check/generator_initial_mw.csv'))
+
+        (pd.DataFrame(scheduled_load_initial_mws, columns=['TraderID', 'TradeType', 'InitialMW']).set_index('TraderID')
+         .to_csv('output/qld_check/scheduled_load_initial_mw.csv'))
+
+        (pd.DataFrame(generator_target_mws, columns=['TraderID', 'TradeType', 'EnergyTarget']).set_index('TraderID')
+         .to_csv('output/qld_check/generator_target_mw.csv'))
+
+        (pd.DataFrame(scheduled_load_target_mws, columns=['TraderID', 'TradeType', 'EnergyTarget']).set_index('TraderID')
+         .to_csv('output/qld_check/scheduled_load_target_mw.csv'))
+
+        pd.DataFrame.from_dict(values, orient='index').to_csv('output/qld_check/inputs.csv')
+
 
 if __name__ == '__main__':
     # Root directory containing NEMDE and MMSDM files
@@ -1211,20 +1302,47 @@ if __name__ == '__main__':
     # Load interval
     nemde_data.load_interval(2019, 10, 10, 1)
 
-    # for i in nemde_data.get_interconnector_index():
-    #     true_loss = nemde_data.get_interconnector_solution_attribute(i, 'Losses')
-    #     i_flow = nemde_data.get_interconnector_solution_attribute(i, 'Flow')
-    #     i_estimated_loss = nemde_data.get_interconnector_loss_estimate(i, i_flow)
-    #     print(i, 'difference:', true_loss - i_estimated_loss)
+    # Checking dispatch intervals stats
+    res = nemde_data.check_dispatch_interval_results()
+    df_r = pd.concat([pd.DataFrame.from_dict(i) for i in res], axis=1).T
 
-    nemde_data.check_dispatch_interval_results()
+    for c in df_r.columns:
+        print(c)
+        try:
+            diff = df_r['total demand - fixed demand'] / df_r[c]
+            print(diff)
+        except Exception as e:
+            print(e)
+            pass
 
-    total_generation = 0
-    for i, j in nemde_data.get_trader_offer_index():
-        r_id = nemde_data.get_trader_period_attribute(i, 'RegionID')
+    df_r.set_index('total demand - fixed demand').plot()
 
-        if (j == 'ENOF') and (r_id == 'QLD1'):
-            initial_mw = nemde_data.get_trader_initial_condition_attribute(i, 'InitialMW')
-            print(i, j, initial_mw)
-            total_generation += initial_mw
-    print('total generation', total_generation)
+
+    # Check QLD demand calculation inputs
+    # nemde_data.check_qld_demand()
+
+    # # Check loss model
+    # i_id = 'NSW1-QLD1'
+    # segments = nemde_data.get_interconnector_loss_model_segments(i_id)
+    #
+    # # First segment
+    # start = -nemde_data.get_interconnector_loss_model_attribute(i_id, 'LossLowerLimit')
+    #
+    # # Loss demand constant
+    # loss_demand_constant = nemde_data.get_interconnector_period_attribute(i_id, 'LossDemandConstant')
+    #
+    # # Format segments with start, end, and factor
+    # new_segments = []
+    # for s in segments:
+    #     segment = {'start': start, 'end': s['Limit'], 'factor': s['Factor']}
+    #     start = s['Limit']
+    #     new_segments.append(segment)
+    #
+    # fig, ax = plt.subplots()
+    # for s in new_segments:
+    #     ax.plot([s['start'], s['end']], [s['factor'], s['factor']])
+    #
+    # ax.plot([new_segments[0]['start'], new_segments[-1]['end']], [0, 0], linewidth=0.7, alpha=0.7, linestyle=':')
+    # ax.plot([0, 0], [new_segments[0]['factor'], new_segments[-1]['factor']], linewidth=0.7, alpha=0.7, linestyle=':')
+    #
+    # plt.show()
