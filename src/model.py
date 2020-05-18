@@ -151,14 +151,6 @@ class NEMDEModel:
         # Generic constraint RHS
         m.P_RHS = Param(m.S_GENERIC_CONSTRAINTS, rule=generic_constraint_rhs_rule)
 
-        def region_demand_rule(m, r):
-            """Get demand in each region. Using forecast demand for now."""
-
-            return self.data.get_region_period_attribute(r, 'DemandForecast')
-
-        # Demand in each NEM region
-        m.P_REGION_DEMAND = Param(m.S_REGIONS, rule=region_demand_rule)
-
         def generic_constraint_violation_factor_rule(m, c):
             """Constraint violation penalty for given generic constraint"""
 
@@ -578,7 +570,7 @@ class NEMDEModel:
         # Total load dispatched in a given region
         m.E_REGION_LOAD = Expression(m.S_REGIONS, rule=region_load_rule)
 
-        def region_net_flow_rule(m, r):
+        def region_net_export_flow_rule(m, r):
             """Compute net flow out of region (export - import)"""
 
             # Network incidence matrix
@@ -587,7 +579,7 @@ class NEMDEModel:
             return sum(incidence_matrix[i][r] * m.V_GC_INTERCONNECTOR[i] for i in m.S_INTERCONNECTORS)
 
         # Net flow out of region
-        m.E_REGION_NET_FLOW = Expression(m.S_REGIONS, rule=region_net_flow_rule)
+        m.E_REGION_NET_EXPORT_FLOW = Expression(m.S_REGIONS, rule=region_net_export_flow_rule)
 
         def region_loss_rule(m, r):
             """Approximate loss in each region based on Marginal Loss Factors"""
@@ -598,6 +590,78 @@ class NEMDEModel:
 
         # Loss in a given region
         m.E_REGION_LOSS = Expression(m.S_REGIONS, rule=region_loss_rule)
+
+        def total_initial_scheduled_load(m, r):
+            """Total initial scheduled load in a given region"""
+
+            total = 0
+            for i, j in self.data.get_trader_offer_index():
+                if j == 'LDOF':
+                    # Semi-dispatch status
+                    semi_dispatch_status = self.data.get_trader_attribute(i, 'SemiDispatch')
+
+                    # Trader region
+                    region = self.data.get_trader_period_attribute(i, 'RegionID')
+
+                    if (r == region) and (semi_dispatch_status == 0):
+                        total += self.data.get_trader_initial_condition_attribute(i, 'InitialMW')
+
+            return total
+
+        # Total initial scheduled load
+        m.E_TOTAL_INITIALMW_SCHEDULED_LOAD = Expression(m.S_REGIONS, rule=total_initial_scheduled_load)
+
+        def total_initial_allocated_losses(m, r):
+            """Total losses assigned to region as a result of interconnector flow"""
+
+            return self.data.get_region_initial_net_allocated_losses(r)
+
+        # Total initial allocated losses
+        m.E_TOTAL_INITIAL_ALLOCATED_LOSSES = Expression(m.S_REGIONS, rule=total_initial_allocated_losses)
+
+        def region_demand_rule(m, r):
+            """Get demand in each region. Using forecast demand for now."""
+
+            # return self.data.get_region_period_attribute(r, 'DemandForecast')
+
+            # Demand in each NEM region
+            demand = (
+                self.data.get_region_initial_condition_attribute(r, 'InitialDemand')
+                + self.data.get_region_initial_condition_attribute(r, 'ADE')
+                + self.data.get_region_period_attribute(r, 'DF')
+                - m.E_TOTAL_INITIALMW_SCHEDULED_LOAD[r]
+                - m.E_TOTAL_INITIAL_ALLOCATED_LOSSES[r]
+            )
+
+            return demand
+
+        # Region Demand
+        m.E_REGION_DEMAND = Expression(m.S_REGIONS, rule=region_demand_rule)
+
+        def allocated_interconnector_losses_rule(m, r):
+            """Losses obtained from model solution and assigned to each region"""
+
+            total = 0
+            for i in self.data.get_interconnector_index():
+                from_region = self.data.get_interconnector_period_attribute(i, 'FromRegion')
+                to_region = self.data.get_interconnector_period_attribute(i, 'ToRegion')
+                loss_share = self.data.get_interconnector_loss_model_attribute(i, 'LossShare')
+
+                # Loss obtained from solution
+                observed_loss = self.data.get_interconnector_solution_attribute(i, 'Losses')
+
+                if r == from_region:
+                    total += observed_loss * loss_share
+
+                elif r == to_region:
+                    total += observed_loss * (1 - loss_share)
+                else:
+                    pass
+
+            return total
+
+        # Fixed loss assigned to each region
+        m.E_ALLOCATED_INTERCONNECTOR_LOSSES = Expression(m.S_REGIONS, rule=allocated_interconnector_losses_rule)
 
         return m
 
@@ -804,9 +868,9 @@ class NEMDEModel:
         def power_balance_rule(m, r):
             """Power balance for each region"""
 
-            return (m.E_REGION_GENERATION[r] - m.E_REGION_LOAD[r]
-                    + m.E_NON_SCHEDULED_GENERATION[r]
-                    == m.P_REGION_DEMAND[r] + m.E_REGION_NET_FLOW[r])
+            return (m.E_REGION_GENERATION[r]
+                    == m.E_REGION_DEMAND[r] + m.E_REGION_LOAD[r] + m.E_REGION_NET_EXPORT_FLOW[r]
+                    + m.E_ALLOCATED_INTERCONNECTOR_LOSSES[r])
 
         # Power balance in each region
         # TODO: add interconnectors
@@ -1704,7 +1768,7 @@ class NEMDEModel:
 
             # Only consider contingency FCAS offers
             if j not in ['R6SE', 'R60S', 'R5MI', 'L6SE', 'L60S', 'L5MI']:
-            # if j not in ['R6SE', 'R60S', 'R5MI']:
+                # if j not in ['R6SE', 'R60S', 'R5MI']:
                 return Constraint.Skip
 
             # Check FCAS is available
@@ -1748,7 +1812,7 @@ class NEMDEModel:
 
             # Only consider contingency FCAS offers
             if j not in ['R6SE', 'R60S', 'R5MI', 'L6SE', 'L60S', 'L5MI']:
-            # if j not in ['L6SE', 'L60S', 'L5MI']:
+                # if j not in ['L6SE', 'L60S', 'L5MI']:
                 return Constraint.Skip
 
             # Check FCAS is available
@@ -1879,7 +1943,7 @@ class NEMDEModel:
 
         # Construct FCAS constraints
         # m = self.define_fcas_constraints(m)
-        # m = self.define_fcas_constraints2(m)
+        m = self.define_fcas_constraints2(m)
 
         return m
 
@@ -1915,8 +1979,8 @@ class NEMDEModel:
         m = self.define_objective(m)
 
         # Fix interconnector solution
-        m = self.fix_interconnector_solution(m)
-        m = self.fix_fcas_solution(m)
+        # m = self.fix_interconnector_solution(m)
+        # m = self.fix_fcas_solution(m)
         # m = self.fix_energy_solution(m)
 
         return m
@@ -2227,11 +2291,12 @@ if __name__ == '__main__':
     # Check interconnector solution
     analysis.check_interconnector_solution(model)
 
+
     def sa_v_loss(flow):
         """Loss equation for V-SA interconnector"""
         vic_demand = nemde.data.get_region_period_attribute('VIC1', 'DemandForecast')
         sa_demand = nemde.data.get_region_period_attribute('SA1', 'DemandForecast')
-        return (0.0138 + (1.3598E-06 * vic_demand) + (-1.3290E-05 * sa_demand))*flow + (1.4761E-04*(flow**2))
+        return (0.0138 + (1.3598E-06 * vic_demand) + (-1.3290E-05 * sa_demand)) * flow + (1.4761E-04 * (flow ** 2))
 
 
     interconnectors = ['N-Q-MNSP1', 'NSW1-QLD1', 'T-V-MNSP1', 'V-S-MNSP1', 'V-SA', 'VIC1-NSW1']
@@ -2239,4 +2304,3 @@ if __name__ == '__main__':
 
     gen_surplus = enof['difference'].sum()
     load_surplus = ldof['difference'].sum()
-
