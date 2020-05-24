@@ -1354,6 +1354,22 @@ class NEMDEDataHandler:
 
         plt.show()
 
+    def get_interconnector_absolute_loss_segments(self, interconnector_id):
+        """Compute absolute loss at each breakpoint"""
+
+        # Absolute loss for each level of flow
+        absolute_loss = [(i['Limit'], self.get_interconnector_loss_estimate(interconnector_id, i['Limit'])) for i in
+                         self.get_interconnector_loss_model_segments(interconnector_id)]
+
+        # First grid point
+        loss_lower_limit = self.get_interconnector_loss_model_attribute(interconnector_id, 'LossLowerLimit')
+        loss_lower_limit_value = self.get_interconnector_loss_estimate(interconnector_id, loss_lower_limit)
+
+        # Append to loss model
+        absolute_loss = [(-loss_lower_limit, loss_lower_limit_value)] + absolute_loss
+
+        return absolute_loss
+
 
 if __name__ == '__main__':
     # Root directory containing NEMDE and MMSDM files
@@ -1367,20 +1383,4 @@ if __name__ == '__main__':
     # Load interval
     nemde_data.load_interval(2019, 10, 10, 1)
 
-    # Check QLD demand calculation inputs
-    # nemde_data.check_qld_demand()
-
-    # qld_r = nemde_data.get_dispatch_interval_summary('QLD1', ['NSW1-QLD1', 'N-Q-MNSP1'])
-    # nsw_r = nemde_data.get_dispatch_interval_summary('NSW1', ['NSW1-QLD1', 'N-Q-MNSP1', 'VIC1-NSW1'])
-
-    r = nemde_data.check_dispatch_interval_results()
-    df_r = pd.concat([pd.DataFrame.from_dict(r[i]['QLD1'], orient='index')
-                     .rename(columns={0: i}) for i in r.keys()], axis=1).T
-
-    df_rn = df_r.copy()
-
-    for c in df_rn:
-        try:
-            df_rn[c] = df_rn['total demand - fixed demand'] / df_rn[c]
-        except:
-            pass
+    a = nemde_data.get_interconnector_absolute_loss_segments('V-SA')
