@@ -764,6 +764,14 @@ class NEMDEModel:
         # Loss cost
         m.E_LOSS_COST = Expression(rule=loss_cost_rule)
 
+        def total_loss_rule(m):
+            """Total interconnector loss"""
+
+            return sum(m.V_LOSS[i] for i in m.S_MNSPS)
+
+        # Total interconnector loss
+        m.E_TOTAL_LOSS = Expression(rule=total_loss_rule)
+
         return m
 
     def define_expressions(self, m):
@@ -2175,8 +2183,8 @@ class NEMDEModel:
         m = self.define_objective(m)
 
         # Fix interconnector solution
-        # m = self.fix_interconnector_solution(m)
-        # m = self.fix_fcas_solution(m)
+        m = self.fix_interconnector_solution(m)
+        m = self.fix_fcas_solution(m)
         # m = self.fix_energy_solution(m)
 
         return m
