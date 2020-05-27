@@ -242,16 +242,24 @@ class NEMDEModel:
         # Interconnector loss model segments
         loss_segments = {i: self.data.get_interconnector_absolute_loss_segments(i) for i in m.S_INTERCONNECTORS}
 
-        def loss_model_breakpoint_rule(m, i, j):
+        def loss_model_breakpoint_x_rule(m, i, j):
             """Loss model breakpoints"""
 
-            return loss_segments[i][j-1][1]
+            return loss_segments[i][j - 1][0]
 
         # Loss model breakpoints
-        m.P_LOSS_MODEL_BREAKPOINTS = Param(m.S_BREAKPOINTS, rule=loss_model_breakpoint_rule)
+        m.P_LOSS_MODEL_BREAKPOINTS_X = Param(m.S_BREAKPOINTS, rule=loss_model_breakpoint_x_rule)
 
+        def loss_model_breakpoint_y_rule(m, i, j):
+            """Loss model breakpoints"""
 
+            return loss_segments[i][j - 1][1]
 
+        # Loss model breakpoints
+        m.P_LOSS_MODEL_BREAKPOINTS_Y = Param(m.S_BREAKPOINTS, rule=loss_model_breakpoint_y_rule)
+
+        # MNSP loss price
+        m.P_MNSP_LOSS_PRICE = Param(initialize=self.data.get_case_attribute('MNSPLossesPrice'))
 
         return m
 
@@ -314,6 +322,11 @@ class NEMDEModel:
         # Interconnector forward and reverse flow constraint violation
         m.V_CV_INTERCONNECTOR_FORWARD = Var(m.S_INTERCONNECTORS, within=NonNegativeReals)
         m.V_CV_INTERCONNECTOR_REVERSE = Var(m.S_INTERCONNECTORS, within=NonNegativeReals)
+
+        # Loss model breakpoints and intervals
+        m.V_LOSS = Var(m.S_INTERCONNECTORS)
+        m.V_LOSS_LAMBDA = Var(m.S_BREAKPOINTS, within=NonNegativeReals)
+        m.V_LOSS_Y = Var(m.S_INTERVALS, within=Binary)
 
         return m
 
@@ -690,7 +703,7 @@ class NEMDEModel:
         # Region Demand
         m.E_REGION_DEMAND = Expression(m.S_REGIONS, rule=region_demand_rule)
 
-        def allocated_interconnector_losses_rule(m, r):
+        def allocated_interconnector_losses_observed_rule(m, r):
             """Losses obtained from model solution and assigned to each region"""
 
             total = 0
@@ -713,7 +726,43 @@ class NEMDEModel:
             return total
 
         # Fixed loss assigned to each region
+        m.E_ALLOCATED_INTERCONNECTOR_LOSSES_OBSERVED = Expression(m.S_REGIONS, rule=allocated_interconnector_losses_observed_rule)
+
+        def allocated_interconnector_losses_rule(m, r):
+            """Interconnector losses assigned to each region"""
+
+            total = 0
+            for i in self.data.get_interconnector_index():
+                from_region = self.data.get_interconnector_period_attribute(i, 'FromRegion')
+                to_region = self.data.get_interconnector_period_attribute(i, 'ToRegion')
+                loss_share = self.data.get_interconnector_loss_model_attribute(i, 'LossShare')
+
+                # Loss for each region
+                if r == from_region:
+                    total += m.V_LOSS[i] * loss_share
+
+                elif r == to_region:
+                    total += m.V_LOSS[i] * (1 - loss_share)
+                else:
+                    pass
+
+            return total
+
+        # Fixed loss assigned to each region
         m.E_ALLOCATED_INTERCONNECTOR_LOSSES = Expression(m.S_REGIONS, rule=allocated_interconnector_losses_rule)
+
+        return m
+
+    def define_loss_model_expressions(self, m):
+        """Loss model expressions"""
+
+        def loss_cost_rule(m):
+            """Loss cost"""
+
+            return sum(m.V_LOSS[i] for i in m.S_MNSPS) * m.P_MNSP_LOSS_PRICE
+
+        # Loss cost
+        m.E_LOSS_COST = Expression(rule=loss_cost_rule)
 
         return m
 
@@ -725,6 +774,7 @@ class NEMDEModel:
         m = self.define_generic_constraint_expressions(m)
         m = self.define_constraint_violation_penalty_expressions(m)
         m = self.define_aggregate_power_expressions(m)
+        m = self.define_loss_model_expressions(m)
 
         return m
 
@@ -921,8 +971,13 @@ class NEMDEModel:
             """Power balance for each region"""
 
             return (m.E_REGION_GENERATION[r]
-                    == m.E_REGION_DEMAND[r] + m.E_REGION_LOAD[r] + m.E_REGION_NET_EXPORT_FLOW[r]
-                    + m.E_ALLOCATED_INTERCONNECTOR_LOSSES[r])
+                    ==
+                    m.E_REGION_DEMAND[r]
+                    + m.E_REGION_LOAD[r]
+                    + m.E_REGION_NET_EXPORT_FLOW[r]
+                    # + m.E_ALLOCATED_INTERCONNECTOR_LOSSES_OBSERVED[r]
+                    + m.E_ALLOCATED_INTERCONNECTOR_LOSSES[r]
+                    )
 
         # Power balance in each region
         # TODO: add interconnectors
@@ -1978,6 +2033,90 @@ class NEMDEModel:
 
         return m
 
+    def define_loss_model_constraints(self, m):
+        """Interconnector loss model constraints"""
+
+        def approximated_loss_rule(m, i):
+            """Approximate interconnector loss"""
+
+            return (m.V_LOSS[i] == sum(m.P_LOSS_MODEL_BREAKPOINTS_Y[i, j] * m.V_LOSS_LAMBDA[i, j]
+                                       for j in m.S_INTERCONNECTOR_BREAKPOINTS[i]))
+
+        # Approximate loss over interconnector
+        m.APPROXIMATED_LOSS = Constraint(m.S_INTERCONNECTORS, rule=approximated_loss_rule)
+        # m.V_LOSS.fix(0)
+
+        def sos2_condition_1_rule(m, i):
+            """SOS2 condition 1"""
+
+            return (m.V_GC_INTERCONNECTOR[i] == sum(m.P_LOSS_MODEL_BREAKPOINTS_X[i, j] * m.V_LOSS_LAMBDA[i, j]
+                                                    for j in m.S_INTERCONNECTOR_BREAKPOINTS[i]))
+
+        # SOS2 condition 1
+        m.SOS2_CONDITION_1 = Constraint(m.S_INTERCONNECTORS, rule=sos2_condition_1_rule)
+
+        def sos2_condition_2_rule(m, i):
+            """SOS2 condition 2"""
+
+            return sum(m.V_LOSS_LAMBDA[i, j] for j in m.S_INTERCONNECTOR_BREAKPOINTS[i]) == 1
+
+        # SOS2 condition 2
+        m.SOS2_CONDITION_2 = Constraint(m.S_INTERCONNECTORS, rule=sos2_condition_2_rule)
+
+        def sos2_condition_3_rule(m, i):
+            """SOS2 condition 3"""
+
+            return sum(m.V_LOSS_Y[i, j] for j in m.S_INTERCONNECTOR_INTERVALS[i]) == 1
+
+        # SOS2 condition 3
+        m.SOS2_CONDITION_3 = Constraint(m.S_INTERCONNECTORS, rule=sos2_condition_3_rule)
+
+        def sos2_condition_4_rule(m, i, j):
+            """SOS2 condition 4"""
+
+            end = max(m.S_INTERCONNECTOR_BREAKPOINTS[i])
+
+            if (j >= 2) and (j <= end - 1):
+                return (sum(m.V_LOSS_Y[i, z] for z in range(j + 1, end))
+                        <= sum(m.V_LOSS_LAMBDA[i, z] for z in range(j + 1, end + 1)))
+            else:
+                return Constraint.Skip
+
+        # SOS2 condition 4
+        m.SOS2_CONDITION_4 = Constraint(m.S_BREAKPOINTS, rule=sos2_condition_4_rule)
+
+        def sos2_condition_5_rule(m, i, j):
+            """SOS2 condition 5"""
+
+            end = max(m.S_INTERCONNECTOR_BREAKPOINTS[i])
+
+            if (j >= 2) and (j <= end - 1):
+                return (sum(m.V_LOSS_LAMBDA[i, z] for z in range(j + 1, end + 1))
+                        <= sum(m.V_LOSS_Y[i, z] for z in range(j, end)))
+            else:
+                return Constraint.Skip
+
+        # SOS2 condition 5
+        m.SOS2_CONDITION_5 = Constraint(m.S_BREAKPOINTS, rule=sos2_condition_5_rule)
+
+        def sos2_condition_6_rule(m, i, j):
+            """SOS2 condition 6"""
+
+            end = max(m.S_INTERCONNECTOR_BREAKPOINTS[i])
+
+            if j == 1:
+                return m.V_LOSS_LAMBDA[i, j] <= m.V_LOSS_Y[i, j]
+                # return Constraint.Skip
+            elif j == end:
+                return m.V_LOSS_LAMBDA[i, j] <= m.V_LOSS_Y[i, j - 1]
+            else:
+                return Constraint.Skip
+
+        # SOS2 condition 6
+        m.SOS2_CONDITION_6 = Constraint(m.S_BREAKPOINTS, rule=sos2_condition_6_rule)
+
+        return m
+
     def define_constraints(self, m):
         """Define model constraints"""
 
@@ -1995,10 +2134,10 @@ class NEMDEModel:
 
         # Construct FCAS constraints
         # m = self.define_fcas_constraints(m)
-        # m = self.define_fcas_constraints2(m)
+        m = self.define_fcas_constraints2(m)
 
         # SOS2 interconnector loss model constraints
-        # m = self.define_sos2_loss_model_constraints(m)
+        m = self.define_loss_model_constraints(m)
 
         return m
 
@@ -2009,7 +2148,9 @@ class NEMDEModel:
         # Total cost for energy and ancillary services
         m.OBJECTIVE = Objective(expr=sum(m.E_TRADER_COST_FUNCTION[t] for t in m.S_TRADER_OFFERS)
                                      + sum(m.E_MNSP_COST_FUNCTION[t] for t in m.S_MNSP_OFFERS)
-                                     + m.E_CV_TOTAL_PENALTY,
+                                     + m.E_CV_TOTAL_PENALTY
+                                     # + m.E_LOSS_COST
+                                ,
                                 sense=minimize)
 
         return m
@@ -2312,50 +2453,65 @@ if __name__ == '__main__':
     model = nemde.construct_model(2019, 10, 10, 1)
 
     # Solve model
-    # model, status = nemde.solve_model(model)
+    model, status = nemde.solve_model(model)
 
-    # # Check solution
-    # enof = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'ENOF', 'EnergyTarget')
-    # ldof = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'LDOF', 'EnergyTarget')
-    #
-    # r6se = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'R6SE', 'R6Target')
-    # r60s = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'R60S', 'R60Target')
-    # r5mi = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'R5MI', 'R5Target')
-    # r5reg = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'R5RE', 'R5RegTarget')
-    #
-    # l6se = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'L6SE', 'L6Target')
-    # l60s = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'L60S', 'L60Target')
-    # l5mi = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'L5MI', 'L5Target')
-    # l5reg = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'L5RE', 'L5RegTarget')
-    #
-    # # Scheduled units
-    # scheduled_traders = analysis.get_scheduled_traders()
-    #
-    # # Filter scheduled generators and loads
-    # enof_scheduled = enof.loc[enof.index.intersection(scheduled_traders), :]
-    # ldof_scheduled = ldof.loc[ldof.index.intersection(scheduled_traders), :]
-    #
-    # # Write generic constraints
-    # nemde.save_generic_constraints(model)
-    #
-    # # Combine into single DataFrame
-    # duid = 'MEADOWBK'
-    # analysis.check_trader_solution(model, duid)
-    # analysis.print_fcas_constraints(model, duid)
-    #
-    # # Check interconnector solution
-    # analysis.check_interconnector_solution(model)
-    #
-    #
-    # def sa_v_loss(flow):
-    #     """Loss equation for V-SA interconnector"""
-    #     vic_demand = nemde.data.get_region_period_attribute('VIC1', 'DemandForecast')
-    #     sa_demand = nemde.data.get_region_period_attribute('SA1', 'DemandForecast')
-    #     return (0.0138 + (1.3598E-06 * vic_demand) + (-1.3290E-05 * sa_demand)) * flow + (1.4761E-04 * (flow ** 2))
-    #
-    #
-    # interconnectors = ['N-Q-MNSP1', 'NSW1-QLD1', 'T-V-MNSP1', 'V-S-MNSP1', 'V-SA', 'VIC1-NSW1']
-    # total_loss = sum(nemde.data.get_interconnector_solution_attribute(i, 'Losses') for i in interconnectors)
-    #
-    # gen_surplus = enof['difference'].sum()
-    # load_surplus = ldof['difference'].sum()
+    # Check solution
+    enof = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'ENOF', 'EnergyTarget')
+    ldof = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'LDOF', 'EnergyTarget')
+
+    r6se = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'R6SE', 'R6Target')
+    r60s = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'R60S', 'R60Target')
+    r5mi = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'R5MI', 'R5Target')
+    r5reg = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'R5RE', 'R5RegTarget')
+
+    l6se = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'L6SE', 'L6Target')
+    l60s = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'L60S', 'L60Target')
+    l5mi = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'L5MI', 'L5Target')
+    l5reg = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'L5RE', 'L5RegTarget')
+
+    # Scheduled units
+    scheduled_traders = analysis.get_scheduled_traders()
+
+    # Filter scheduled generators and loads
+    enof_scheduled = enof.loc[enof.index.intersection(scheduled_traders), :]
+    ldof_scheduled = ldof.loc[ldof.index.intersection(scheduled_traders), :]
+
+    # Write generic constraints
+    nemde.save_generic_constraints(model)
+
+    # Combine into single DataFrame
+    duid = 'MEADOWBK'
+    analysis.check_trader_solution(model, duid)
+    analysis.print_fcas_constraints(model, duid)
+
+    # Check interconnector solution
+    analysis.check_interconnector_solution(model)
+
+
+    def sa_v_loss(flow):
+        """Loss equation for V-SA interconnector"""
+        vic_demand = nemde.data.get_region_period_attribute('VIC1', 'DemandForecast')
+        sa_demand = nemde.data.get_region_period_attribute('SA1', 'DemandForecast')
+        return (0.0138 + (1.3598E-06 * vic_demand) + (-1.3290E-05 * sa_demand)) * flow + (1.4761E-04 * (flow ** 2))
+
+
+    interconnectors = ['N-Q-MNSP1', 'NSW1-QLD1', 'T-V-MNSP1', 'V-S-MNSP1', 'V-SA', 'VIC1-NSW1']
+    total_loss = sum(nemde.data.get_interconnector_solution_attribute(i, 'Losses') for i in interconnectors)
+
+    gen_surplus = enof['difference'].sum()
+    load_surplus = ldof['difference'].sum()
+
+    x = [i[1] for i in model.P_LOSS_MODEL_BREAKPOINTS_X.items() if i[0][0] == 'V-S-MNSP1']
+    y = [i[1] for i in model.P_LOSS_MODEL_BREAKPOINTS_Y.items() if i[0][0] == 'V-S-MNSP1']
+
+    print('V-S-MNSP1 solution loss', nemde.data.get_interconnector_solution_attribute('V-S-MNSP1', 'Losses'))
+    print('V-S-MNSP1 model loss', model.V_LOSS['V-S-MNSP1'].value)
+
+    print('V-S-MNSP1 solution flow', nemde.data.get_interconnector_solution_attribute('V-S-MNSP1', 'Flow'))
+    print('V-S-MNSP1 model flow', model.V_GC_INTERCONNECTOR['V-S-MNSP1'].value)
+
+    fig, ax = plt.subplots()
+    ax.plot(x, y)
+    plt.show()
+
+    interconnector_solution = {i: nemde.data.get_interconnector_solution_attribute(i, 'Losses') for i in model.S_INTERCONNECTORS}

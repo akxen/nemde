@@ -1190,12 +1190,15 @@ class NEMDEDataHandler:
         # Construct segments based on loss model
         segments = self.get_segments(interconnector_id)
 
+        if flow == 9:
+            q = 100
+
         # Initialise total in
         total_area = 0
         for s in segments:
             if flow > 0:
                 # Only want segments to right of origin
-                if s['end'] < 0:
+                if s['end'] <= 0:
                     proportion = 0
 
                 # Only want segments that are less than or equal to flow
@@ -1363,7 +1366,7 @@ class NEMDEDataHandler:
 
         # First grid point
         loss_lower_limit = self.get_interconnector_loss_model_attribute(interconnector_id, 'LossLowerLimit')
-        loss_lower_limit_value = self.get_interconnector_loss_estimate(interconnector_id, loss_lower_limit)
+        loss_lower_limit_value = self.get_interconnector_loss_estimate(interconnector_id, -loss_lower_limit)
 
         # Append to loss model
         absolute_loss = [(-loss_lower_limit, loss_lower_limit_value)] + absolute_loss
@@ -1383,4 +1386,25 @@ if __name__ == '__main__':
     # Load interval
     nemde_data.load_interval(2019, 10, 10, 1)
 
-    a = nemde_data.get_interconnector_absolute_loss_segments('V-SA')
+    # for i in nemde_data.get_interconnector_index():
+    for i in ['V-SA']:
+        segments = nemde_data.get_interconnector_absolute_loss_segments(i)
+        x, y = [i[0] for i in segments], [i[1] for i in segments]
+        fig, ax = plt.subplots()
+        ax.plot(x, y)
+        ax.set_title(i)
+
+        # Solution loss
+        solution_loss = nemde_data.get_interconnector_solution_attribute(i, 'Losses')
+        flow_min, flow_max = segments[0][0], segments[-1][0]
+
+        # Min and max flow
+        ax.plot([flow_min, flow_max], [solution_loss, solution_loss], linewidth=1.2, alpha=0.7, linestyle=':')
+
+        # Solution flow
+        solution_flow = nemde_data.get_interconnector_solution_attribute(i, 'Flow')
+        loss_max = max([i[1] for i in segments]) + 10
+        loss_min = min([i[1] for i in segments]) - 10
+        ax.plot([solution_flow, solution_flow], [loss_min, loss_max], linewidth=1.2, alpha=0.7, linestyle=':')
+
+        plt.show()
