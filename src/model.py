@@ -726,7 +726,8 @@ class NEMDEModel:
             return total
 
         # Fixed loss assigned to each region
-        m.E_ALLOCATED_INTERCONNECTOR_LOSSES_OBSERVED = Expression(m.S_REGIONS, rule=allocated_interconnector_losses_observed_rule)
+        m.E_ALLOCATED_INTERCONNECTOR_LOSSES_OBSERVED = Expression(m.S_REGIONS,
+                                                                  rule=allocated_interconnector_losses_observed_rule)
 
         def allocated_interconnector_losses_rule(m, r):
             """Interconnector losses assigned to each region"""
@@ -2183,8 +2184,8 @@ class NEMDEModel:
         m = self.define_objective(m)
 
         # Fix interconnector solution
-        m = self.fix_interconnector_solution(m)
-        m = self.fix_fcas_solution(m)
+        # m = self.fix_interconnector_solution(m)
+        # m = self.fix_fcas_solution(m)
         # m = self.fix_energy_solution(m)
 
         return m
