@@ -328,6 +328,10 @@ class NEMDEModel:
         m.V_LOSS_LAMBDA = Var(m.S_BREAKPOINTS, within=NonNegativeReals)
         m.V_LOSS_Y = Var(m.S_INTERVALS, within=Binary)
 
+        # Flow between region and interconnector connection points
+        m.V_FLOW_FROM_CP = Var(m.S_INTERCONNECTORS)
+        m.V_FLOW_TO_CP = Var(m.S_INTERCONNECTORS)
+
         return m
 
     @staticmethod
@@ -635,13 +639,49 @@ class NEMDEModel:
         # Total load dispatched in a given region
         m.E_REGION_LOAD = Expression(m.S_REGIONS, rule=region_load_rule)
 
+        # def region_net_export_flow_rule(m, r):
+        #     """Compute net flow out of region (export - import)"""
+        #
+        #     # Network incidence matrix
+        #     incidence_matrix = self.get_incidence_matrix(m)
+        #
+        #     return sum(incidence_matrix[i][r] * m.V_GC_INTERCONNECTOR[i] for i in m.S_INTERCONNECTORS)
+        #
+        # # Net flow out of region
+        # m.E_REGION_NET_EXPORT_FLOW = Expression(m.S_REGIONS, rule=region_net_export_flow_rule)
+
         def region_net_export_flow_rule(m, r):
-            """Compute net flow out of region (export - import)"""
+            """Net flow out of region"""
 
-            # Network incidence matrix
-            incidence_matrix = self.get_incidence_matrix(m)
+            net_flow = 0
 
-            return sum(incidence_matrix[i][r] * m.V_GC_INTERCONNECTOR[i] for i in m.S_INTERCONNECTORS)
+            for i in m.S_INTERCONNECTORS:
+                from_node = self.data.get_interconnector_period_attribute(i, 'FromRegion')
+                to_node = self.data.get_interconnector_period_attribute(i, 'ToRegion')
+                mnsp_status = self.data.get_interconnector_period_attribute(i, 'MNSP')
+
+                if r == from_node:
+                    # Check if an MNSP
+                    if mnsp_status == 1:
+                        factor = self.data.get_interconnector_period_attribute(i, 'FromRegionLF')
+                    else:
+                        factor = 1
+
+                    net_flow += factor * m.V_FLOW_FROM_CP[i]
+
+                elif r == to_node:
+                    # Check if an MNSP
+                    if mnsp_status == 1:
+                        factor = self.data.get_interconnector_period_attribute(i, 'ToRegionLF')
+                    else:
+                        factor = 1
+
+                    net_flow += - (factor * m.V_FLOW_TO_CP[i])
+
+                else:
+                    pass
+
+            return net_flow
 
         # Net flow out of region
         m.E_REGION_NET_EXPORT_FLOW = Expression(m.S_REGIONS, rule=region_net_export_flow_rule)
@@ -985,7 +1025,7 @@ class NEMDEModel:
                     + m.E_REGION_LOAD[r]
                     + m.E_REGION_NET_EXPORT_FLOW[r]
                     # + m.E_ALLOCATED_INTERCONNECTOR_LOSSES_OBSERVED[r]
-                    + m.E_ALLOCATED_INTERCONNECTOR_LOSSES[r]
+                    # + m.E_ALLOCATED_INTERCONNECTOR_LOSSES[r]
                     )
 
         # Power balance in each region
@@ -1014,6 +1054,30 @@ class NEMDEModel:
 
         # Forward power flow limit for interconnector
         m.C_INTERCONNECTOR_REVERSE_FLOW = Constraint(m.S_INTERCONNECTORS, rule=interconnector_reverse_flow_rule)
+
+        def from_node_connection_point_balance_rule(m, i):
+            """Power balance at from node connection point"""
+
+            # Loss share applied to from node connection point
+            loss_share = self.data.get_interconnector_loss_model_attribute(i, 'LossShare')
+
+            return m.V_FLOW_FROM_CP[i] - (loss_share * m.V_LOSS[i]) - m.V_GC_INTERCONNECTOR[i] == 0
+
+        # From node connection point power balance
+        m.C_FROM_NODE_CP_POWER_BALANCE = Constraint(m.S_INTERCONNECTORS, rule=from_node_connection_point_balance_rule)
+
+        def to_node_connection_point_balance_rule(m, i):
+            """Power balance at to node connection point"""
+
+            # Loss share applied to from node connection point
+            loss_share = 1 - self.data.get_interconnector_loss_model_attribute(i, 'LossShare')
+
+            return m.V_GC_INTERCONNECTOR[i] - (loss_share * m.V_LOSS[i]) - m.V_FLOW_TO_CP[i] == 0
+
+        # To node connection point power balance
+        m.C_TO_NODE_CP_POWER_BALANCE = Constraint(m.S_INTERCONNECTORS, rule=to_node_connection_point_balance_rule)
+
+        return m
 
     def get_fcas_trapezium_offer(self, trader_id, trade_type):
         """Get FCAS trapezium offer for a given trader and trade type"""
@@ -2049,7 +2113,9 @@ class NEMDEModel:
             """Approximate interconnector loss"""
 
             return (m.V_LOSS[i] == sum(m.P_LOSS_MODEL_BREAKPOINTS_Y[i, j] * m.V_LOSS_LAMBDA[i, j]
-                                       for j in m.S_INTERCONNECTOR_BREAKPOINTS[i]))
+                                       for j in m.S_INTERCONNECTOR_BREAKPOINTS[i])
+                    # + self.data.get_interconnector_period_attribute(i, 'LossDemandConstant')
+                    )
 
         # Approximate loss over interconnector
         m.APPROXIMATED_LOSS = Constraint(m.S_INTERCONNECTORS, rule=approximated_loss_rule)
@@ -2140,6 +2206,9 @@ class NEMDEModel:
 
         # Construct region power balance constraints
         m = self.define_region_constraints(m)
+
+        # Construct interconnector constraints
+        m = self.define_interconnector_constraints(m)
 
         # Construct FCAS constraints
         # m = self.define_fcas_constraints(m)
