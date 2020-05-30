@@ -1,6 +1,7 @@
 """Class used to construct and solve NEMDE approximation"""
 
 import os
+import time
 
 import pandas as pd
 from pyomo.environ import *
@@ -2195,27 +2196,37 @@ class NEMDEModel:
     def define_constraints(self, m):
         """Define model constraints"""
 
+        t0 = time.time()
+
         # Ensure offer bands aren't violated
+        print('Starting to define constraints:', time.time() - t0)
         m = self.define_offer_constraints(m)
+        print('Defined offer constraints:', time.time() - t0)
 
         # Construct generic constraints and link variables to those found in objective
         m = self.define_generic_constraints(m)
+        print('Defined generic constraints:', time.time() - t0)
 
         # Construct unit constraints (e.g. ramp rate constraints)
         m = self.define_unit_constraints(m)
+        print('Defined unit constraints:', time.time() - t0)
 
         # Construct region power balance constraints
         m = self.define_region_constraints(m)
+        print('Defined region constraints:', time.time() - t0)
 
         # Construct interconnector constraints
         m = self.define_interconnector_constraints(m)
+        print('Defined interconnector constraints:', time.time() - t0)
 
         # Construct FCAS constraints
         # m = self.define_fcas_constraints(m)
         m = self.define_fcas_constraints2(m)
+        print('Defined FCAS constraints:', time.time() - t0)
 
         # SOS2 interconnector loss model constraints
         m = self.define_loss_model_constraints(m)
+        print('Defined loss model constraints:', time.time() - t0)
 
         return m
 
@@ -2237,20 +2248,35 @@ class NEMDEModel:
         """Construct NEMDE approximation"""
 
         # Update data for specified interval
+        t0 = time.time()
+        print('Starting model construction:', time.time() - t0)
         self.data.load_interval(year, month, day, interval)
         self.fcas.data.load_interval(year, month, day, interval)
         self.mmsdm_data.load_interval(year, month)
+        print('Loaded data:', time.time() - t0)
 
         # Initialise concrete model instance
         m = ConcreteModel()
+        print('Initialised model:', time.time() - t0)
 
         # Define model components
         m = self.define_sets(m)
+        print('Defined sets:', time.time() - t0)
+
         m = self.define_parameters(m)
+        print('Defined parameters:', time.time() - t0)
+
         m = self.define_variables(m)
+        print('Defined variables:', time.time() - t0)
+
         m = self.define_expressions(m)
+        print('Defined expressions:', time.time() - t0)
+
         m = self.define_constraints(m)
+        print('Defined constraints:', time.time() - t0)
+
         m = self.define_objective(m)
+        print('Defined objective:', time.time() - t0)
 
         # Fix interconnector solution
         # m = self.fix_interconnector_solution(m)
@@ -2263,7 +2289,11 @@ class NEMDEModel:
         """Solve model"""
 
         # Solve model
+        t0 = time.time()
+
+        print('Starting solve:', time.time() - t0)
         solve_status = self.opt.solve(m, tee=self.tee, options=self.solver_options, keepfiles=self.keepfiles)
+        print('Finished solve:', time.time() - t0)
 
         return m, solve_status
 
