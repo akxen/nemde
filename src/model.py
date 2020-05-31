@@ -237,7 +237,7 @@ class NEMDEModel:
         # Ancillary services enablement max price (assume for constraint ensure FCAS < enablement max if active)
         m.P_CVF_AS_ENABLEMENT_MAX_PRICE = Param(initialize=self.data.get_case_attribute('ASEnablementMaxPrice'))
 
-        # Interconnector powerflow violation price
+        # Interconnector power flow violation price
         m.P_CVF_INTERCONNECTOR_PRICE = Param(initialize=self.data.get_case_attribute('InterconnectorPrice'))
 
         # Interconnector loss model segments
@@ -449,7 +449,6 @@ class NEMDEModel:
         # Penalty factor for ramp down rate violation
         m.E_CV_TRADER_RAMP_DOWN_PENALTY = Expression(m.S_TRADERS, rule=trader_ramp_down_penalty_rule)
 
-        # TODO: can probably remove this
         def trader_trapezium_penalty_rule(m, i, j):
             """Penalty for violating FCAS trapezium bounds"""
 
@@ -540,7 +539,7 @@ class NEMDEModel:
         m.E_CV_MNSP_CAPACITY_PENALTY = Expression(m.S_MNSP_OFFERS, rule=mnsp_capacity_penalty_rule)
 
         def interconnector_forward_penalty_rule(m, i):
-            """Penalty for forward powerflow exceeding max allowable flow"""
+            """Penalty for forward power flow exceeding max allowable flow"""
 
             return m.P_CVF_INTERCONNECTOR_PRICE * m.V_CV_INTERCONNECTOR_FORWARD[i]
 
@@ -549,7 +548,7 @@ class NEMDEModel:
                                                            rule=interconnector_forward_penalty_rule)
 
         def interconnector_reverse_penalty_rule(m, i):
-            """Penalty for reverse powerflow exceeding max allowable flow"""
+            """Penalty for reverse power flow exceeding max allowable flow"""
 
             return m.P_CVF_INTERCONNECTOR_PRICE * m.V_CV_INTERCONNECTOR_REVERSE[i]
 
@@ -603,34 +602,6 @@ class NEMDEModel:
         # Total generation dispatched in a given region
         m.E_REGION_GENERATION = Expression(m.S_REGIONS, rule=region_generation_rule)
 
-        def region_non_scheduled_generation_rule(m, r):
-            """Non-scheduled generation rule"""
-
-            # Initialise non-scheduled generation
-            non_scheduled_generation = 0
-
-            for g in m.S_NON_SCHEDULED_GENERATORS:
-                try:
-                    # Region ID
-                    region = self.data.get_constraint_scada_attribute_partial_id('T', 'MW', f'{g}.', 'Grouping_ID')
-
-                    if region != r:
-                        continue
-
-                    # Generator dispatch
-                    dispatch = self.data.get_non_scheduled_generator_dispatch(g, 'MW')
-
-                    # Update dispatch for given region
-                    non_scheduled_generation += dispatch
-
-                except Exception as e:
-                    print(e)
-
-            return non_scheduled_generation
-
-        # Total non-scheduled generation
-        m.E_NON_SCHEDULED_GENERATION = Expression(m.S_REGIONS, rule=region_non_scheduled_generation_rule)
-
         def region_load_rule(m, r):
             """Available load offers in given region"""
 
@@ -639,17 +610,6 @@ class NEMDEModel:
 
         # Total load dispatched in a given region
         m.E_REGION_LOAD = Expression(m.S_REGIONS, rule=region_load_rule)
-
-        # def region_net_export_flow_rule(m, r):
-        #     """Compute net flow out of region (export - import)"""
-        #
-        #     # Network incidence matrix
-        #     incidence_matrix = self.get_incidence_matrix(m)
-        #
-        #     return sum(incidence_matrix[i][r] * m.V_GC_INTERCONNECTOR[i] for i in m.S_INTERCONNECTORS)
-        #
-        # # Net flow out of region
-        # m.E_REGION_NET_EXPORT_FLOW = Expression(m.S_REGIONS, rule=region_net_export_flow_rule)
 
         def region_net_export_flow_rule(m, r):
             """Net flow out of region"""
@@ -728,8 +688,6 @@ class NEMDEModel:
         def region_demand_rule(m, r):
             """Get demand in each region. Using forecast demand for now."""
 
-            # return self.data.get_region_period_attribute(r, 'DemandForecast')
-
             # Demand in each NEM region
             demand = (
                     self.data.get_region_initial_condition_attribute(r, 'InitialDemand')
@@ -770,50 +728,6 @@ class NEMDEModel:
         m.E_ALLOCATED_INTERCONNECTOR_LOSSES_OBSERVED = Expression(m.S_REGIONS,
                                                                   rule=allocated_interconnector_losses_observed_rule)
 
-        def allocated_interconnector_losses_rule(m, r):
-            """Interconnector losses assigned to each region"""
-
-            total = 0
-            for i in self.data.get_interconnector_index():
-                from_region = self.data.get_interconnector_period_attribute(i, 'FromRegion')
-                to_region = self.data.get_interconnector_period_attribute(i, 'ToRegion')
-                loss_share = self.data.get_interconnector_loss_model_attribute(i, 'LossShare')
-
-                # Loss for each region
-                if r == from_region:
-                    total += m.V_LOSS[i] * loss_share
-
-                elif r == to_region:
-                    total += m.V_LOSS[i] * (1 - loss_share)
-                else:
-                    pass
-
-            return total
-
-        # Fixed loss assigned to each region
-        m.E_ALLOCATED_INTERCONNECTOR_LOSSES = Expression(m.S_REGIONS, rule=allocated_interconnector_losses_rule)
-
-        return m
-
-    def define_loss_model_expressions(self, m):
-        """Loss model expressions"""
-
-        def loss_cost_rule(m):
-            """Loss cost"""
-
-            return sum(m.V_LOSS[i] for i in m.S_MNSPS) * m.P_MNSP_LOSS_PRICE
-
-        # Loss cost
-        m.E_LOSS_COST = Expression(rule=loss_cost_rule)
-
-        def total_loss_rule(m):
-            """Total interconnector loss"""
-
-            return sum(m.V_LOSS[i] for i in m.S_MNSPS)
-
-        # Total interconnector loss
-        m.E_TOTAL_LOSS = Expression(rule=total_loss_rule)
-
         return m
 
     def define_expressions(self, m):
@@ -824,7 +738,6 @@ class NEMDEModel:
         m = self.define_generic_constraint_expressions(m)
         m = self.define_constraint_violation_penalty_expressions(m)
         m = self.define_aggregate_power_expressions(m)
-        m = self.define_loss_model_expressions(m)
 
         return m
 
@@ -885,7 +798,8 @@ class NEMDEModel:
 
         return m
 
-    def define_offer_constraints(self, m):
+    @staticmethod
+    def define_offer_constraints(m):
         """Ensure trader and MNSP bids don't exceed their specified bid bands"""
 
         def trader_total_offer_rule(m, i, j):
@@ -893,8 +807,7 @@ class NEMDEModel:
 
             return m.V_TRADER_TOTAL_OFFER[i, j] == sum(m.V_TRADER_OFFER[i, j, k] for k in m.S_BANDS)
 
-            # Linking individual quantity band offers to total amount offered by trader
-
+        # Linking individual quantity band offers to total amount offered by trader
         m.C_TRADER_TOTAL_OFFER = Constraint(m.S_TRADER_OFFERS, rule=trader_total_offer_rule)
 
         def trader_offer_rule(m, i, j, k):
@@ -980,39 +893,6 @@ class NEMDEModel:
 
         return m
 
-    def get_incidence_matrix(self, m):
-        """
-        Construct region incidence matrix for interconnectors. Coefficient of +1 indicates 'from' region, -1 indicates
-        'to' region
-        """
-
-        # Initialise container for incidence matrix information
-        incidence_matrix = dict()
-
-        for i in m.S_INTERCONNECTORS:
-            from_region = self.data.get_interconnector_period_attribute(i, 'FromRegion')
-            to_region = self.data.get_interconnector_period_attribute(i, 'ToRegion')
-
-            # Initialise inner dictionary to contain regions
-            incidence_matrix[i] = dict()
-
-            # Iterate over NEM regions
-            for r in m.S_REGIONS:
-
-                # Assign +1 if region is interconnector's 'from' region
-                if r == from_region:
-                    incidence_matrix[i][r] = 1
-
-                # Assign -1 if region is interconnector's 'to' region
-                elif r == to_region:
-                    incidence_matrix[i][r] = -1
-
-                # Assign 0 if interconnector not connected to region
-                else:
-                    incidence_matrix[i][r] = 0
-
-        return incidence_matrix
-
     @staticmethod
     def define_region_constraints(m):
         """Define power balance constraint for each region, and constrain flows on interconnectors"""
@@ -1025,21 +905,18 @@ class NEMDEModel:
                     m.E_REGION_DEMAND[r]
                     + m.E_REGION_LOAD[r]
                     + m.E_REGION_NET_EXPORT_FLOW[r]
-                    # + m.E_ALLOCATED_INTERCONNECTOR_LOSSES_OBSERVED[r]
-                    # + m.E_ALLOCATED_INTERCONNECTOR_LOSSES[r]
                     )
 
         # Power balance in each region
-        # TODO: add interconnectors
         m.C_POWER_BALANCE = Constraint(m.S_REGIONS, rule=power_balance_rule)
 
         return m
 
     def define_interconnector_constraints(self, m):
-        """Define powerflow limits on interconnectors"""
+        """Define power flow limits on interconnectors"""
 
         def interconnector_forward_flow_rule(m, i):
-            """Constrain forward powerflow over interconnector"""
+            """Constrain forward power flow over interconnector"""
 
             return (m.V_GC_INTERCONNECTOR[i] <= self.data.get_interconnector_period_attribute(i, 'UpperLimit')
                     + m.V_CV_INTERCONNECTOR_FORWARD[i])
@@ -1048,7 +925,7 @@ class NEMDEModel:
         m.C_INTERCONNECTOR_FORWARD_FLOW = Constraint(m.S_INTERCONNECTORS, rule=interconnector_forward_flow_rule)
 
         def interconnector_reverse_flow_rule(m, i):
-            """Constrain reverse powerflow over interconnector"""
+            """Constrain reverse power flow over interconnector"""
 
             return (m.V_GC_INTERCONNECTOR[i] + m.V_CV_INTERCONNECTOR_REVERSE[i]
                     >= - self.data.get_interconnector_period_attribute(i, 'LowerLimit'))
@@ -1100,7 +977,6 @@ class NEMDEModel:
         """Scale enablement min for regulating service"""
 
         # Get AGC enablement min
-        # TODO: Check if 'LMW' is the correct attribute (think so because it's located close the 'AGCStatus' attribute).
         try:
             agc_min = self.data.get_trader_initial_condition_attribute(trader_id, 'LMW')
 
@@ -1121,9 +997,7 @@ class NEMDEModel:
     def get_fcas_trapezium_scaled_enablement_max(self, trader_id, trapezium):
         """Scale enablement max for regulating service"""
 
-        # Get AGC enablement min
-        # TODO: Check if 'HMW' is the correct attribute (think so because it's located close the 'AGCStatus' attribute).
-
+        # Get AGC enablement max
         try:
             agc_max = self.data.get_trader_initial_condition_attribute(trader_id, 'HMW')
 
@@ -1351,335 +1225,6 @@ class NEMDEModel:
         else:
             return False
 
-    def define_fcas_constraints(self, m):
-        """Define FCAS constraints"""
-
-        def as_profile_rule(m, i, j):
-            """Compute max available based on initial MW"""
-
-            if j not in ['R6SE', 'R60S', 'R5MI', 'R5RE', 'L6SE', 'L60S', 'L5MI', 'L5RE']:
-                return Constraint.Skip
-
-            # Scaled FCAS trapezium for regulation services. No scaling for contingency services
-            if j in ['R5RE', 'L5RE']:
-                # trapezium = self.get_scaled_fcas_trapezium(i, j)
-                trapezium = self.get_fcas_trapezium_offer(i, j)
-            else:
-                trapezium = self.get_fcas_trapezium_offer(i, j)
-
-            # Initial MW
-            initial_mw = self.data.get_trader_initial_condition_attribute(i, 'InitialMW')
-
-            # LHS trapezium slope
-            try:
-                slope_1 = trapezium['max_available'] / (trapezium['low_breakpoint'] - trapezium['enablement_min'])
-                constant_1 = - slope_1 * trapezium['enablement_min']
-                value_1 = (slope_1 * initial_mw) + constant_1
-            except ZeroDivisionError:
-                value_1 = trapezium['max_available']
-
-            # RHS trapezium slope
-            try:
-                slope_2 = - trapezium['max_available'] / (trapezium['enablement_max'] - trapezium['high_breakpoint'])
-                constant_2 = - slope_2 * trapezium['enablement_max']
-                value_2 = (slope_2 * initial_mw) + constant_2
-
-                if i == 'BW01':
-                    print(i, j, 'slope_2', slope_2)
-                    print(i, j, 'constant_2', constant_2)
-
-            except ZeroDivisionError:
-                value_2 = trapezium['max_available']
-
-            # Check if outside enablement min / max envelope
-            if (initial_mw < trapezium['enablement_min']) or (initial_mw > trapezium['enablement_max']):
-                max_value = 0
-            else:
-                max_value = min(value_1, value_2, trapezium['max_available'])
-
-            if i == 'BW01':
-                print(i, j, 'value 1', value_1)
-                print(i, j, 'value 2', value_2)
-                print(i, j, max_value)
-
-            return m.V_TRADER_TOTAL_OFFER[i, j] <= max_value + m.V_CV_TRADER_FCAS_TRAPEZIUM[i, j]
-
-        # Ancillary service profile violation
-        m.C_FCAS_TRAPEZIUM = Constraint(m.S_TRADER_OFFERS, rule=as_profile_rule)
-
-        def joint_ramping_up_rule(m, i, j):
-            """Joint energy and FCAS ramping constraints"""
-
-            # Only construct constraints for up regulation offers
-            if j != 'R5RE':
-                return Constraint.Skip
-
-            # Check FCAS preconditions
-            fcas_available = self.check_fcas_preconditions(i, j)
-
-            # Check unit has energy offer
-            has_energy_offer = self.check_trader_has_energy_offer(i, m)
-
-            # If FCAS not available or no energy offer provided then constraint is not constructed
-            if not fcas_available or not has_energy_offer:
-                return Constraint.Skip
-
-            # Check if a generator is a generator, load, or normally on load
-            trader_type = self.data.get_trader_attribute(i, 'TraderType')
-
-            # Get AGC status of generator
-            agc_status = self.data.get_trader_initial_condition_attribute(i, 'AGCStatus')
-
-            # No constraint if AGC not enabled
-            if agc_status != 1:
-                return Constraint.Skip
-
-            # Map between trader type and energy offer key
-            offer_map = {'GENERATOR': 'ENOF', 'LOAD': 'LDOF', 'NORMALLY_ON_LOAD': 'LDOF'}
-
-            # Get the AGC ramp rate
-            ramp_rate = self.data.get_trader_initial_condition_attribute(i, 'SCADARampUpRate') / 12
-
-            # No constraint if ramp rate <= 0
-            if ramp_rate <= 0:
-                return Constraint.Skip
-
-            # Get initial MW
-            initial_mw = self.data.get_trader_initial_condition_attribute(i, 'InitialMW')
-
-            return (m.V_TRADER_TOTAL_OFFER[i, offer_map[trader_type]] + m.V_TRADER_TOTAL_OFFER[i, j]
-                    <= initial_mw + ramp_rate + m.V_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, offer_map[trader_type]])
-
-        # Joint ramp up constraint
-        m.C_JOINT_RAMPING_UP = Constraint(m.S_TRADER_OFFERS, rule=joint_ramping_up_rule)
-
-        def joint_ramping_down_rule(m, i, j):
-            """Joint energy and FCAS ramping constraints"""
-
-            # Only construct constraints for up regulation offers
-            if j != 'L5RE':
-                return Constraint.Skip
-
-            # Check FCAS preconditions
-            fcas_available = self.check_fcas_preconditions(i, j)
-
-            # Check unit has energy offer
-            has_energy_offer = self.check_trader_has_energy_offer(i, m)
-
-            # If FCAS not available or no energy offer provided then constraint is constructed
-            if not fcas_available or not has_energy_offer:
-                return Constraint.Skip
-
-            # Check if a generator is a generator, load, or normally on load
-            trader_type = self.data.get_trader_attribute(i, 'TraderType')
-
-            # Get AGC status of generator
-            agc_status = self.data.get_trader_initial_condition_attribute(i, 'AGCStatus')
-
-            # No constraint if AGC not enabled
-            if agc_status != 1:
-                return Constraint.Skip
-
-            # Map between trader type and energy offer key
-            offer_map = {'GENERATOR': 'ENOF', 'LOAD': 'LDOF', 'NORMALLY_ON_LOAD': 'LDOF'}
-
-            # Get the AGC ramp rate
-            ramp_rate = self.data.get_trader_initial_condition_attribute(i, 'SCADARampDnRate') / 12
-
-            # No constraint if ramp rate <= 0
-            if ramp_rate <= 0:
-                return Constraint.Skip
-
-            # Get initial MW
-            initial_mw = self.data.get_trader_initial_condition_attribute(i, 'InitialMW')
-
-            return (m.V_TRADER_TOTAL_OFFER[i, offer_map[trader_type]] - m.V_TRADER_TOTAL_OFFER[i, j]
-                    + m.V_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, offer_map[trader_type]] >= initial_mw - ramp_rate)
-
-        # Joint ramp down constraint
-        m.C_JOINT_RAMPING_DOWN = Constraint(m.S_TRADER_OFFERS, rule=joint_ramping_down_rule)
-
-        def joint_capacity_up_rule(m, i, j):
-            """Joint energy and FCAS contingency constraints"""
-
-            # Only construct constraints for contingency service offers
-            if j not in ['R6SE', 'R60S', 'R5MI']:
-                return Constraint.Skip
-
-            # Check if energy offer exists for the trader
-            has_energy_offer = self.check_trader_has_energy_offer(i, m)
-
-            # FCAS availability preconditions
-            fcas_available = self.check_fcas_preconditions(i, j)
-
-            # No constraint constructed if no energy offer and FCAS availability preconditions not met
-            if not has_energy_offer or not fcas_available:
-                return Constraint.Skip
-
-            # AGC status
-            agc_status = self.data.get_trader_initial_condition_attribute(i, 'AGCStatus')
-
-            # Get FCAS trapezium (note: no scaling because contingency offer)
-            trapezium = self.get_fcas_trapezium_offer(i, j)
-
-            # Slope coefficient
-            coefficient = (trapezium['enablement_max'] - trapezium['high_breakpoint']) / trapezium['max_available']
-
-            # Map between trader type and energy offer key
-            offer_map = {'GENERATOR': 'ENOF', 'LOAD': 'LDOF', 'NORMALLY_ON_LOAD': 'LDOF'}
-
-            # Get trader type (generator, load, or normally on load)
-            trader_type = self.data.get_trader_attribute(i, 'TraderType')
-
-            # TODO: Check if this approach is suitable
-            # Note: Some traders have an energy offer and AGCStatus tag but do not offer regulating FCAS, but do offer
-            # other contingency FCAS. If regulation FCAS not offered then omitting this from constraint for now.
-            if (i, 'R5RE') in m.S_TRADER_OFFERS:
-                return (m.V_TRADER_TOTAL_OFFER[i, offer_map[trader_type]] + (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
-                        + (agc_status * m.V_TRADER_TOTAL_OFFER[i, 'R5RE'])
-                        <= trapezium['enablement_max'] + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_UP[i, j])
-            else:
-                return (m.V_TRADER_TOTAL_OFFER[i, offer_map[trader_type]] + (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
-                        <= trapezium['enablement_max'] + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_UP[i, j])
-                # return Constraint.Skip
-
-        # FCAS join capacity constraint up
-        # m.C_JOINT_CAPACITY_UP = Constraint(m.S_TRADER_OFFERS, rule=joint_capacity_up_rule)
-
-        def joint_capacity_down_rule(m, i, j):
-            """Joint energy and FCAS contingency constraints"""
-
-            # Only construct constraints for contingency service offers
-            if j not in ['L6SE', 'L60S', 'L5MI']:
-                return Constraint.Skip
-
-            # Check if energy offer exists for the trader
-            has_energy_offer = self.check_trader_has_energy_offer(i, m)
-
-            # FCAS availability preconditions
-            fcas_available = self.check_fcas_preconditions(i, j)
-
-            # No constraint constructed if no energy offer and FCAS availability preconditions not met
-            if not has_energy_offer or not fcas_available:
-                return Constraint.Skip
-
-            # AGC status
-            agc_status = self.data.get_trader_initial_condition_attribute(i, 'AGCStatus')
-
-            # Get FCAS trapezium (note: no scaling because contingency offer)
-            trapezium = self.get_fcas_trapezium_offer(i, j)
-
-            # Slope coefficient
-            coefficient = (trapezium['low_breakpoint'] - trapezium['enablement_min']) / trapezium['max_available']
-
-            # Map between trader type and energy offer key
-            offer_map = {'GENERATOR': 'ENOF', 'LOAD': 'LDOF', 'NORMALLY_ON_LOAD': 'LDOF'}
-
-            # Get trader type (generator, load, or normally on load)
-            trader_type = self.data.get_trader_attribute(i, 'TraderType')
-
-            # TODO: Check if this approach is suitable
-            # Note: Some traders have an energy offer and AGCStatus tag but do not offer regulating FCAS, but do offer
-            # other contingency FCAS. If regulation FCAS not offered then omitting this from constraint for now.
-            if (i, 'L5RE') in m.S_TRADER_OFFERS:
-                return (m.V_TRADER_TOTAL_OFFER[i, offer_map[trader_type]] - (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
-                        - (agc_status * m.V_TRADER_TOTAL_OFFER[i, 'L5RE'])
-                        >= trapezium['enablement_min'] + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_DOWN[i, j])
-            else:
-                return (m.V_TRADER_TOTAL_OFFER[i, offer_map[trader_type]] - (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
-                        >= trapezium['enablement_min'] + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_DOWN[i, j])
-
-        # FCAS join capacity constraint down
-        # m.C_JOINT_CAPACITY_DOWN = Constraint(m.S_TRADER_OFFERS, rule=joint_capacity_down_rule)
-
-        def joint_regulating_capacity_up_rule(m, i, j):
-            """Joint energy and regulating FCAS constraints"""
-
-            # Only construct constraints for contingency service offers
-            # TODO: Should raise and lower contingency FCAS be considered here?
-            if j not in ['R6SE', 'R60S', 'R5MI', 'L6SE', 'L60S', 'L5MI']:
-                return Constraint.Skip
-
-            # Check if energy offer exists for the trader
-            has_energy_offer = self.check_trader_has_energy_offer(i, m)
-
-            # FCAS availability preconditions
-            fcas_available = self.check_fcas_preconditions(i, j)
-
-            # No constraint constructed if no energy offer and FCAS availability preconditions not met
-            if not has_energy_offer or not fcas_available:
-                return Constraint.Skip
-
-            # AGC status
-            agc_status = self.data.get_trader_initial_condition_attribute(i, 'AGCStatus')
-
-            # No constraint created if trader not available for regulated services (e.g. if AGC status = 0)
-            if agc_status != 1:
-                return Constraint.Skip
-
-            # Get FCAS trapezium
-            trapezium = self.get_fcas_trapezium_offer(i, j)
-
-            # Compute slope coefficient
-            coefficient = (trapezium['enablement_max'] - trapezium['high_breakpoint']) / trapezium['max_available']
-
-            # Map between trader type and energy offer key
-            offer_map = {'GENERATOR': 'ENOF', 'LOAD': 'LDOF', 'NORMALLY_ON_LOAD': 'LDOF'}
-
-            # Get trader type (generator, load, or normally on load)
-            trader_type = self.data.get_trader_attribute(i, 'TraderType')
-
-            return (m.V_TRADER_TOTAL_OFFER[i, offer_map[trader_type]] + (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
-                    <= trapezium['enablement_max'] + m.V_CV_JOINT_REGULATING_CAPACITY_UP[i, j])
-
-        # FCAS joint regulating capacity up
-        # m.C_JOINT_REGULATING_CAPACITY_UP = Constraint(m.S_TRADER_OFFERS, rule=joint_regulating_capacity_up_rule)
-
-        def joint_regulating_capacity_down_rule(m, i, j):
-            """Joint energy and regulating FCAS constraints"""
-
-            # Only construct constraints for contingency service offers
-            # TODO: Should raise and lower contingency FCAS be considered here?
-            if j not in ['R6SE', 'R60S', 'R5MI', 'L6SE', 'L60S', 'L5MI']:
-                return Constraint.Skip
-
-            # Check if energy offer exists for the trader
-            has_energy_offer = self.check_trader_has_energy_offer(i, m)
-
-            # FCAS availability preconditions
-            fcas_available = self.check_fcas_preconditions(i, j)
-
-            # No constraint constructed if no energy offer and FCAS availability preconditions not met
-            if not has_energy_offer or not fcas_available:
-                return Constraint.Skip
-
-            # AGC status
-            agc_status = self.data.get_trader_initial_condition_attribute(i, 'AGCStatus')
-
-            # No constraint created if trader not available for regulated services (e.g. if AGC status = 0)
-            if agc_status != 1:
-                return Constraint.Skip
-
-            # Get FCAS trapezium
-            trapezium = self.get_fcas_trapezium_offer(i, j)
-
-            # Compute slope coefficient
-            coefficient = (trapezium['low_breakpoint'] - trapezium['enablement_min']) / trapezium['max_available']
-
-            # Map between trader type and energy offer key
-            offer_map = {'GENERATOR': 'ENOF', 'LOAD': 'LDOF', 'NORMALLY_ON_LOAD': 'LDOF'}
-
-            # Get trader type (generator, load, or normally on load)
-            trader_type = self.data.get_trader_attribute(i, 'TraderType')
-
-            return (m.V_TRADER_TOTAL_OFFER[i, offer_map[trader_type]] - (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
-                    + m.V_CV_JOINT_REGULATING_CAPACITY_DOWN[i, j] >= trapezium['enablement_min'])
-
-        # FCAS joint regulating capacity down
-        # m.C_JOINT_REGULATING_CAPACITY_DOWN = Constraint(m.S_TRADER_OFFERS, rule=joint_regulating_capacity_down_rule)
-
-        return m
-
     @staticmethod
     def get_slope(x1, x2, y1, y2):
         """Compute slope. Return None if slope is undefined"""
@@ -1712,9 +1257,6 @@ class NEMDEModel:
                        for i in range(1, 11)])
                   > 0)
 
-        # Energy availability >= enablement min for FCAS service
-        # print(trader_id, trade_type)
-
         # TODO: Need to handle traders without energy offers
         # Try and get max available for energy offers
         try:
@@ -1744,18 +1286,28 @@ class NEMDEModel:
                   <= self.data.get_trader_initial_condition_attribute(trader_id, 'InitialMW')
                   <= trapezium['enablement_max'])
 
-        # AGC is activate
-        # TODO: AGC criterion doesn't seem to apply to storage units
-        # if trader_id == ['DALNTH01']:
-        #     cond_6 = True
-        # else:
-        #     cond_6 = self.data.get_trader_initial_condition_attribute(trader_id, 'AGCStatus') == 1
-        cond_6 = True
+        # AGC is activate for regulating FCAS
+        if trade_type in ['R5RE', 'L5RE']:
+            agc_status = self.data.get_trader_initial_condition_attribute(trader_id, 'AGCStatus')
+            if agc_status == 1:
+                cond_6 = True
+            else:
+                cond_6 = False
+        else:
+            # Set cond_6 to True if non-regulating FCAS offer
+            cond_6 = True
 
         return all([cond_1, cond_2, cond_3, cond_4, cond_5, cond_6])
 
-    def define_fcas_constraints2(self, m):
+    def define_fcas_constraints(self, m):
         """FCAS constraints"""
+
+        # Get FCAS availability for each unit and offer type (run once and store result in dictionary)
+        fcas_availability = {(i, j): self.get_fcas_availability(i, j) for i, j in m.S_TRADER_OFFERS
+                             if j not in ['ENOF', 'LDOF']}
+
+        # Start timer
+        t0 = time.time()
 
         def fcas_available_rule(m, i, j):
             """Set FCAS to zero if conditions not met"""
@@ -1764,14 +1316,16 @@ class NEMDEModel:
                 return Constraint.Skip
 
             # Check energy output in previous interval within enablement minutes (else trapped outside trapezium)
-            if not self.get_fcas_availability(i, j):
+            # if not self.get_fcas_availability(i, j):
+            if not fcas_availability[(i, j)]:
                 # Set FCAS to 0 if unavailable
                 return m.V_TRADER_TOTAL_OFFER[i, j] == 0
             else:
                 return Constraint.Skip
 
         # FCAS availability
-        m.FCAS_AVAILABILITY_RULE = Constraint(m.S_TRADER_OFFERS, rule=fcas_available_rule)
+        m.C_FCAS_AVAILABILITY_RULE = Constraint(m.S_TRADER_OFFERS, rule=fcas_available_rule)
+        print('Finished constructing C_FCAS_AVAILABILITY_RULE:', time.time() - t0)
 
         def as_profile_1_rule(m, i, j):
             """Constraint LHS component of FCAS trapeziums (line between enablement min and low breakpoint)"""
@@ -1781,7 +1335,8 @@ class NEMDEModel:
                 return Constraint.Skip
 
             # Check FCAS is available
-            if not self.get_fcas_availability(i, j):
+            # if not self.get_fcas_availability(i, j):
+            if not fcas_availability[(i, j)]:
                 return Constraint.Skip
 
             # Get FCAS trapezium
@@ -1813,7 +1368,8 @@ class NEMDEModel:
                         + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j])
 
         # AS profile constraint - between enablement min and low breakpoint
-        m.AS_PROFILE_1 = Constraint(m.S_TRADER_OFFERS, rule=as_profile_1_rule)
+        m.C_AS_PROFILE_1 = Constraint(m.S_TRADER_OFFERS, rule=as_profile_1_rule)
+        print('Finished constructing C_AS_PROFILE_1:', time.time() - t0)
 
         def as_profile_2_rule(m, i, j):
             """Top of FCAS trapezium"""
@@ -1823,7 +1379,8 @@ class NEMDEModel:
                 return Constraint.Skip
 
             # Check FCAS is available
-            if not self.get_fcas_availability(i, j):
+            # if not self.get_fcas_availability(i, j):
+            if not fcas_availability[(i, j)]:
                 return Constraint.Skip
 
             # Get FCAS trapezium
@@ -1836,7 +1393,8 @@ class NEMDEModel:
             return m.V_TRADER_TOTAL_OFFER[i, j] <= trapezium['max_available'] + m.V_CV_TRADER_FCAS_AS_PROFILE_2[i, j]
 
         # AS profile constraint - between enablement min and low breakpoint
-        m.AS_PROFILE_2 = Constraint(m.S_TRADER_OFFERS, rule=as_profile_2_rule)
+        m.C_AS_PROFILE_2 = Constraint(m.S_TRADER_OFFERS, rule=as_profile_2_rule)
+        print('Finished constructing C_AS_PROFILE_2:', time.time() - t0)
 
         def as_profile_3_rule(m, i, j):
             """Constraint LHS component of FCAS trapeziums (line between enablement min and low breakpoint)"""
@@ -1846,7 +1404,8 @@ class NEMDEModel:
                 return Constraint.Skip
 
             # Check FCAS is available
-            if not self.get_fcas_availability(i, j):
+            # if not self.get_fcas_availability(i, j):
+            if not fcas_availability[(i, j)]:
                 return Constraint.Skip
 
             # Get FCAS trapezium
@@ -1876,7 +1435,8 @@ class NEMDEModel:
                         + m.V_CV_TRADER_FCAS_AS_PROFILE_3[i, j])
 
         # AS profile constraint - between enablement min and low breakpoint
-        m.AS_PROFILE_3 = Constraint(m.S_TRADER_OFFERS, rule=as_profile_3_rule)
+        m.C_AS_PROFILE_3 = Constraint(m.S_TRADER_OFFERS, rule=as_profile_3_rule)
+        print('Finished constructing C_AS_PROFILE_3:', time.time() - t0)
 
         def joint_ramp_up_rule(m, i, j):
             """Joint ramping constraint for regulating FCAS"""
@@ -1886,7 +1446,8 @@ class NEMDEModel:
                 return Constraint.Skip
 
             # Check FCAS is available
-            if not self.get_fcas_availability(i, j):
+            # if not self.get_fcas_availability(i, j):
+            if not fcas_availability[(i, j)]:
                 return Constraint.Skip
 
             # SCADA ramp-up - divide by 12 to get max ramp over 5 minutes (assuming SCADARampUpRate is MW/h)
@@ -1909,7 +1470,8 @@ class NEMDEModel:
                         + m.V_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, j])
 
         # Joint ramp up constraint
-        m.JOINT_RAMP_UP = Constraint(m.S_TRADER_OFFERS, rule=joint_ramp_up_rule)
+        m.C_JOINT_RAMP_UP = Constraint(m.S_TRADER_OFFERS, rule=joint_ramp_up_rule)
+        print('Finished constructing C_JOINT_RAMP_UP:', time.time() - t0)
 
         def joint_ramp_down_rule(m, i, j):
             """Joint ramping constraint for regulating FCAS"""
@@ -1919,7 +1481,8 @@ class NEMDEModel:
                 return Constraint.Skip
 
             # Check FCAS is available
-            if not self.get_fcas_availability(i, j):
+            # if not self.get_fcas_availability(i, j):
+            if not fcas_availability[(i, j)]:
                 return Constraint.Skip
 
             # SCADA ramp-up - divide by 12 to get max ramp over 5 minutes (assuming SCADARampDnRate is MW/h)
@@ -1942,7 +1505,8 @@ class NEMDEModel:
                         + m.V_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, j] >= initial_mw - scada_ramp)
 
         # Joint ramp up constraint
-        m.JOINT_RAMP_DOWN = Constraint(m.S_TRADER_OFFERS, rule=joint_ramp_down_rule)
+        m.C_JOINT_RAMP_DOWN = Constraint(m.S_TRADER_OFFERS, rule=joint_ramp_down_rule)
+        print('Finished constructing C_JOINT_RAMP_DOWN:', time.time() - t0)
 
         def joint_capacity_up_rule(m, i, j):
             """Joint capacity constraint for raise regulation services and contingency FCAS"""
@@ -1953,7 +1517,8 @@ class NEMDEModel:
                 return Constraint.Skip
 
             # Check FCAS is available
-            if not self.get_fcas_availability(i, j):
+            # if not self.get_fcas_availability(i, j):
+            if not fcas_availability[(i, j)]:
                 return Constraint.Skip
 
             # Get FCAS trapezium
@@ -1986,7 +1551,8 @@ class NEMDEModel:
                 return Constraint.Skip
 
         # Joint capacity constraint up
-        m.JOINT_CAPACITY_UP = Constraint(m.S_TRADER_OFFERS, rule=joint_capacity_up_rule)
+        m.C_JOINT_CAPACITY_UP = Constraint(m.S_TRADER_OFFERS, rule=joint_capacity_up_rule)
+        print('Finished constructing C_JOINT_CAPACITY_UP:', time.time() - t0)
 
         def joint_capacity_down_rule(m, i, j):
             """Joint capacity constraint for lower regulation services and contingency FCAS"""
@@ -1997,7 +1563,8 @@ class NEMDEModel:
                 return Constraint.Skip
 
             # Check FCAS is available
-            if not self.get_fcas_availability(i, j):
+            # if not self.get_fcas_availability(i, j):
+            if not fcas_availability[(i, j)]:
                 return Constraint.Skip
 
             # Get FCAS trapezium
@@ -2035,7 +1602,8 @@ class NEMDEModel:
                 return Constraint.Skip
 
         # Joint capacity constraint down
-        m.JOINT_CAPACITY_DOWN = Constraint(m.S_TRADER_OFFERS, rule=joint_capacity_down_rule)
+        m.C_JOINT_CAPACITY_DOWN = Constraint(m.S_TRADER_OFFERS, rule=joint_capacity_down_rule)
+        print('Finished constructing C_JOINT_CAPACITY_DOWN:', time.time() - t0)
 
         def energy_regulating_up_rule(m, i, j):
             """Joint energy and regulating FCAS constraints"""
@@ -2045,7 +1613,8 @@ class NEMDEModel:
                 return Constraint.Skip
 
             # Check FCAS is available
-            if not self.get_fcas_availability(i, j):
+            # if not self.get_fcas_availability(i, j):
+            if not fcas_availability[(i, j)]:
                 return Constraint.Skip
 
             # Get FCAS trapezium
@@ -2069,7 +1638,8 @@ class NEMDEModel:
                 return Constraint.Skip
 
         # Joint energy and regulating FCAS constraint
-        m.JOINT_REGULATING_UP = Constraint(m.S_TRADER_OFFERS, rule=energy_regulating_up_rule)
+        m.C_JOINT_REGULATING_UP = Constraint(m.S_TRADER_OFFERS, rule=energy_regulating_up_rule)
+        print('Finished constructing C_JOINT_REGULATING_UP:', time.time() - t0)
 
         def energy_regulating_down_rule(m, i, j):
             """Joint energy and regulating FCAS constraints"""
@@ -2079,7 +1649,8 @@ class NEMDEModel:
                 return Constraint.Skip
 
             # Check FCAS is available
-            if not self.get_fcas_availability(i, j):
+            # if not self.get_fcas_availability(i, j):
+            if not fcas_availability[(i, j)]:
                 return Constraint.Skip
 
             # Get FCAS trapezium
@@ -2103,11 +1674,13 @@ class NEMDEModel:
                 return Constraint.Skip
 
         # Joint energy and regulating FCAS constraint
-        m.JOINT_REGULATING_DOWN = Constraint(m.S_TRADER_OFFERS, rule=energy_regulating_down_rule)
+        m.C_JOINT_REGULATING_DOWN = Constraint(m.S_TRADER_OFFERS, rule=energy_regulating_down_rule)
+        print('Finished constructing C_JOINT_REGULATING_DOWN:', time.time() - t0)
 
         return m
 
-    def define_loss_model_constraints(self, m):
+    @staticmethod
+    def define_loss_model_constraints(m):
         """Interconnector loss model constraints"""
 
         def approximated_loss_rule(m, i):
@@ -2115,12 +1688,10 @@ class NEMDEModel:
 
             return (m.V_LOSS[i] == sum(m.P_LOSS_MODEL_BREAKPOINTS_Y[i, j] * m.V_LOSS_LAMBDA[i, j]
                                        for j in m.S_INTERCONNECTOR_BREAKPOINTS[i])
-                    # + self.data.get_interconnector_period_attribute(i, 'LossDemandConstant')
                     )
 
         # Approximate loss over interconnector
-        m.APPROXIMATED_LOSS = Constraint(m.S_INTERCONNECTORS, rule=approximated_loss_rule)
-        # m.V_LOSS.fix(0)
+        m.C_APPROXIMATED_LOSS = Constraint(m.S_INTERCONNECTORS, rule=approximated_loss_rule)
 
         def sos2_condition_1_rule(m, i):
             """SOS2 condition 1"""
@@ -2129,7 +1700,7 @@ class NEMDEModel:
                                                     for j in m.S_INTERCONNECTOR_BREAKPOINTS[i]))
 
         # SOS2 condition 1
-        m.SOS2_CONDITION_1 = Constraint(m.S_INTERCONNECTORS, rule=sos2_condition_1_rule)
+        m.C_SOS2_CONDITION_1 = Constraint(m.S_INTERCONNECTORS, rule=sos2_condition_1_rule)
 
         def sos2_condition_2_rule(m, i):
             """SOS2 condition 2"""
@@ -2137,7 +1708,7 @@ class NEMDEModel:
             return sum(m.V_LOSS_LAMBDA[i, j] for j in m.S_INTERCONNECTOR_BREAKPOINTS[i]) == 1
 
         # SOS2 condition 2
-        m.SOS2_CONDITION_2 = Constraint(m.S_INTERCONNECTORS, rule=sos2_condition_2_rule)
+        m.C_SOS2_CONDITION_2 = Constraint(m.S_INTERCONNECTORS, rule=sos2_condition_2_rule)
 
         def sos2_condition_3_rule(m, i):
             """SOS2 condition 3"""
@@ -2145,7 +1716,7 @@ class NEMDEModel:
             return sum(m.V_LOSS_Y[i, j] for j in m.S_INTERCONNECTOR_INTERVALS[i]) == 1
 
         # SOS2 condition 3
-        m.SOS2_CONDITION_3 = Constraint(m.S_INTERCONNECTORS, rule=sos2_condition_3_rule)
+        m.C_SOS2_CONDITION_3 = Constraint(m.S_INTERCONNECTORS, rule=sos2_condition_3_rule)
 
         def sos2_condition_4_rule(m, i, j):
             """SOS2 condition 4"""
@@ -2159,7 +1730,7 @@ class NEMDEModel:
                 return Constraint.Skip
 
         # SOS2 condition 4
-        m.SOS2_CONDITION_4 = Constraint(m.S_BREAKPOINTS, rule=sos2_condition_4_rule)
+        m.C_SOS2_CONDITION_4 = Constraint(m.S_BREAKPOINTS, rule=sos2_condition_4_rule)
 
         def sos2_condition_5_rule(m, i, j):
             """SOS2 condition 5"""
@@ -2173,7 +1744,7 @@ class NEMDEModel:
                 return Constraint.Skip
 
         # SOS2 condition 5
-        m.SOS2_CONDITION_5 = Constraint(m.S_BREAKPOINTS, rule=sos2_condition_5_rule)
+        m.C_SOS2_CONDITION_5 = Constraint(m.S_BREAKPOINTS, rule=sos2_condition_5_rule)
 
         def sos2_condition_6_rule(m, i, j):
             """SOS2 condition 6"""
@@ -2189,7 +1760,7 @@ class NEMDEModel:
                 return Constraint.Skip
 
         # SOS2 condition 6
-        m.SOS2_CONDITION_6 = Constraint(m.S_BREAKPOINTS, rule=sos2_condition_6_rule)
+        m.C_SOS2_CONDITION_6 = Constraint(m.S_BREAKPOINTS, rule=sos2_condition_6_rule)
 
         return m
 
@@ -2220,8 +1791,7 @@ class NEMDEModel:
         print('Defined interconnector constraints:', time.time() - t0)
 
         # Construct FCAS constraints
-        # m = self.define_fcas_constraints(m)
-        m = self.define_fcas_constraints2(m)
+        m = self.define_fcas_constraints(m)
         print('Defined FCAS constraints:', time.time() - t0)
 
         # SOS2 interconnector loss model constraints
@@ -2238,7 +1808,7 @@ class NEMDEModel:
         m.OBJECTIVE = Objective(expr=sum(m.E_TRADER_COST_FUNCTION[t] for t in m.S_TRADER_OFFERS)
                                      + sum(m.E_MNSP_COST_FUNCTION[t] for t in m.S_MNSP_OFFERS)
                                      + m.E_CV_TOTAL_PENALTY
-                                     # + m.E_LOSS_COST
+                                # + m.E_LOSS_COST
                                 ,
                                 sense=minimize)
 
@@ -2279,7 +1849,7 @@ class NEMDEModel:
         print('Defined objective:', time.time() - t0)
 
         # Fix interconnector solution
-        # m = self.fix_interconnector_solution(m)
+        m = self.fix_interconnector_solution(m)
         # m = self.fix_fcas_solution(m)
         # m = self.fix_energy_solution(m)
 
@@ -2588,7 +2158,7 @@ if __name__ == '__main__':
     nemde.save_generic_constraints(model)
 
     # Combine into single DataFrame
-    duid = 'MEADOWBK'
+    duid = 'JBUTTERS'
     analysis.check_trader_solution(model, duid)
     analysis.print_fcas_constraints(model, duid)
 
@@ -2622,4 +2192,8 @@ if __name__ == '__main__':
     ax.plot(x, y)
     plt.show()
 
-    interconnector_solution = {i: nemde.data.get_interconnector_solution_attribute(i, 'Losses') for i in model.S_INTERCONNECTORS}
+    interconnector_loss_solution = {i: nemde.data.get_interconnector_solution_attribute(i, 'Losses')
+                                    for i in model.S_INTERCONNECTORS}
+
+    interconnector_flow_solution = {i: nemde.data.get_interconnector_solution_attribute(i, 'Flow')
+                                    for i in model.S_INTERCONNECTORS}
