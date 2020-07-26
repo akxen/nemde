@@ -2130,9 +2130,9 @@ if __name__ == '__main__':
     # Construct model for given trading interval
     model = nemde.construct_model(2019, 10, 10, 1)
 
-    # # Solve model
-    # model, status = nemde.solve_model(model)
-    #
+    # Solve model
+    model, status = nemde.solve_model(model)
+
     # # Check solution
     # enof = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'ENOF', 'EnergyTarget')
     # ldof = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'LDOF', 'EnergyTarget')
