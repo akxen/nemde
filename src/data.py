@@ -42,8 +42,6 @@ class MMSDMDataHandler:
 
         z_1_name = f'MMSDM_{year}_{month:02}.zip'
 
-        print(os.listdir(self.mmsdm_dir))
-
         with zipfile.ZipFile(os.path.join(self.mmsdm_dir, z_1_name)) as z_1:
             z_2_name = f'MMSDM_{year}_{month:02}/MMSDM_Historical_Data_SQLLoader/DATA/PUBLIC_DVD_{name}_{year}{month:02}010000.zip'
             with z_1.open(z_2_name) as z_2:
@@ -91,8 +89,6 @@ class NEMDEDataHandler:
 
         z_1_name = f'NEMDE_{year}_{month:02}.zip'
 
-        print(os.listdir(self.nemde_dir))
-
         with zipfile.ZipFile(os.path.join(self.nemde_dir, z_1_name)) as z_1:
             if f'NEMDE_{year}_{month:02}/NEMDE_Market_Data/' in z_1.namelist():
                 z_2_name = f'NEMDE_{year}_{month:02}/NEMDE_Market_Data/NEMDE_Files/NemSpdOutputs_{year}{month:02}{day:02}_loaded.zip'
@@ -129,6 +125,17 @@ class NEMDEDataHandler:
         info = xmltodict.parse(data)
 
         return info
+
+    def get_nemde_json(self, year, month, day, interval):
+        """Get NEMDE input / output file in dictionary format"""
+
+        # Load NEMDE inputs / outputs
+        data = self.load_file(year, month, day, interval)
+
+        # Convert to dictionary
+        info = xmltodict.parse(data)
+
+        return json.dumps(info)
 
     def load_interval(self, year, month, day, interval):
         """Load xml data for a given interval"""
@@ -1408,5 +1415,3 @@ if __name__ == '__main__':
         ax.plot([solution_flow, solution_flow], [loss_min, loss_max], linewidth=1.2, alpha=0.7, linestyle=':')
 
         plt.show()
-
-

@@ -2,7 +2,6 @@
 
 import os
 import time
-import json
 
 import pandas as pd
 from pyomo.environ import *
@@ -13,13 +12,19 @@ import matplotlib.pyplot as plt
 from data import NEMDEDataHandler
 from data import MMSDMDataHandler
 from fcas import FCASHandler
-from parser import JSONParser
 
 
 class NEMDEModel:
-    def __init__(self, parser):
+    def __init__(self, data_dir, output_dir):
+        # Directories
+        self.output_dir = output_dir
+
         # Object used to extract NEMDE input information
-        self.parser = parser
+        self.data = NEMDEDataHandler(data_dir)
+
+        # Object used to extract MMSDM input information
+        self.mmsdm_data = MMSDMDataHandler(data_dir)
+        self.fcas = FCASHandler(data_dir)
 
         # Solver options
         self.tee = True
@@ -27,82 +32,82 @@ class NEMDEModel:
         self.solver_options = {}  # 'MIPGap': 0.0005,
         self.opt = SolverFactory('cplex', solver_io='lp')
 
-    def define_sets(self, m, data):
+    def define_sets(self, m):
         """Define model sets"""
 
         # Market participants (generators and loads)
-        m.S_TRADERS = Set(initialize=self.parser.get_trader_index(data))
+        m.S_TRADERS = Set(initialize=self.data.get_trader_index())
 
         # Non-scheduled generators
-        m.S_NON_SCHEDULED_GENERATORS = Set(initialize=self.parser.get_non_scheduled_generators(data))
+        m.S_NON_SCHEDULED_GENERATORS = Set(initialize=self.data.get_non_scheduled_generators())
 
         # Market Network Service Providers (interconnectors that bid into the market)
-        m.S_MNSPS = Set(initialize=self.parser.get_mnsp_index(data))
+        m.S_MNSPS = Set(initialize=self.data.get_mnsp_index())
 
         # All interconnectors (interconnector_id)
-        m.S_INTERCONNECTORS = Set(initialize=self.parser.get_interconnector_index(data))
+        m.S_INTERCONNECTORS = Set(initialize=self.data.get_interconnector_index())
 
         # Trader offer types
-        m.S_TRADER_OFFERS = Set(initialize=self.parser.get_trader_offer_index(data))
+        m.S_TRADER_OFFERS = Set(initialize=self.data.get_trader_offer_index())
 
         # MNSP offer types
-        m.S_MNSP_OFFERS = Set(initialize=self.parser.get_mnsp_offer_index())
+        m.S_MNSP_OFFERS = Set(initialize=self.data.get_mnsp_offer_index())
 
-        # # Generic constraints
-        # m.S_GENERIC_CONSTRAINTS = Set(initialize=self.data.get_generic_constraint_index())
-        #
-        # # NEM regions
-        # m.S_REGIONS = Set(initialize=self.data.get_region_index())
-        #
-        # # Generic constraints trader variables
-        # m.S_GC_TRADER_VARS = Set(initialize=self.data.get_generic_constraint_trader_variable_index())
-        #
-        # # Generic constraint interconnector variables
-        # m.S_GC_INTERCONNECTOR_VARS = Set(initialize=self.data.get_generic_constraint_interconnector_variable_index())
-        #
-        # # Generic constraint region variables
-        # m.S_GC_REGION_VARS = Set(initialize=self.data.get_generic_constraint_region_variable_index())
-        #
-        # # Price / quantity band index
-        # m.S_BANDS = RangeSet(1, 10, 1)
-        #
-        # def loss_model_interconnector_breakpoints_rule(m, i):
-        #     """Interconnector loss model breakpoints"""
-        #
-        #     # Loss model segments
-        #     segments = self.data.get_interconnector_absolute_loss_segments(i)
-        #
-        #     return range(1, len(segments) + 1)
-        #
-        # # Loss model breakpoints
-        # m.S_INTERCONNECTOR_BREAKPOINTS = Set(m.S_INTERCONNECTORS, rule=loss_model_interconnector_breakpoints_rule)
-        #
-        # def loss_model_interconnector_intervals_rule(m, i):
-        #     """Interconnector loss model intervals"""
-        #
-        #     # Loss model segments
-        #     segments = self.data.get_interconnector_absolute_loss_segments(i)
-        #
-        #     return range(1, len(segments))
-        #
-        # # Loss model intervals
-        # m.S_INTERCONNECTOR_INTERVALS = Set(m.S_INTERCONNECTORS, rule=loss_model_interconnector_intervals_rule)
-        #
-        # def loss_model_breakpoints_rule(m):
-        #     """All interconnector breakpoints"""
-        #
-        #     return [(i, j) for i in self.data.get_interconnector_index() for j in m.S_INTERCONNECTOR_BREAKPOINTS[i]]
-        #
-        # # All interconnector
-        # m.S_BREAKPOINTS = Set(initialize=loss_model_breakpoints_rule(m))
-        #
-        # def loss_model_intervals_rule(m):
-        #     """All interconnector breakpoints"""
-        #
-        #     return [(i, j) for i in self.data.get_interconnector_index() for j in m.S_INTERCONNECTOR_INTERVALS[i]]
-        #
-        # # All interconnector
-        # m.S_INTERVALS = Set(initialize=loss_model_intervals_rule(m))
+        # Generic constraints
+        m.S_GENERIC_CONSTRAINTS = Set(initialize=self.data.get_generic_constraint_index())
+
+        # NEM regions
+        m.S_REGIONS = Set(initialize=self.data.get_region_index())
+
+        # Generic constraints trader variables
+        m.S_GC_TRADER_VARS = Set(initialize=self.data.get_generic_constraint_trader_variable_index())
+
+        # Generic constraint interconnector variables
+        m.S_GC_INTERCONNECTOR_VARS = Set(initialize=self.data.get_generic_constraint_interconnector_variable_index())
+
+        # Generic constraint region variables
+        m.S_GC_REGION_VARS = Set(initialize=self.data.get_generic_constraint_region_variable_index())
+
+        # Price / quantity band index
+        m.S_BANDS = RangeSet(1, 10, 1)
+
+        def loss_model_interconnector_breakpoints_rule(m, i):
+            """Interconnector loss model breakpoints"""
+
+            # Loss model segments
+            segments = self.data.get_interconnector_absolute_loss_segments(i)
+
+            return range(1, len(segments) + 1)
+
+        # Loss model breakpoints
+        m.S_INTERCONNECTOR_BREAKPOINTS = Set(m.S_INTERCONNECTORS, rule=loss_model_interconnector_breakpoints_rule)
+
+        def loss_model_interconnector_intervals_rule(m, i):
+            """Interconnector loss model intervals"""
+
+            # Loss model segments
+            segments = self.data.get_interconnector_absolute_loss_segments(i)
+
+            return range(1, len(segments))
+
+        # Loss model intervals
+        m.S_INTERCONNECTOR_INTERVALS = Set(m.S_INTERCONNECTORS, rule=loss_model_interconnector_intervals_rule)
+
+        def loss_model_breakpoints_rule(m):
+            """All interconnector breakpoints"""
+
+            return [(i, j) for i in self.data.get_interconnector_index() for j in m.S_INTERCONNECTOR_BREAKPOINTS[i]]
+
+        # All interconnector
+        m.S_BREAKPOINTS = Set(initialize=loss_model_breakpoints_rule(m))
+
+        def loss_model_intervals_rule(m):
+            """All interconnector breakpoints"""
+
+            return [(i, j) for i in self.data.get_interconnector_index() for j in m.S_INTERCONNECTOR_INTERVALS[i]]
+
+        # All interconnector
+        m.S_INTERVALS = Set(initialize=loss_model_intervals_rule(m))
 
         return m
 
@@ -1801,16 +1806,15 @@ class NEMDEModel:
 
         return m
 
-    def construct_model(self, case_data):
+    def construct_model(self, year, month, day, interval):
         """Construct NEMDE approximation"""
 
         # Update data for specified interval
         t0 = time.time()
         print('Starting model construction:', time.time() - t0)
-
-        # Convert case data to dict
-        data = json.loads(case_data)
-
+        self.data.load_interval(year, month, day, interval)
+        self.fcas.data.load_interval(year, month, day, interval)
+        self.mmsdm_data.load_interval(year, month)
         print('Loaded data:', time.time() - t0)
 
         # Initialise concrete model instance
@@ -1818,32 +1822,30 @@ class NEMDEModel:
         print('Initialised model:', time.time() - t0)
 
         # Define model components
-        m = self.define_sets(m, data)
+        m = self.define_sets(m)
         print('Defined sets:', time.time() - t0)
 
-        return m
+        m = self.define_parameters(m)
+        print('Defined parameters:', time.time() - t0)
 
-        # m = self.define_parameters(m)
-        # print('Defined parameters:', time.time() - t0)
-        #
-        # m = self.define_variables(m)
-        # print('Defined variables:', time.time() - t0)
-        #
-        # m = self.define_expressions(m)
-        # print('Defined expressions:', time.time() - t0)
-        #
-        # m = self.define_constraints(m)
-        # print('Defined constraints:', time.time() - t0)
-        #
-        # m = self.define_objective(m)
-        # print('Defined objective:', time.time() - t0)
-        #
-        # # Fix interconnector solution
-        # m = self.fix_interconnector_solution(m)
-        # # m = self.fix_fcas_solution(m)
-        # # m = self.fix_energy_solution(m)
-        #
-        # return m
+        m = self.define_variables(m)
+        print('Defined variables:', time.time() - t0)
+
+        m = self.define_expressions(m)
+        print('Defined expressions:', time.time() - t0)
+
+        m = self.define_constraints(m)
+        print('Defined constraints:', time.time() - t0)
+
+        m = self.define_objective(m)
+        print('Defined objective:', time.time() - t0)
+
+        # Fix interconnector solution
+        m = self.fix_interconnector_solution(m)
+        # m = self.fix_fcas_solution(m)
+        # m = self.fix_energy_solution(m)
+
+        return m
 
     def solve_model(self, m):
         """Solve model"""
@@ -2173,24 +2175,19 @@ if __name__ == '__main__':
     data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
                                   os.path.pardir, 'nemweb', 'Reports', 'Data_Archive')
 
-    # Object used to get case data
-    nemde_data = NEMDEDataHandler(data_directory)
+    # Object used to construct and run NEMDE approximate model
+    nemde = NEMDEModel(data_directory, output_directory)
 
-    # Object used to parse case data and extract model parameters
-    nemde_parser = JSONParser()
+    # Load MMSDM data for given interval
+    nemde.mmsdm_data.load_interval(2019, 10)
 
-    # Get case data for a given dispatch interval
-    interval_case_data = nemde_data.get_nemde_json(2019, 10, 10, 1)
-    i_dict = json.loads(interval_case_data)
-
-    # Object used to construct and run approximate NEMDE model
-    nemde = NEMDEModel(nemde_parser)
+    # Object used to interrogate NEMDE solution
+    analysis = NEMDESolution(data_directory)
+    analysis.data.load_interval(2019, 10, 10, 1)
+    analysis.fcas.data.load_interval(2019, 10, 10, 1)
 
     # Construct model for given trading interval
-    nemde_model = nemde.construct_model(interval_case_data)
+    nemde_model = nemde.construct_model(2019, 10, 10, 1)
 
-    # # Solve model
-    # nemde_model, status = nemde.solve_model(nemde_model)
-
-    # # Process solution
-    # nemde_solution = nemde.get_solution(nemde_model)
+    # Solve model
+    nemde_model, status = nemde.solve_model(nemde_model)
