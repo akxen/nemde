@@ -1393,25 +1393,27 @@ if __name__ == '__main__':
     # Load interval
     nemde_data.load_interval(2019, 10, 10, 1)
 
-    # for i in nemde_data.get_interconnector_index():
-    for i in ['V-SA']:
-        segments = nemde_data.get_interconnector_absolute_loss_segments(i)
-        x, y = [i[0] for i in segments], [i[1] for i in segments]
-        fig, ax = plt.subplots()
-        ax.plot(x, y)
-        ax.set_title(i)
+    # # for i in nemde_data.get_interconnector_index():
+    # for i in ['V-SA']:
+    #     segments = nemde_data.get_interconnector_absolute_loss_segments(i)
+    #     x, y = [i[0] for i in segments], [i[1] for i in segments]
+    #     fig, ax = plt.subplots()
+    #     ax.plot(x, y)
+    #     ax.set_title(i)
+    #
+    #     # Solution loss
+    #     solution_loss = nemde_data.get_interconnector_solution_attribute(i, 'Losses')
+    #     flow_min, flow_max = segments[0][0], segments[-1][0]
+    #
+    #     # Min and max flow
+    #     ax.plot([flow_min, flow_max], [solution_loss, solution_loss], linewidth=1.2, alpha=0.7, linestyle=':')
+    #
+    #     # Solution flow
+    #     solution_flow = nemde_data.get_interconnector_solution_attribute(i, 'Flow')
+    #     loss_max = max([i[1] for i in segments]) + 10
+    #     loss_min = min([i[1] for i in segments]) - 10
+    #     ax.plot([solution_flow, solution_flow], [loss_min, loss_max], linewidth=1.2, alpha=0.7, linestyle=':')
+    #
+    #     plt.show()
 
-        # Solution loss
-        solution_loss = nemde_data.get_interconnector_solution_attribute(i, 'Losses')
-        flow_min, flow_max = segments[0][0], segments[-1][0]
-
-        # Min and max flow
-        ax.plot([flow_min, flow_max], [solution_loss, solution_loss], linewidth=1.2, alpha=0.7, linestyle=':')
-
-        # Solution flow
-        solution_flow = nemde_data.get_interconnector_solution_attribute(i, 'Flow')
-        loss_max = max([i[1] for i in segments]) + 10
-        loss_min = min([i[1] for i in segments]) - 10
-        ax.plot([solution_flow, solution_flow], [loss_min, loss_max], linewidth=1.2, alpha=0.7, linestyle=':')
-
-        plt.show()
+    j = nemde_data.get_interconnector_absolute_loss_segments('N-Q-MNSP1')

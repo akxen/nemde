@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 from data import NEMDEDataHandler
 from data import MMSDMDataHandler
 from fcas import FCASHandler
-from parser import JSONParser
+from parser import CaseFileJSONParser
 
 
 class NEMDEModel:
@@ -46,81 +46,92 @@ class NEMDEModel:
         m.S_TRADER_OFFERS = Set(initialize=self.parser.get_trader_offer_index(data))
 
         # MNSP offer types
-        m.S_MNSP_OFFERS = Set(initialize=self.parser.get_mnsp_offer_index())
+        m.S_MNSP_OFFERS = Set(initialize=self.parser.get_mnsp_offer_index(data))
 
-        # # Generic constraints
-        # m.S_GENERIC_CONSTRAINTS = Set(initialize=self.data.get_generic_constraint_index())
-        #
-        # # NEM regions
-        # m.S_REGIONS = Set(initialize=self.data.get_region_index())
-        #
-        # # Generic constraints trader variables
-        # m.S_GC_TRADER_VARS = Set(initialize=self.data.get_generic_constraint_trader_variable_index())
-        #
-        # # Generic constraint interconnector variables
-        # m.S_GC_INTERCONNECTOR_VARS = Set(initialize=self.data.get_generic_constraint_interconnector_variable_index())
-        #
-        # # Generic constraint region variables
-        # m.S_GC_REGION_VARS = Set(initialize=self.data.get_generic_constraint_region_variable_index())
-        #
-        # # Price / quantity band index
-        # m.S_BANDS = RangeSet(1, 10, 1)
-        #
-        # def loss_model_interconnector_breakpoints_rule(m, i):
-        #     """Interconnector loss model breakpoints"""
-        #
-        #     # Loss model segments
-        #     segments = self.data.get_interconnector_absolute_loss_segments(i)
-        #
-        #     return range(1, len(segments) + 1)
-        #
-        # # Loss model breakpoints
-        # m.S_INTERCONNECTOR_BREAKPOINTS = Set(m.S_INTERCONNECTORS, rule=loss_model_interconnector_breakpoints_rule)
-        #
-        # def loss_model_interconnector_intervals_rule(m, i):
-        #     """Interconnector loss model intervals"""
-        #
-        #     # Loss model segments
-        #     segments = self.data.get_interconnector_absolute_loss_segments(i)
-        #
-        #     return range(1, len(segments))
-        #
-        # # Loss model intervals
-        # m.S_INTERCONNECTOR_INTERVALS = Set(m.S_INTERCONNECTORS, rule=loss_model_interconnector_intervals_rule)
-        #
-        # def loss_model_breakpoints_rule(m):
-        #     """All interconnector breakpoints"""
-        #
-        #     return [(i, j) for i in self.data.get_interconnector_index() for j in m.S_INTERCONNECTOR_BREAKPOINTS[i]]
-        #
-        # # All interconnector
-        # m.S_BREAKPOINTS = Set(initialize=loss_model_breakpoints_rule(m))
-        #
-        # def loss_model_intervals_rule(m):
-        #     """All interconnector breakpoints"""
-        #
-        #     return [(i, j) for i in self.data.get_interconnector_index() for j in m.S_INTERCONNECTOR_INTERVALS[i]]
-        #
-        # # All interconnector
-        # m.S_INTERVALS = Set(initialize=loss_model_intervals_rule(m))
+        # Generic constraints
+        m.S_GENERIC_CONSTRAINTS = Set(initialize=self.parser.get_generic_constraint_index(data))
+
+        # NEM regions
+        m.S_REGIONS = Set(initialize=self.parser.get_region_index(data))
+
+        # Generic constraints trader variables
+        m.S_GC_TRADER_VARS = Set(initialize=self.parser.get_generic_constraint_trader_variable_index(data))
+
+        # Generic constraint interconnector variables
+        m.S_GC_INTERCONNECTOR_VARS = Set(
+            initialize=self.parser.get_generic_constraint_interconnector_variable_index(data))
+
+        # Generic constraint region variables
+        m.S_GC_REGION_VARS = Set(initialize=self.parser.get_generic_constraint_region_variable_index(data))
+
+        # Price / quantity band index
+        m.S_BANDS = RangeSet(1, 10, 1)
+
+        # Loss model breakpoint index for each interconnector
+        loss_model_breakpoints_index = self.parser.get_interconnector_loss_model_breakpoints_index(data)
+
+        # TODO: need to speed this up - index list of indices slow to construct
+        def loss_model_interconnector_breakpoints_rule(m, i):
+            """Interconnector loss model breakpoint index"""
+
+            return loss_model_breakpoints_index[i]
+
+        # Loss model breakpoints
+        m.S_INTERCONNECTOR_BREAKPOINTS = Set(m.S_INTERCONNECTORS, rule=loss_model_interconnector_breakpoints_rule)
+
+        # Loss model segment index for each interconnector
+        loss_model_intervals_index = self.parser.get_interconnector_loss_model_intervals_index(data)
+
+        # TODO: need to speed this up - index list of indices slow to construct
+        def loss_model_interconnector_intervals_rule(m, i):
+            """Interconnector loss model intervals"""
+
+            # return range(1, len(segments))
+            return loss_model_intervals_index[i]
+
+        # Loss model intervals
+        m.S_INTERCONNECTOR_INTERVALS = Set(m.S_INTERCONNECTORS, rule=loss_model_interconnector_intervals_rule)
+
+        def loss_model_breakpoints_rule(m):
+            """All interconnector breakpoints"""
+
+            return [(i, j) for i in m.S_INTERCONNECTORS for j in m.S_INTERCONNECTOR_BREAKPOINTS[i]]
+
+        # All interconnector breakpoints
+        m.S_BREAKPOINTS = Set(initialize=loss_model_breakpoints_rule(m))
+
+        def loss_model_intervals_rule(m):
+            """All interconnector breakpoints"""
+
+            return [(i, j) for i in m.S_INTERCONNECTORS for j in m.S_INTERCONNECTOR_INTERVALS[i]]
+
+        # All interconnector intervals
+        m.S_INTERVALS = Set(initialize=loss_model_intervals_rule(m))
 
         return m
 
-    def define_parameters(self, m):
+    def define_parameters(self, m, data):
         """Define model parameters"""
+
+        # Summary of trader collection data - enables quick access to price bands and other attributes
+        trader_collection = self.parser.get_trader_collection_summary(data)
 
         def trader_price_band_rule(m, i, j, k):
             """Price bands for traders"""
 
-            return self.data.get_trader_price_band_attribute(i, j, f'PriceBand{k}')
+            return float(trader_collection.get(i).get('summary').get('trade_types').get(j).get(f'@PriceBand{k}'))
 
         # Price bands for traders (generators / loads)
         m.P_TRADER_PRICE_BAND = Param(m.S_TRADER_OFFERS, m.S_BANDS, rule=trader_price_band_rule)
 
+        # Summary of trader period data - enables quick access of quantity bands and other attributes
+        trader_period = self.parser.get_trader_period_summary(data)
+
         def trader_quantity_band_rule(m, i, j, k):
             """Quantity bands for traders"""
 
-            return self.data.get_trader_quantity_band_attribute(i, j, f'BandAvail{k}')
+            # return self.data.get_trader_quantity_band_attribute(i, j, f'BandAvail{k}')
+            return float(trader_period.get(i).get('summary').get('trade_types').get(j).get(f'@BandAvail{k}'))
 
         # Quantity bands for traders (generators / loads)
         m.P_TRADER_QUANTITY_BAND = Param(m.S_TRADER_OFFERS, m.S_BANDS, rule=trader_quantity_band_rule)
@@ -129,10 +140,10 @@ class NEMDEModel:
             """Max available energy output from given trader"""
 
             # Use UIGF for max available ENOF for semi-dispatchable plant
-            if (self.data.get_trader_attribute(i, 'SemiDispatch') == 1) and (j == 'ENOF'):
-                return self.data.get_trader_period_attribute(i, 'UIGF')
+            if (trader_collection.get(i).get('@SemiDispatch') == '1') and (j == 'ENOF'):
+                return float(trader_period.get(i).get('@UIGF'))
             else:
-                return self.data.get_trader_quantity_band_attribute(i, j, 'MaxAvail')
+                return float(trader_period.get(i).get('summary').get('trade_types').get(j).get('@MaxAvail'))
 
         # Max available output for given trader
         m.P_TRADER_MAX_AVAILABLE = Param(m.S_TRADER_OFFERS, rule=trader_max_available_rule)
@@ -140,7 +151,12 @@ class NEMDEModel:
         def trader_initial_mw_rule(m, i):
             """Initial power output condition for each trader"""
 
-            return self.data.get_trader_initial_condition_attribute(i, 'InitialMW')
+            # All initial conditions for a given trader
+            trader_initial_conditions = (trader_collection.get(i).get('TraderInitialConditionCollection')
+                                         .get('TraderInitialCondition'))
+
+            # Extract InitialMW
+            return float(self.parser.get_trader_initial_condition_attribute(trader_initial_conditions, 'InitialMW'))
 
         # Initial MW output for generators / loads
         m.P_TRADER_INITIAL_MW = Param(m.S_TRADERS, rule=trader_initial_mw_rule)
@@ -148,7 +164,8 @@ class NEMDEModel:
         def mnsp_price_band_rule(m, i, j, k):
             """Price bands for MNSPs"""
 
-            return self.data.get_mnsp_price_band_attribute(i, j, f'PriceBand{k}')
+            # return self.data.get_mnsp_price_band_attribute(i, j, f'PriceBand{k}')
+            return self.parser.get_mnsp_price_band_attribute(data, i, j, f'PriceBand{k}')
 
         # Price bands for MNSPs
         m.P_MNSP_PRICE_BAND = Param(m.S_MNSP_OFFERS, m.S_BANDS, rule=mnsp_price_band_rule)
@@ -158,96 +175,96 @@ class NEMDEModel:
 
             return self.data.get_mnsp_quantity_band_attribute(i, j, f'BandAvail{k}')
 
-        # Quantity bands for MNSPs
-        m.P_MNSP_QUANTITY_BAND = Param(m.S_MNSP_OFFERS, m.S_BANDS, rule=mnsp_quantity_band_rule)
-
-        def mnsp_max_available_rule(m, i, j):
-            """Max available energy output from given MNSP"""
-
-            return self.data.get_mnsp_quantity_band_attribute(i, j, 'MaxAvail')
-
-        # Max available output for given MNSP
-        m.P_MNSP_MAX_AVAILABLE = Param(m.S_MNSP_OFFERS, rule=mnsp_max_available_rule)
-
-        def generic_constraint_rhs_rule(m, c):
-            """RHS value for given generic constraint"""
-
-            return self.data.get_generic_constraint_solution_attribute(c, 'RHS')
-
-        # Generic constraint RHS
-        m.P_RHS = Param(m.S_GENERIC_CONSTRAINTS, rule=generic_constraint_rhs_rule)
-
-        def generic_constraint_violation_factor_rule(m, c):
-            """Constraint violation penalty for given generic constraint"""
-
-            return self.data.get_generic_constraint_attribute(c, 'ViolationPrice')
-
-        # Constraint violation factors
-        m.P_CVF_GC = Param(m.S_GENERIC_CONSTRAINTS, rule=generic_constraint_violation_factor_rule)
-
-        # Value of lost load
-        m.P_CVF_VOLL = Param(initialize=self.data.get_case_attribute('VoLL'))
-
-        # Energy deficit price
-        m.P_CVF_ENERGY_DEFICIT_PRICE = Param(initialize=self.data.get_case_attribute('EnergyDeficitPrice'))
-
-        # Energy surplus price
-        m.P_CVF_ENERGY_SURPLUS_PRICE = Param(initialize=self.data.get_case_attribute('EnergySurplusPrice'))
-
-        # Ramp-rate constraint violation factor
-        m.P_CVF_RAMP_RATE_PRICE = Param(initialize=self.data.get_case_attribute('RampRatePrice'))
-
-        # Capacity price (assume for constraint ensuring max available capacity not exceeded)
-        m.P_CVF_CAPACITY_PRICE = Param(initialize=self.data.get_case_attribute('CapacityPrice'))
-
-        # Offer price (assume for constraint ensuring band offer amounts are not exceeded)
-        m.P_CVF_OFFER_PRICE = Param(initialize=self.data.get_case_attribute('OfferPrice'))
-
-        # MNSP offer price (assumed for constraint ensuring MNSP band offers are not exceeded)
-        m.P_CVF_MNSP_OFFER_PRICE = Param(initialize=self.data.get_case_attribute('MNSPOfferPrice'))
-
-        # MNSP ramp rate price (not sure what this applies to - unclear what MNSP ramp rates are)
-        m.P_CVF_MNSP_RAMP_RATE_PRICE = Param(initialize=self.data.get_case_attribute('MNSPRampRatePrice'))
-
-        # MNSP capacity price (assume for constraint ensuring max available capacity not exceeded)
-        m.P_CVF_MNSP_CAPACITY_PRICE = Param(initialize=self.data.get_case_attribute('MNSPCapacityPrice'))
-
-        # Ancillary services profile price (assume for constraint ensure FCAS trapezium not violated)
-        m.P_CVF_AS_PROFILE_PRICE = Param(initialize=self.data.get_case_attribute('ASProfilePrice'))
-
-        # Ancillary services max available price (assume for constraint ensure max available amount not exceeded)
-        m.P_CVF_AS_MAX_AVAIL_PRICE = Param(initialize=self.data.get_case_attribute('ASMaxAvailPrice'))
-
-        # Ancillary services enablement min price (assume for constraint ensure FCAS > enablement min if active)
-        m.P_CVF_AS_ENABLEMENT_MIN_PRICE = Param(initialize=self.data.get_case_attribute('ASEnablementMinPrice'))
-
-        # Ancillary services enablement max price (assume for constraint ensure FCAS < enablement max if active)
-        m.P_CVF_AS_ENABLEMENT_MAX_PRICE = Param(initialize=self.data.get_case_attribute('ASEnablementMaxPrice'))
-
-        # Interconnector power flow violation price
-        m.P_CVF_INTERCONNECTOR_PRICE = Param(initialize=self.data.get_case_attribute('InterconnectorPrice'))
-
-        # Interconnector loss model segments
-        loss_segments = {i: self.data.get_interconnector_absolute_loss_segments(i) for i in m.S_INTERCONNECTORS}
-
-        def loss_model_breakpoint_x_rule(m, i, j):
-            """Loss model breakpoints"""
-
-            return loss_segments[i][j - 1][0]
-
-        # Loss model breakpoints
-        m.P_LOSS_MODEL_BREAKPOINTS_X = Param(m.S_BREAKPOINTS, rule=loss_model_breakpoint_x_rule)
-
-        def loss_model_breakpoint_y_rule(m, i, j):
-            """Loss model breakpoints"""
-
-            return loss_segments[i][j - 1][1]
-
-        # Loss model breakpoints
-        m.P_LOSS_MODEL_BREAKPOINTS_Y = Param(m.S_BREAKPOINTS, rule=loss_model_breakpoint_y_rule)
-
-        # MNSP loss price
-        m.P_MNSP_LOSS_PRICE = Param(initialize=self.data.get_case_attribute('MNSPLossesPrice'))
+        # # Quantity bands for MNSPs
+        # m.P_MNSP_QUANTITY_BAND = Param(m.S_MNSP_OFFERS, m.S_BANDS, rule=mnsp_quantity_band_rule)
+        #
+        # def mnsp_max_available_rule(m, i, j):
+        #     """Max available energy output from given MNSP"""
+        #
+        #     return self.data.get_mnsp_quantity_band_attribute(i, j, 'MaxAvail')
+        #
+        # # Max available output for given MNSP
+        # m.P_MNSP_MAX_AVAILABLE = Param(m.S_MNSP_OFFERS, rule=mnsp_max_available_rule)
+        #
+        # def generic_constraint_rhs_rule(m, c):
+        #     """RHS value for given generic constraint"""
+        #
+        #     return self.data.get_generic_constraint_solution_attribute(c, 'RHS')
+        #
+        # # Generic constraint RHS
+        # m.P_RHS = Param(m.S_GENERIC_CONSTRAINTS, rule=generic_constraint_rhs_rule)
+        #
+        # def generic_constraint_violation_factor_rule(m, c):
+        #     """Constraint violation penalty for given generic constraint"""
+        #
+        #     return self.data.get_generic_constraint_attribute(c, 'ViolationPrice')
+        #
+        # # Constraint violation factors
+        # m.P_CVF_GC = Param(m.S_GENERIC_CONSTRAINTS, rule=generic_constraint_violation_factor_rule)
+        #
+        # # Value of lost load
+        # m.P_CVF_VOLL = Param(initialize=self.data.get_case_attribute('VoLL'))
+        #
+        # # Energy deficit price
+        # m.P_CVF_ENERGY_DEFICIT_PRICE = Param(initialize=self.data.get_case_attribute('EnergyDeficitPrice'))
+        #
+        # # Energy surplus price
+        # m.P_CVF_ENERGY_SURPLUS_PRICE = Param(initialize=self.data.get_case_attribute('EnergySurplusPrice'))
+        #
+        # # Ramp-rate constraint violation factor
+        # m.P_CVF_RAMP_RATE_PRICE = Param(initialize=self.data.get_case_attribute('RampRatePrice'))
+        #
+        # # Capacity price (assume for constraint ensuring max available capacity not exceeded)
+        # m.P_CVF_CAPACITY_PRICE = Param(initialize=self.data.get_case_attribute('CapacityPrice'))
+        #
+        # # Offer price (assume for constraint ensuring band offer amounts are not exceeded)
+        # m.P_CVF_OFFER_PRICE = Param(initialize=self.data.get_case_attribute('OfferPrice'))
+        #
+        # # MNSP offer price (assumed for constraint ensuring MNSP band offers are not exceeded)
+        # m.P_CVF_MNSP_OFFER_PRICE = Param(initialize=self.data.get_case_attribute('MNSPOfferPrice'))
+        #
+        # # MNSP ramp rate price (not sure what this applies to - unclear what MNSP ramp rates are)
+        # m.P_CVF_MNSP_RAMP_RATE_PRICE = Param(initialize=self.data.get_case_attribute('MNSPRampRatePrice'))
+        #
+        # # MNSP capacity price (assume for constraint ensuring max available capacity not exceeded)
+        # m.P_CVF_MNSP_CAPACITY_PRICE = Param(initialize=self.data.get_case_attribute('MNSPCapacityPrice'))
+        #
+        # # Ancillary services profile price (assume for constraint ensure FCAS trapezium not violated)
+        # m.P_CVF_AS_PROFILE_PRICE = Param(initialize=self.data.get_case_attribute('ASProfilePrice'))
+        #
+        # # Ancillary services max available price (assume for constraint ensure max available amount not exceeded)
+        # m.P_CVF_AS_MAX_AVAIL_PRICE = Param(initialize=self.data.get_case_attribute('ASMaxAvailPrice'))
+        #
+        # # Ancillary services enablement min price (assume for constraint ensure FCAS > enablement min if active)
+        # m.P_CVF_AS_ENABLEMENT_MIN_PRICE = Param(initialize=self.data.get_case_attribute('ASEnablementMinPrice'))
+        #
+        # # Ancillary services enablement max price (assume for constraint ensure FCAS < enablement max if active)
+        # m.P_CVF_AS_ENABLEMENT_MAX_PRICE = Param(initialize=self.data.get_case_attribute('ASEnablementMaxPrice'))
+        #
+        # # Interconnector power flow violation price
+        # m.P_CVF_INTERCONNECTOR_PRICE = Param(initialize=self.data.get_case_attribute('InterconnectorPrice'))
+        #
+        # # Interconnector loss model segments
+        # loss_segments = {i: self.data.get_interconnector_absolute_loss_segments(i) for i in m.S_INTERCONNECTORS}
+        #
+        # def loss_model_breakpoint_x_rule(m, i, j):
+        #     """Loss model breakpoints"""
+        #
+        #     return loss_segments[i][j - 1][0]
+        #
+        # # Loss model breakpoints
+        # m.P_LOSS_MODEL_BREAKPOINTS_X = Param(m.S_BREAKPOINTS, rule=loss_model_breakpoint_x_rule)
+        #
+        # def loss_model_breakpoint_y_rule(m, i, j):
+        #     """Loss model breakpoints"""
+        #
+        #     return loss_segments[i][j - 1][1]
+        #
+        # # Loss model breakpoints
+        # m.P_LOSS_MODEL_BREAKPOINTS_Y = Param(m.S_BREAKPOINTS, rule=loss_model_breakpoint_y_rule)
+        #
+        # # MNSP loss price
+        # m.P_MNSP_LOSS_PRICE = Param(initialize=self.data.get_case_attribute('MNSPLossesPrice'))
 
         return m
 
@@ -1821,11 +1838,11 @@ class NEMDEModel:
         m = self.define_sets(m, data)
         print('Defined sets:', time.time() - t0)
 
+        m = self.define_parameters(m, data)
+        print('Defined parameters:', time.time() - t0)
+
         return m
 
-        # m = self.define_parameters(m)
-        # print('Defined parameters:', time.time() - t0)
-        #
         # m = self.define_variables(m)
         # print('Defined variables:', time.time() - t0)
         #
@@ -2177,11 +2194,10 @@ if __name__ == '__main__':
     nemde_data = NEMDEDataHandler(data_directory)
 
     # Object used to parse case data and extract model parameters
-    nemde_parser = JSONParser()
+    nemde_parser = CaseFileJSONParser()
 
     # Get case data for a given dispatch interval
     interval_case_data = nemde_data.get_nemde_json(2019, 10, 10, 1)
-    i_dict = json.loads(interval_case_data)
 
     # Object used to construct and run approximate NEMDE model
     nemde = NEMDEModel(nemde_parser)
