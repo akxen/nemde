@@ -4,395 +4,192 @@ import os
 import json
 from abc import ABC, abstractmethod
 
-from data import NEMDEDataHandler
+from utils.loader import load_dispatch_interval_json
+from utils.convert import str_to_float
 
 
-class ModelComponentConstructorAbstract:
-    def __init__(self):
-        pass
+def parse_trader_initial_condition_collection(trader_data):
+    """Extract initial condition information from trader data element"""
 
-    @staticmethod
-    @abstractmethod
-    def get_trader_index(data):
-        """Get trader index"""
-        pass
+    # All initial conditions
+    initial_conditions = trader_data.get('TraderInitialConditionCollection').get('TraderInitialCondition')
 
-    @staticmethod
-    @abstractmethod
-    def get_non_scheduled_generators(data):
-        """Get non-scheduled generators"""
-        pass
+    # Extracted trader initial conditions
+    parsed_initial_conditions = {i.get('InitialConditionID'): str_to_float(i.get('Value')) for i in initial_conditions}
 
-    @staticmethod
-    @abstractmethod
-    def get_mnsp_index(data):
-        """MNSP index"""
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def get_interconnector_index(data):
-        """Interconnector index"""
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def get_trader_offer_index(data):
-        """Get trader offer index"""
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def get_mnsp_offer_index(data):
-        """MNSP offer index"""
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def get_generic_constraint_index(data):
-        """Get index for all generic constraints. Assuming no intervention"""
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def get_region_index(data):
-        """Get index for all NEM regions"""
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def get_generic_constraint_trader_variable_index(data):
-        """Get index of all trader variables within generic constraints"""
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def get_generic_constraint_interconnector_variable_index(data):
-        """Get index of all interconnector variables within generic constraints"""
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def get_generic_constraint_region_variable_index(data):
-        """Get index of all region variables within generic constraints"""
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def get_interconnector_loss_model_breakpoints_index(data):
-        """Index for interconnector loss model breakpoints"""
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def get_interconnector_loss_model_intervals_index(data):
-        """Index for interconnector loss model breakpoints"""
-        pass
+    return parsed_initial_conditions
 
 
-class ModelComponentConstructorJSON(ModelComponentConstructorAbstract):
-    def __init__(self):
-        pass
+def parse_trader_price_structure_collection(trader_info):
+    """Extract price bands"""
 
-    @staticmethod
-    def get_trader_index(data):
-        """Get trader index"""
+    # Extract price info
+    price_info = (trader_info.get('TradePriceStructureCollection').get('TradePriceStructure')
+                  .get('TradeTypePriceStructureCollection').get('TradeTypePriceStructure'))
 
-        # Trader period attribute
-        elements = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
-                    .get('TraderPeriodCollection').get('TraderPeriod'))
+    if isinstance(price_info, list):
+        return {j.get('TradeType'): {k: str_to_float(v) for k, v in j.items()} for j in price_info}
 
-        return [i.get('@TraderID') for i in elements]
+    elif isinstance(price_info, dict):
+        return {price_info.get('TradeType'): {k: str_to_float(v) for k, v in price_info.items()}}
 
-    @staticmethod
-    def get_non_scheduled_generators(data):
-        """Get non-scheduled generators"""
+    else:
+        raise Exception(f'Unexpected type: {price_info}')
 
-        # Non-scheduled generator attribute
-        elements = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
-                    .get('Non_Scheduled_Generator_Collection').get('Non_Scheduled_Generator'))
 
-        return [i.get('@DUID') for i in elements]
+def parse_trader_collection(data):
+    """Parse NEMDE input - trader collection"""
 
-    @staticmethod
-    def get_mnsp_index(data):
-        """MNSP index"""
+    # Trader data
+    traders = data.get('NEMSPDCaseFile').get('NemSpdInputs').get('TraderCollection').get('Trader')
 
-        # Get MNSP elements
-        elements = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
-                    .get('InterconnectorPeriodCollection').get('InterconnectorPeriod'))
+    # Container for trader collection data
+    trader_collection = {}
 
-        return [i.get('@InterconnectorID') for i in elements if i.get('@MNSP') == '1']
+    for i in traders:
+        # Extract ID
+        trader_id = i.get('TraderID')
 
-    @staticmethod
-    def get_interconnector_index(data):
-        """Interconnector index"""
+        # Initialise empty dictionary for parsed data
+        trader_collection[trader_id] = {}
 
-        # Get MNSP elements
-        elements = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
-                    .get('InterconnectorPeriodCollection').get('InterconnectorPeriod'))
-
-        return [i.get('@InterconnectorID') for i in elements]
-
-    @staticmethod
-    def get_trader_offer_index(data):
-        """Get trader offer index"""
-
-        # Trader offer index
-        elements = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
-                    .get('TraderPeriodCollection').get('TraderPeriod'))
-
-        # Container for trader offer index
-        trader_offer_index = []
-
-        for trader in elements:
-            # Extract offer info
-            offer_info = trader.get('TradeCollection').get('Trade')
-
-            # Case when trader has only one offer
-            if type(offer_info) == dict:
-                trader_offer_index.append((trader.get('@TraderID'), offer_info.get('@TradeType')))
-
-            # Case when trader has multiple offers
-            elif type(offer_info) == list:
-                for offer in offer_info:
-                    trader_offer_index.append((trader.get('@TraderID'), offer.get('@TradeType')))
+        # Extract data and parse keys according to specified rules
+        for k, v in i.items():
+            if k == 'TraderInitialConditionCollection':
+                trader_collection[trader_id]['initial_conditions'] = parse_trader_initial_condition_collection(i)
+            elif k == 'TradePriceStructureCollection':
+                trader_collection[trader_id]['price_structure'] = parse_trader_price_structure_collection(i)
             else:
-                raise Exception(f'Unexpected type: {type(offer_info)}')
+                trader_collection[trader_id][k] = str_to_float(v)
 
-        return trader_offer_index
+    return trader_collection
 
-    @staticmethod
-    def get_mnsp_offer_index(data):
-        """MNSP offer index"""
 
-        # Container for MNSP offer index
-        mnsp_offer = []
+def parse_region_initial_condition_collection(region_data):
+    """Parse initial condition information for a given region"""
 
-        # Get MNSP offer information
-        mnsps = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
-                 .get('InterconnectorPeriodCollection').get('InterconnectorPeriod'))
+    # All initial conditions
+    initial_conditions = region_data.get('RegionInitialConditionCollection').get('RegionInitialCondition')
 
-        for i in mnsps:
-            # Identify MNSPs
-            if i.get('@MNSP') == '1':
-                # Extract regions corresponding to each offer
-                for j in i.get('MNSPOfferCollection').get('MNSPOffer'):
-                    mnsp_offer.append((i.get('@InterconnectorID'), j.get('@RegionID')))
+    # Extracted trader initial conditions
+    parsed_initial_conditions = {i.get('InitialConditionID'): str_to_float(i.get('Value')) for i in initial_conditions}
 
-        return mnsp_offer
+    return parsed_initial_conditions
 
-    @staticmethod
-    def get_generic_constraint_index(data):
-        """Get index for all generic constraints. Assuming no intervention"""
 
-        # Generic constraint information
-        constraints = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('GenericConstraintCollection')
-                       .get('GenericConstraint'))
+def parse_region_collection(data):
+    """Parse region collection data"""
 
-        # Container for constraint IDs
-        constraint_ids = []
+    # All regions
+    regions = data.get('NEMSPDCaseFile').get('NemSpdInputs').get('RegionCollection').get('Region')
 
-        for i in constraints:
-            # Ensure LHS is non-empty
-            if i.get('LHSFactorCollection'):
+    # Container for parsed data
+    region_collection = {}
 
-                # If not an intervention period constraint, append to container
-                if i.get('s:ConstraintTrkCollection').get('ConstraintTrkItem').get('@Intervention') == 'False':
-                    constraint_ids.append(i.get('@ConstraintID'))
+    for i in regions:
+        # Extract ID
+        region_id = i.get('RegionID')
 
-        return constraint_ids
+        # Initialise empty dictionary for parsed data
+        region_collection[region_id] = {}
 
-    @staticmethod
-    def get_region_index(data):
-        """Get index for all NEM regions"""
-
-        # Region information
-        regions = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
-                   .get('RegionPeriodCollection').get('RegionPeriod'))
-
-        # Extract region IDs
-        region_ids = [i.get('@RegionID') for i in regions]
-
-        return region_ids
-
-    @staticmethod
-    def get_generic_constraint_trader_variable_index(data):
-        """Get index of all trader variables within generic constraints"""
-
-        # All generic constraints
-        constraints = (
-            data.get('NEMSPDCaseFile').get('NemSpdInputs').get('GenericConstraintCollection').get(
-                'GenericConstraint')
-        )
-
-        # Container for trader variables
-        trader_variables = []
-
-        for i in constraints:
-            # Proceed to next constraint if no LHS factors
-            if i.get('LHSFactorCollection') is None:
-                continue
-
-            # Extract trader factors
-            factors = i.get('LHSFactorCollection').get('TraderFactor', None)
-
-            # Proceed to next constraint if no trader variables in constraint
-            if factors is None:
-                continue
-
-            # Case where only one trader variable is in constraint
-            elif type(factors) == dict:
-                trader_variables.append((factors.get('@TraderID'), factors.get('@TradeType')))
-
-            # Case where multiple trader variables in constraint
-            elif type(factors) == list:
-                for j in factors:
-                    trader_variables.append((j.get('@TraderID'), j.get('@TradeType')))
-
+        for k, v in i.items():
+            if k == 'RegionInitialConditionCollection':
+                region_collection[region_id]['initial_conditions'] = parse_region_initial_condition_collection(i)
             else:
-                raise Exception(f'Unexpected type: {factors}')
+                region_collection[region_id][k] = str_to_float(v)
 
-        # Get unique trader variables
-        return list(set(trader_variables))
+    return region_collection
 
-    @staticmethod
-    def get_generic_constraint_interconnector_variable_index(data):
-        """Get index of all interconnector variables within generic constraints"""
 
-        # All generic constraints
-        constraints = (
-            data.get('NEMSPDCaseFile').get('NemSpdInputs').get('GenericConstraintCollection').get(
-                'GenericConstraint')
-        )
+def parse_interconnector_initial_condition_collection(interconnector_data):
+    """Parse interconnector initial condition information"""
 
-        # Container for interconnector variables
-        interconnector_variables = []
+    # All initial conditions
+    initial_conditions = (interconnector_data.get('InterconnectorInitialConditionCollection')
+                          .get('InterconnectorInitialCondition'))
 
-        for i in constraints:
-            # Proceed to next constraint if no LHS factors
-            if i.get('LHSFactorCollection') is None:
-                continue
+    # Extracted trader initial conditions
+    parsed_initial_conditions = {i.get('InitialConditionID'): str_to_float(i.get('Value')) for i in initial_conditions}
 
-            # Extract trader factors
-            factors = i.get('LHSFactorCollection').get('InterconnectorFactor', None)
+    return parsed_initial_conditions
 
-            # Proceed to next constraint if no interconnector variables in constraint
-            if factors is None:
-                continue
 
-            # Case where only one interconnector variable is in constraint
-            elif type(factors) == dict:
-                interconnector_variables.append(factors.get('@InterconnectorID'))
+def parse_interconnector_loss_model_segment_collection(loss_model_data):
+    """Parse interconnector loss model segment collection"""
 
-            # Case where multiple interconnector variables in constraint
-            elif type(factors) == list:
-                for j in factors:
-                    interconnector_variables.append(j.get('@InterconnectorID'))
+    # All loss models segments
+    segments = loss_model_data.get('SegmentCollection').get('Segment')
 
+    return {i: {k: str_to_float(v) for k, v in j.items()} for i, j in enumerate(segments)}
+
+
+def parse_interconnector_loss_model_collection(interconnector_data):
+    """Parse interconnector loss model collection"""
+
+    # Loss model for a given interconnector
+    loss_model = interconnector_data.get('LossModelCollection').get('LossModel')
+
+    # Container for parsed loss model data
+    parsed_loss_model = {}
+
+    for k, v in loss_model.items():
+        if k == 'SegmentCollection':
+            parsed_loss_model['segment_collection'] = parse_interconnector_loss_model_segment_collection(loss_model)
+        else:
+            parsed_loss_model[k] = str_to_float(v)
+
+    return parsed_loss_model
+
+
+def parse_interconnector_price_structure(interconnector_data):
+    """Parse MNSP price structure data"""
+
+
+
+def parse_interconnector_collection(data):
+    """Parse interconnector collection information"""
+
+    # All interconnectors
+    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('InterconnectorCollection')
+                       .get('Interconnector'))
+
+    # Container for parsed interconnector data
+    parsed = {}
+
+    for i in interconnectors:
+        # Interconnector ID
+        interconnector_id = i.get('InterconnectorID')
+
+        # Container for interconnector data
+        parsed[interconnector_id] = {}
+
+        for k, v in i.items():
+            if k == 'InterconnectorInitialConditionCollection':
+                parsed[interconnector_id]['initial_conditions'] = parse_interconnector_initial_condition_collection(i)
+            elif k == 'LossModelCollection':
+                parsed[interconnector_id]['loss_model'] = parse_interconnector_loss_model_collection(i)
+            elif k == 'MNSPPriceStructure':
+                parsed[interconnector_id]['mnsp_price_structure'] = parse_interconnector_price_structure(i)
             else:
-                raise Exception(f'Unexpected type: {factors}')
+                print(v)
+                parsed[interconnector_id][k] = str_to_float(v)
 
-        # Get unique interconnector variables
-        return list(set(interconnector_variables))
-
-    @staticmethod
-    def get_generic_constraint_region_variable_index(data):
-        """Get index of all region variables within generic constraints"""
-
-        # All generic constraints
-        constraints = (
-            data.get('NEMSPDCaseFile').get('NemSpdInputs').get('GenericConstraintCollection').get(
-                'GenericConstraint')
-        )
-
-        # Container for region variables
-        region_variables = []
-
-        for i in constraints:
-            # Proceed to next constraint if no LHS factors
-            if i.get('LHSFactorCollection') is None:
-                continue
-
-            # Extract region factors
-            factors = i.get('LHSFactorCollection').get('RegionFactor', None)
-
-            # Proceed to next constraint if no region variables in constraint
-            if factors is None:
-                continue
-
-            # Case where only one region variable is in constraint
-            elif type(factors) == dict:
-                region_variables.append((factors.get('@RegionID'), factors.get('@TradeType')))
-
-            # Case where multiple region variables in constraint
-            elif type(factors) == list:
-                for j in factors:
-                    region_variables.append((j.get('@RegionID'), j.get('@TradeType')))
-
-            else:
-                raise Exception(f'Unexpected type: {factors}')
-
-        # Get unique region variables
-        return list(set(region_variables))
-
-    @staticmethod
-    def get_interconnector_loss_model_breakpoints_index(data):
-        """Index for interconnector loss model breakpoints"""
-
-        # All interconnectors
-        interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('InterconnectorCollection')
-                           .get('Interconnector'))
-
-        # Container for breakpoint index
-        breakpoint_index = {}
-
-        for i in interconnectors:
-            # Loss model intervals
-            n_intervals = len(i.get('LossModelCollection').get('LossModel').get('SegmentCollection').get('Segment'))
-
-            # Breakpoints = intervals + 1
-            n_breakpoints = n_intervals + 1
-
-            # Create index and append to container
-            breakpoint_index[i.get('@InterconnectorID')] = range(1, n_breakpoints + 1)
-
-        return breakpoint_index
-
-    @staticmethod
-    def get_interconnector_loss_model_intervals_index(data):
-        """Index for interconnector loss model breakpoints"""
-
-        # All interconnectors
-        interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('InterconnectorCollection')
-                           .get('Interconnector'))
-
-        # Container for segments index
-        segments_index = {}
-
-        for i in interconnectors:
-            # Loss model intervals
-            n_intervals = len(i.get('LossModelCollection').get('LossModel').get('SegmentCollection').get('Segment'))
-
-            # Create index and append to container
-            segments_index[i.get('@InterconnectorID')] = range(1, n_intervals + 1)
-
-        return segments_index
+    return parsed
 
 
 if __name__ == '__main__':
     # Data directory
-    output_directory = os.path.join(os.path.dirname(__file__), 'output')
     data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
-                                  os.path.pardir, 'nemweb', 'Reports', 'Data_Archive')
+                                  os.path.pardir, os.path.pardir, os.path.pardir, 'nemweb', 'Reports', 'Data_Archive',
+                                  'NEMDE', 'zipped')
 
     # Object used to get case data
-    nemde_data = NEMDEDataHandler(data_directory)
+    case_data_json = load_dispatch_interval_json(data_directory, 2019, 10, 10, 1)
 
-    # Object used to parse case data and extract model parameters
-    json_parser = CaseFileLookupJSONParser()
+    # Convert to dictionary
+    cdata = json.loads(case_data_json)
 
-    # Get case data for a given dispatch interval
-    case_data = nemde_data.get_nemde_json(2019, 10, 10, 1)
-    d = json.loads(case_data)
-
+    trader_collection_parsed = parse_trader_collection(cdata)
+    region_collection_parsed = parse_region_collection(cdata)
+    interconnector_collection_parsed = parse_interconnector_collection(cdata)

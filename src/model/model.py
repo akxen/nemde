@@ -31,9 +31,6 @@ class NEMDEModel:
         # Market participants (generators and loads)
         m.S_TRADERS = pyo.Set(initialize=self.parser.get_trader_index(data))
 
-        # Non-scheduled generators
-        m.S_NON_SCHEDULED_GENERATORS = pyo.Set(initialize=self.parser.get_non_scheduled_generators(data))
-
         # Market Network Service Providers (interconnectors that bid into the market)
         m.S_MNSPS = pyo.Set(initialize=self.parser.get_mnsp_index(data))
 

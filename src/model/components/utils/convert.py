@@ -15,3 +15,12 @@ def parse_single_attribute(data, attribute):
         return float(value)
     except ValueError:
         return value
+
+
+def str_to_float(value):
+    """Attempt to convert input to float"""
+
+    try:
+        return float(value)
+    except ValueError:
+        return value
