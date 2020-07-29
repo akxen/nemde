@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from data import NEMDEDataHandler
 
 
-class CaseFileAbstractClass(ABC):
+class ModelComponentConstructorAbstract:
     def __init__(self):
         pass
 
@@ -50,9 +50,7 @@ class CaseFileAbstractClass(ABC):
     @staticmethod
     @abstractmethod
     def get_generic_constraint_index(data):
-        """
-        Get index for all generic constraints. Note: using constraint solution to identify constraints that were used
-        """
+        """Get index for all generic constraints. Assuming no intervention"""
         pass
 
     @staticmethod
@@ -69,7 +67,7 @@ class CaseFileAbstractClass(ABC):
 
     @staticmethod
     @abstractmethod
-    def get_generic_constraint_interconnector_variable_index(self):
+    def get_generic_constraint_interconnector_variable_index(data):
         """Get index of all interconnector variables within generic constraints"""
         pass
 
@@ -82,31 +80,17 @@ class CaseFileAbstractClass(ABC):
     @staticmethod
     @abstractmethod
     def get_interconnector_loss_model_breakpoints_index(data):
-        """Get index for interconnector loss model breakpoints"""
+        """Index for interconnector loss model breakpoints"""
         pass
 
     @staticmethod
     @abstractmethod
     def get_interconnector_loss_model_intervals_index(data):
-        """Get index for interconnector loss model segments"""
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def get_trader_collection_summary(data):
-        """
-        Summary of trader collection data - facilitates quick access of price band attributes which are otherwise nested
-        """
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def get_trader_period_summary(data):
-        """Get summary of trader period data - enables quick quantity band access"""
+        """Index for interconnector loss model breakpoints"""
         pass
 
 
-class CaseFileJSONParser(CaseFileAbstractClass):
+class ModelComponentConstructorJSON(ModelComponentConstructorAbstract):
     def __init__(self):
         pass
 
@@ -238,7 +222,8 @@ class CaseFileJSONParser(CaseFileAbstractClass):
 
         # All generic constraints
         constraints = (
-            data.get('NEMSPDCaseFile').get('NemSpdInputs').get('GenericConstraintCollection').get('GenericConstraint')
+            data.get('NEMSPDCaseFile').get('NemSpdInputs').get('GenericConstraintCollection').get(
+                'GenericConstraint')
         )
 
         # Container for trader variables
@@ -277,7 +262,8 @@ class CaseFileJSONParser(CaseFileAbstractClass):
 
         # All generic constraints
         constraints = (
-            data.get('NEMSPDCaseFile').get('NemSpdInputs').get('GenericConstraintCollection').get('GenericConstraint')
+            data.get('NEMSPDCaseFile').get('NemSpdInputs').get('GenericConstraintCollection').get(
+                'GenericConstraint')
         )
 
         # Container for interconnector variables
@@ -316,7 +302,8 @@ class CaseFileJSONParser(CaseFileAbstractClass):
 
         # All generic constraints
         constraints = (
-            data.get('NEMSPDCaseFile').get('NemSpdInputs').get('GenericConstraintCollection').get('GenericConstraint')
+            data.get('NEMSPDCaseFile').get('NemSpdInputs').get('GenericConstraintCollection').get(
+                'GenericConstraint')
         )
 
         # Container for region variables
@@ -392,124 +379,6 @@ class CaseFileJSONParser(CaseFileAbstractClass):
 
         return segments_index
 
-    @staticmethod
-    def get_trader_collection_summary(data):
-        """
-        Summary of trader collection data - facilitates quick access of price band attributes which are otherwise nested
-        """
-
-        # All traders
-        traders = data.get('NEMSPDCaseFile').get('NemSpdInputs').get('TraderCollection').get('Trader')
-
-        # Container for trader collection summary
-        trader_collection = {}
-
-        for i in traders:
-            trader_collection[i.get('@TraderID')] = i
-
-            # Container for summary data
-            trader_collection[i.get('@TraderID')]['summary'] = {}
-
-            # All offers for a given trader
-            offers = (i.get('TradePriceStructureCollection').get('TradePriceStructure')
-                      .get('TradeTypePriceStructureCollection').get('TradeTypePriceStructure'))
-
-            # Extract price bands
-            if type(offers) == list:
-                trader_collection[i.get('@TraderID')]['summary']['trade_types'] = {j.get('@TradeType'): j for j in
-                                                                                   offers}
-            elif type(offers) == dict:
-                trader_collection[i.get('@TraderID')]['summary']['trade_types'] = {offers.get('@TradeType'): offers}
-            else:
-                raise Exception(f'Unexpected type: {offers}')
-
-        return trader_collection
-
-    @staticmethod
-    def get_trader_period_summary(data):
-        """Get summary of trader period data - enables quick quantity band access"""
-
-        traders = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
-                   .get('TraderPeriodCollection').get('TraderPeriod'))
-
-        # Container for trader period data
-        trader_period = {}
-
-        for i in traders:
-            trader_period[i.get('@TraderID')] = i
-            trader_period[i.get('@TraderID')]['summary'] = {}
-
-            # All offers for given trader
-            offers = i.get('TradeCollection').get('Trade')
-
-            if type(offers) == list:
-                trader_period[i.get('@TraderID')]['summary']['trade_types'] = {j.get('@TradeType'): j for j in offers}
-
-            elif type(offers) == dict:
-                trader_period[i.get('@TraderID')]['summary']['trade_types'] = {offers.get('@TradeType'): offers}
-
-            else:
-                raise Exception(f'Unexpected type: {offers}')
-
-        return trader_period
-
-    @staticmethod
-    def get_trader_initial_condition_attribute(trader_initial_conditions, attribute):
-        """Extract desired initial condition attribute value given generators initial conditions"""
-
-        for i in trader_initial_conditions:
-            if i.get('@InitialConditionID') == attribute:
-                return i.get('@Value')
-        raise Exception(f'Attribute not found: {trader_initial_conditions, attribute}')
-
-    @staticmethod
-    def get_mnsp_price_band_attribute(data, interconnector_id, region_id, attribute):
-        """MNSP price band attribute"""
-
-        # All interconnectors
-        interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('InterconnectorCollection')
-                           .get('Interconnector'))
-
-        for i in interconnectors:
-            if i.get('@InterconnectorID') != interconnector_id:
-                continue
-
-            # Offer for each region
-            offers = (i.get('MNSPPriceStructureCollection').get('MNSPPriceStructure')
-                      .get('MNSPRegionPriceStructureCollection').get('MNSPRegionPriceStructure'))
-
-            for j in offers:
-                if j.get('@RegionID') == region_id:
-                    return j.get(attribute)
-
-            raise Exception(f'Attribute not found: {attribute}')
-
-    @staticmethod
-    def get_mnsp_quantity_band_attribute(data, interconnector_id, region_id, attribute):
-        """Get quantity band information for given MNSP for a bids in a given region"""
-
-        # Path to element containing quantity band information for given interconnector and region
-        path = (f".//NemSpdInputs/PeriodCollection/Period/InterconnectorPeriodCollection/"
-                f"InterconnectorPeriod[@InterconnectorID='{mnsp_id}']/MNSPOfferCollection"
-                f"/MNSPOffer[@RegionID='{region_id}']")
-
-        # Matching elements
-        elements = self.interval_data.findall(path)
-
-        # All interconnectors
-        interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection')
-                           .get('Period').get('InterconnectorPeriodCollection'))
-
-        for i in interconnectors:
-            if i.get('@InterconnectorID') != interconnector_id:
-                continue
-
-
-
-
-
-        return self.parse_single_attribute(elements, attribute)
-
 
 if __name__ == '__main__':
     # Data directory
@@ -521,11 +390,9 @@ if __name__ == '__main__':
     nemde_data = NEMDEDataHandler(data_directory)
 
     # Object used to parse case data and extract model parameters
-    json_parser = CaseFileJSONParser()
+    json_parser = CaseFileLookupJSONParser()
 
     # Get case data for a given dispatch interval
     case_data = nemde_data.get_nemde_json(2019, 10, 10, 1)
     d = json.loads(case_data)
 
-    trader_period = json_parser.get_trader_period_summary(d)
-    trader_collection = json_parser.get_trader_collection_summary(d)

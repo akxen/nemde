@@ -133,7 +133,7 @@ class NEMDEDataHandler:
         data = self.load_file(year, month, day, interval)
 
         # Convert to dictionary
-        info = xmltodict.parse(data)
+        info = xmltodict.parse(data, attr_prefix='')
 
         return json.dumps(info)
 

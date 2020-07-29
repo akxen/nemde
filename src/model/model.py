@@ -5,15 +5,13 @@ import time
 import json
 
 import pandas as pd
-from pyomo.environ import *
+import pyomo.environ as pyo
+from pyomo.opt import SolverFactory
 from pyomo.util.infeasible import log_infeasible_constraints
 
-import matplotlib.pyplot as plt
-
-from data import NEMDEDataHandler
-from data import MMSDMDataHandler
-from fcas import FCASHandler
-from parser import CaseFileJSONParser
+from components.fcas import FCASHandler
+from components.parser import CaseFileJSONParser
+from components.utils.loader import load_dispatch_interval_json
 
 
 class NEMDEModel:
@@ -31,41 +29,41 @@ class NEMDEModel:
         """Define model sets"""
 
         # Market participants (generators and loads)
-        m.S_TRADERS = Set(initialize=self.parser.get_trader_index(data))
+        m.S_TRADERS = pyo.Set(initialize=self.parser.get_trader_index(data))
 
         # Non-scheduled generators
-        m.S_NON_SCHEDULED_GENERATORS = Set(initialize=self.parser.get_non_scheduled_generators(data))
+        m.S_NON_SCHEDULED_GENERATORS = pyo.Set(initialize=self.parser.get_non_scheduled_generators(data))
 
         # Market Network Service Providers (interconnectors that bid into the market)
-        m.S_MNSPS = Set(initialize=self.parser.get_mnsp_index(data))
+        m.S_MNSPS = pyo.Set(initialize=self.parser.get_mnsp_index(data))
 
         # All interconnectors (interconnector_id)
-        m.S_INTERCONNECTORS = Set(initialize=self.parser.get_interconnector_index(data))
+        m.S_INTERCONNECTORS = pyo.Set(initialize=self.parser.get_interconnector_index(data))
 
         # Trader offer types
-        m.S_TRADER_OFFERS = Set(initialize=self.parser.get_trader_offer_index(data))
+        m.S_TRADER_OFFERS = pyo.Set(initialize=self.parser.get_trader_offer_index(data))
 
         # MNSP offer types
-        m.S_MNSP_OFFERS = Set(initialize=self.parser.get_mnsp_offer_index(data))
+        m.S_MNSP_OFFERS = pyo.Set(initialize=self.parser.get_mnsp_offer_index(data))
 
         # Generic constraints
-        m.S_GENERIC_CONSTRAINTS = Set(initialize=self.parser.get_generic_constraint_index(data))
+        m.S_GENERIC_CONSTRAINTS = pyo.Set(initialize=self.parser.get_generic_constraint_index(data))
 
         # NEM regions
-        m.S_REGIONS = Set(initialize=self.parser.get_region_index(data))
+        m.S_REGIONS = pyo.Set(initialize=self.parser.get_region_index(data))
 
         # Generic constraints trader variables
-        m.S_GC_TRADER_VARS = Set(initialize=self.parser.get_generic_constraint_trader_variable_index(data))
+        m.S_GC_TRADER_VARS = pyo.Set(initialize=self.parser.get_generic_constraint_trader_variable_index(data))
 
         # Generic constraint interconnector variables
-        m.S_GC_INTERCONNECTOR_VARS = Set(
+        m.S_GC_INTERCONNECTOR_VARS = pyo.Set(
             initialize=self.parser.get_generic_constraint_interconnector_variable_index(data))
 
         # Generic constraint region variables
-        m.S_GC_REGION_VARS = Set(initialize=self.parser.get_generic_constraint_region_variable_index(data))
+        m.S_GC_REGION_VARS = pyo.Set(initialize=self.parser.get_generic_constraint_region_variable_index(data))
 
         # Price / quantity band index
-        m.S_BANDS = RangeSet(1, 10, 1)
+        m.S_BANDS = pyo.RangeSet(1, 10, 1)
 
         # Loss model breakpoint index for each interconnector
         loss_model_breakpoints_index = self.parser.get_interconnector_loss_model_breakpoints_index(data)
@@ -77,7 +75,7 @@ class NEMDEModel:
             return loss_model_breakpoints_index[i]
 
         # Loss model breakpoints
-        m.S_INTERCONNECTOR_BREAKPOINTS = Set(m.S_INTERCONNECTORS, rule=loss_model_interconnector_breakpoints_rule)
+        m.S_INTERCONNECTOR_BREAKPOINTS = pyo.Set(m.S_INTERCONNECTORS, rule=loss_model_interconnector_breakpoints_rule)
 
         # Loss model segment index for each interconnector
         loss_model_intervals_index = self.parser.get_interconnector_loss_model_intervals_index(data)
@@ -90,7 +88,7 @@ class NEMDEModel:
             return loss_model_intervals_index[i]
 
         # Loss model intervals
-        m.S_INTERCONNECTOR_INTERVALS = Set(m.S_INTERCONNECTORS, rule=loss_model_interconnector_intervals_rule)
+        m.S_INTERCONNECTOR_INTERVALS = pyo.Set(m.S_INTERCONNECTORS, rule=loss_model_interconnector_intervals_rule)
 
         def loss_model_breakpoints_rule(m):
             """All interconnector breakpoints"""
@@ -98,7 +96,7 @@ class NEMDEModel:
             return [(i, j) for i in m.S_INTERCONNECTORS for j in m.S_INTERCONNECTOR_BREAKPOINTS[i]]
 
         # All interconnector breakpoints
-        m.S_BREAKPOINTS = Set(initialize=loss_model_breakpoints_rule(m))
+        m.S_BREAKPOINTS = pyo.Set(initialize=loss_model_breakpoints_rule(m))
 
         def loss_model_intervals_rule(m):
             """All interconnector breakpoints"""
@@ -106,7 +104,7 @@ class NEMDEModel:
             return [(i, j) for i in m.S_INTERCONNECTORS for j in m.S_INTERCONNECTOR_INTERVALS[i]]
 
         # All interconnector intervals
-        m.S_INTERVALS = Set(initialize=loss_model_intervals_rule(m))
+        m.S_INTERVALS = pyo.Set(initialize=loss_model_intervals_rule(m))
 
         return m
 
@@ -122,7 +120,7 @@ class NEMDEModel:
             return float(trader_collection.get(i).get('summary').get('trade_types').get(j).get(f'@PriceBand{k}'))
 
         # Price bands for traders (generators / loads)
-        m.P_TRADER_PRICE_BAND = Param(m.S_TRADER_OFFERS, m.S_BANDS, rule=trader_price_band_rule)
+        m.P_TRADER_PRICE_BAND = pyo.Param(m.S_TRADER_OFFERS, m.S_BANDS, rule=trader_price_band_rule)
 
         # Summary of trader period data - enables quick access of quantity bands and other attributes
         trader_period = self.parser.get_trader_period_summary(data)
@@ -134,7 +132,7 @@ class NEMDEModel:
             return float(trader_period.get(i).get('summary').get('trade_types').get(j).get(f'@BandAvail{k}'))
 
         # Quantity bands for traders (generators / loads)
-        m.P_TRADER_QUANTITY_BAND = Param(m.S_TRADER_OFFERS, m.S_BANDS, rule=trader_quantity_band_rule)
+        m.P_TRADER_QUANTITY_BAND = pyo.Param(m.S_TRADER_OFFERS, m.S_BANDS, rule=trader_quantity_band_rule)
 
         def trader_max_available_rule(m, i, j):
             """Max available energy output from given trader"""
@@ -146,7 +144,7 @@ class NEMDEModel:
                 return float(trader_period.get(i).get('summary').get('trade_types').get(j).get('@MaxAvail'))
 
         # Max available output for given trader
-        m.P_TRADER_MAX_AVAILABLE = Param(m.S_TRADER_OFFERS, rule=trader_max_available_rule)
+        m.P_TRADER_MAX_AVAILABLE = pyo.Param(m.S_TRADER_OFFERS, rule=trader_max_available_rule)
 
         def trader_initial_mw_rule(m, i):
             """Initial power output condition for each trader"""
@@ -159,7 +157,7 @@ class NEMDEModel:
             return float(self.parser.get_trader_initial_condition_attribute(trader_initial_conditions, 'InitialMW'))
 
         # Initial MW output for generators / loads
-        m.P_TRADER_INITIAL_MW = Param(m.S_TRADERS, rule=trader_initial_mw_rule)
+        m.P_TRADER_INITIAL_MW = pyo.Param(m.S_TRADERS, rule=trader_initial_mw_rule)
 
         def mnsp_price_band_rule(m, i, j, k):
             """Price bands for MNSPs"""
@@ -168,7 +166,7 @@ class NEMDEModel:
             return self.parser.get_mnsp_price_band_attribute(data, i, j, f'PriceBand{k}')
 
         # Price bands for MNSPs
-        m.P_MNSP_PRICE_BAND = Param(m.S_MNSP_OFFERS, m.S_BANDS, rule=mnsp_price_band_rule)
+        m.P_MNSP_PRICE_BAND = pyo.Param(m.S_MNSP_OFFERS, m.S_BANDS, rule=mnsp_price_band_rule)
 
         def mnsp_quantity_band_rule(m, i, j, k):
             """Quantity bands for MNSPs"""
@@ -2186,7 +2184,6 @@ def check_solution(model):
 
 if __name__ == '__main__':
     # Data directory
-    output_directory = os.path.join(os.path.dirname(__file__), 'output')
     data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
                                   os.path.pardir, 'nemweb', 'Reports', 'Data_Archive')
 
