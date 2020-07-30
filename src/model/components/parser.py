@@ -2,10 +2,13 @@
 
 import os
 import json
-from abc import ABC, abstractmethod
 
-from utils.loader import load_dispatch_interval_json
-from utils.convert import str_to_float
+try:
+    from .utils.loader import load_dispatch_interval_json
+    from .utils.convert import str_to_float
+except ImportError:
+    from utils.loader import load_dispatch_interval_json
+    from utils.convert import str_to_float
 
 
 def parse_trader_initial_condition_collection(trader_data):
@@ -20,11 +23,11 @@ def parse_trader_initial_condition_collection(trader_data):
     return parsed_initial_conditions
 
 
-def parse_trader_price_structure_collection(trader_info):
+def parse_trader_price_structure_collection(trader_data):
     """Extract price bands"""
 
     # Extract price info
-    price_info = (trader_info.get('TradePriceStructureCollection').get('TradePriceStructure')
+    price_info = (trader_data.get('TradePriceStructureCollection').get('TradePriceStructure')
                   .get('TradeTypePriceStructureCollection').get('TradeTypePriceStructure'))
 
     if isinstance(price_info, list):
@@ -145,6 +148,12 @@ def parse_interconnector_loss_model_collection(interconnector_data):
 def parse_interconnector_price_structure(interconnector_data):
     """Parse MNSP price structure data"""
 
+    price_structure = (interconnector_data.get('MNSPPriceStructureCollection').get('MNSPPriceStructure')
+                       .get('MNSPRegionPriceStructureCollection').get('MNSPRegionPriceStructure'))
+
+    parsed = {i.get('RegionID'): {k: str_to_float(v) for k, v in i.items()} for i in price_structure}
+
+    return parsed
 
 
 def parse_interconnector_collection(data):
@@ -169,11 +178,163 @@ def parse_interconnector_collection(data):
                 parsed[interconnector_id]['initial_conditions'] = parse_interconnector_initial_condition_collection(i)
             elif k == 'LossModelCollection':
                 parsed[interconnector_id]['loss_model'] = parse_interconnector_loss_model_collection(i)
-            elif k == 'MNSPPriceStructure':
-                parsed[interconnector_id]['mnsp_price_structure'] = parse_interconnector_price_structure(i)
+            elif k == 'MNSPPriceStructureCollection':
+                parsed[interconnector_id]['price_structure'] = parse_interconnector_price_structure(i)
             else:
-                print(v)
                 parsed[interconnector_id][k] = str_to_float(v)
+
+    return parsed
+
+
+def parse_region_period_collection(data):
+    """Parse region period collection data"""
+
+    # All regions
+    regions = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
+               .get('RegionPeriodCollection').get('RegionPeriod'))
+
+    return {i.get('RegionID'): {k: str_to_float(v) for k, v in i.items()} for i in regions}
+
+
+def parse_trader_period_trade_collection(trader_data):
+    """Extract quantity band and other trader period information"""
+
+    # All trades
+    trades = trader_data.get('TradeCollection').get('Trade')
+
+    if isinstance(trades, list):
+        return {i.get('TradeType'): {k: str_to_float(v) for k, v in i.items()} for i in trades}
+    elif isinstance(trades, dict):
+        return {trades.get('TradeType'): {k: str_to_float(v) for k, v in trades.items()}}
+    else:
+        raise Exception(f'Unexpected type: {trades}')
+
+
+def parse_trader_period_collection(data):
+    """Parse trader period collection"""
+
+    # All traders
+    traders = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
+               .get('TraderPeriodCollection').get('TraderPeriod'))
+
+    # Container for parsed data
+    parsed = {}
+
+    for i in traders:
+        # Extract trader ID
+        trader_id = i.get('TraderID')
+
+        # Initialise inner dictionary for parsed trade data
+        parsed[trader_id] = {}
+
+        for k, v in i.items():
+            if k == 'TradeCollection':
+                parsed[trader_id]['trader_period'] = parse_trader_period_trade_collection(i)
+            else:
+                parsed[trader_id][k] = v
+
+    return parsed
+
+
+def parse_interconnector_period_offer_collection(interconnector_data):
+    """Parse MNSP period offer collection"""
+
+    # All trades for a given MNSP interconnector
+    trades = interconnector_data.get('MNSPOfferCollection').get('MNSPOffer')
+
+    return {i.get('RegionID'): {k: str_to_float(v) for k, v in i.items()} for i in trades}
+
+
+def parse_interconnector_period_collection(data):
+    """Parse interconnector period collection data"""
+
+    # All interconnectors
+    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
+                       .get('InterconnectorPeriodCollection').get('InterconnectorPeriod'))
+
+    # Container for parsed data
+    parsed = {}
+
+    for i in interconnectors:
+        # Extract ID
+        interconnector_id = i.get('InterconnectorID')
+
+        # Initialise inner container for parsed data
+        parsed[interconnector_id] = {}
+
+        for k, v in i.items():
+            # Handle MNSP offer collection
+            if k == 'MNSPOfferCollection':
+                parsed[interconnector_id]['offer_collection'] = parse_interconnector_period_offer_collection(i)
+
+            # Don't attempt float conversion for these keys
+            elif k in ['LossModelID']:
+                parsed[interconnector_id][k] = v
+
+            # Attempt to convert to float
+            else:
+                parsed[interconnector_id][k] = str_to_float(v)
+
+    return parsed
+
+
+def parse_generic_constraint_period_collection(data):
+    """Parse generic constraint period collection data"""
+
+    # All constraints
+    constraints = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
+                   .get('GenericConstraintPeriodCollection').get('GenericConstraintPeriod'))
+
+    return constraints
+
+
+def parse_generic_constraint_collection(data):
+    """Parse generic constraint collection data"""
+
+    # All constraints
+    constraints = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('GenericConstraintCollection')
+                   .get('GenericConstraint'))
+
+    return constraints
+
+
+def parse_constraint_solution(data):
+    """Parse constraint solution"""
+
+    # All constraints
+    constraints = data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('ConstraintSolution')
+
+    # Container for parsed constraints
+    parsed = []
+
+    for i in constraints:
+        parsed.append({k: str_to_float(v) if k in ['RHS', 'MarginalValue', 'Deficit'] else v for k, v in i.items()})
+
+    return parsed
+
+
+def parse_case_attributes(data):
+    """Parse case attributes"""
+
+    return {k: str_to_float(v) for k, v in data.get('NEMSPDCaseFile').get('NemSpdInputs').get('Case').items()}
+
+
+def parse_data(data):
+    """Parse model data and extract selected components"""
+
+    # Container for parsed data
+    parsed = {
+        'trader_collection': parse_trader_collection(data),
+        'region_collection': parse_region_collection(data),
+        'interconnector_collection': parse_interconnector_collection(data),
+        'generic_constraint_collection': parse_generic_constraint_collection(data),
+        'trader_period_collection': parse_trader_period_collection(data),
+        'region_period_collection': parse_region_period_collection(data),
+        'interconnector_period_collection': parse_interconnector_period_collection(data),
+        'generic_constraint_period_collection': parse_generic_constraint_period_collection(data),
+        'constraint_solution': parse_constraint_solution(data),
+        'case_attributes': parse_case_attributes(data),
+    }
 
     return parsed
 
@@ -190,6 +351,17 @@ if __name__ == '__main__':
     # Convert to dictionary
     cdata = json.loads(case_data_json)
 
+    import time
+
+    t0 = time.time()
     trader_collection_parsed = parse_trader_collection(cdata)
     region_collection_parsed = parse_region_collection(cdata)
     interconnector_collection_parsed = parse_interconnector_collection(cdata)
+    generic_constraint_collection_parsed = parse_generic_constraint_collection(cdata)
+    region_period_collection_parsed = parse_region_period_collection(cdata)
+    trader_period_collection_parsed = parse_trader_period_collection(cdata)
+    interconnector_period_collection_parsed = parse_interconnector_period_collection(cdata)
+    generic_constraint_period_collection_parsed = parse_generic_constraint_period_collection(cdata)
+    print(time.time() - t0)
+
+    parsed_data = parse_data(cdata)
