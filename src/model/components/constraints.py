@@ -1,9 +1,11 @@
 """Define constraints"""
 
+import time
+
 import pyomo.environ as pyo
 
 
-def define_generic_constraints(self, m):
+def define_generic_constraints(m):
     """
     Construct generic constraints. Also include constraints linking pyo.Variables in objective function to pyo.Variables in
     Generic  pyo.Constraints.
@@ -21,8 +23,9 @@ def define_generic_constraints(self, m):
         """Link total offer amount for each bid type to region pyo.Variables"""
 
         return (sum(m.V_TRADER_TOTAL_OFFER[q, r] for q, r in m.S_TRADER_OFFERS
-                    if (self.data.get_trader_period_attribute(q, 'RegionID') == i) and (r == j))
-                == m.V_GC_REGION[i, j])
+                    # if (self.data.get_trader_period_attribute(q, 'RegionID') == i)
+                    if (m.P_TRADER_REGION[q] == i)
+                    and (r == j)) == m.V_GC_REGION[i, j])
 
     # Link between region pyo.Variables and the trader components constituting those pyo.Variables
     m.C_REGION_VARIABLE_LINK = pyo.Constraint(m.S_GC_REGION_VARS, rule=region_variable_link_rule)
@@ -31,8 +34,11 @@ def define_generic_constraints(self, m):
         """Link generic constraint MNSP pyo.Variables to objective function pyo.Variables"""
 
         # From and to regions for a given MNSP
-        from_region = self.data.get_interconnector_period_attribute(i, 'FromRegion')
-        to_region = self.data.get_interconnector_period_attribute(i, 'ToRegion')
+        # from_region = self.data.get_interconnector_period_attribute(i, 'FromRegion')
+        from_region = m.P_INTERCONNECTOR_FROM_REGION[i]
+
+        # to_region = self.data.get_interconnector_period_attribute(i, 'ToRegion')
+        to_region = m.P_INTERCONNECTOR_TO_REGION[i]
 
         # TODO: Taking difference between 'to' and 'from' region. Think this is correct.
         return m.V_GC_INTERCONNECTOR[i] == m.V_MNSP_TOTAL_OFFER[i, to_region] - m.V_MNSP_TOTAL_OFFER[i, from_region]
@@ -44,7 +50,8 @@ def define_generic_constraints(self, m):
         """NEMDE Generic  pyo.Constraints"""
 
         # Type of generic constraint (LE, GE, EQ)
-        constraint_type = self.data.get_generic_constraint_attribute(c, 'Type')
+        # constraint_type = self.data.get_generic_constraint_attribute(c, 'Type')
+        constraint_type = m.P_GENERIC_CONSTRAINT_TYPE[c]
 
         if constraint_type == 'LE':
             return m.E_LHS_TERMS[c] <= m.P_RHS[c] + m.V_CV[c]
@@ -61,7 +68,6 @@ def define_generic_constraints(self, m):
     return m
 
 
-@staticmethod
 def define_offer_constraints(m):
     """Ensure trader and MNSP bids don't exceed their specified bid bands"""
 
@@ -116,7 +122,7 @@ def define_offer_constraints(m):
     return m
 
 
-def define_unit_constraints(self, m):
+def define_unit_constraints(m):
     """Construct ramp rate constraints for units"""
 
     def trader_ramp_up_rate_rule(m, i, j):
@@ -127,10 +133,12 @@ def define_unit_constraints(self, m):
             return pyo.Constraint.Skip
 
         # Ramp rate
-        ramp_limit = self.data.get_trader_quantity_band_attribute(i, j, 'RampUpRate')
+        # ramp_limit = self.data.get_trader_quantity_band_attribute(i, j, 'RampUpRate')
+        ramp_limit = m.P_TRADER_RAMP_UP_RATE[i]
 
         # Initial MW
-        initial_mw = self.data.get_trader_initial_condition_attribute(i, 'InitialMW')
+        # initial_mw = self.data.get_trader_initial_condition_attribute(i, 'InitialMW')
+        initial_mw = m.P_TRADER_INITIAL_MW[i]
 
         return m.V_TRADER_TOTAL_OFFER[i, j] - initial_mw <= (ramp_limit / 12) + m.V_CV_TRADER_RAMP_UP[i]
 
@@ -145,10 +153,12 @@ def define_unit_constraints(self, m):
             return pyo.Constraint.Skip
 
         # Ramp rate
-        ramp_limit = self.data.get_trader_quantity_band_attribute(i, j, 'RampDnRate')
+        # ramp_limit = self.data.get_trader_quantity_band_attribute(i, j, 'RampDnRate')
+        ramp_limit = m.P_TRADER_RAMP_DOWN_RATE[i]
 
         # Initial MW
-        initial_mw = self.data.get_trader_initial_condition_attribute(i, 'InitialMW')
+        # initial_mw = self.data.get_trader_initial_condition_attribute(i, 'InitialMW')
+        initial_mw = m.P_TRADER_INITIAL_MW[i]
 
         return m.V_TRADER_TOTAL_OFFER[i, j] - initial_mw + m.V_CV_TRADER_RAMP_DOWN[i] >= - (ramp_limit / 12)
 
@@ -158,7 +168,6 @@ def define_unit_constraints(self, m):
     return m
 
 
-@staticmethod
 def define_region_constraints(m):
     """Define power balance constraint for each region, and constrain flows on interconnectors"""
 
@@ -178,14 +187,16 @@ def define_region_constraints(m):
     return m
 
 
-def define_interconnector_constraints(self, m):
+def define_interconnector_constraints(m):
     """Define power flow limits on interconnectors"""
 
     def interconnector_forward_flow_rule(m, i):
         """Constrain forward power flow over interconnector"""
 
-        return (m.V_GC_INTERCONNECTOR[i] <= self.data.get_interconnector_period_attribute(i, 'UpperLimit')
-                + m.V_CV_INTERCONNECTOR_FORWARD[i])
+        # return (m.V_GC_INTERCONNECTOR[i] <= self.data.get_interconnector_period_attribute(i, 'UpperLimit')
+        #         + m.V_CV_INTERCONNECTOR_FORWARD[i])
+
+        return m.V_GC_INTERCONNECTOR[i] <= m.P_INTERCONNECTOR_UPPER_LIMIT[i] + m.V_CV_INTERCONNECTOR_FORWARD[i]
 
     # Forward power flow limit for interconnector
     m.C_INTERCONNECTOR_FORWARD_FLOW = pyo.Constraint(m.S_INTERCONNECTORS, rule=interconnector_forward_flow_rule)
@@ -193,8 +204,10 @@ def define_interconnector_constraints(self, m):
     def interconnector_reverse_flow_rule(m, i):
         """Constrain reverse power flow over interconnector"""
 
-        return (m.V_GC_INTERCONNECTOR[i] + m.V_CV_INTERCONNECTOR_REVERSE[i]
-                >= - self.data.get_interconnector_period_attribute(i, 'LowerLimit'))
+        # return (m.V_GC_INTERCONNECTOR[i] + m.V_CV_INTERCONNECTOR_REVERSE[i]
+        #         >= - self.data.get_interconnector_period_attribute(i, 'LowerLimit'))
+
+        return m.V_GC_INTERCONNECTOR[i] + m.V_CV_INTERCONNECTOR_REVERSE[i] >= - m.P_INTERCONNECTOR_LOWER_LIMIT[i]
 
     # Forward power flow limit for interconnector
     m.C_INTERCONNECTOR_REVERSE_FLOW = pyo.Constraint(m.S_INTERCONNECTORS, rule=interconnector_reverse_flow_rule)
@@ -202,10 +215,12 @@ def define_interconnector_constraints(self, m):
     def from_node_connection_point_balance_rule(m, i):
         """Power balance at from node connection point"""
 
-        # Loss share applied to from node connection point
-        loss_share = self.data.get_interconnector_loss_model_attribute(i, 'LossShare')
+        # # Loss share applied to from node connection point
+        # loss_share = self.data.get_interconnector_loss_model_attribute(i, 'LossShare')
+        #
+        # return m.V_FLOW_FROM_CP[i] - (loss_share * m.V_LOSS[i]) - m.V_GC_INTERCONNECTOR[i] == 0
 
-        return m.V_FLOW_FROM_CP[i] - (loss_share * m.V_LOSS[i]) - m.V_GC_INTERCONNECTOR[i] == 0
+        return m.V_FLOW_FROM_CP[i] - (m.P_INTERCONNECTOR_LOSS_SHARE[i] * m.V_LOSS[i]) - m.V_GC_INTERCONNECTOR[i] == 0
 
     # From node connection point power balance
     m.C_FROM_NODE_CP_POWER_BALANCE = pyo.Constraint(m.S_INTERCONNECTORS,
@@ -215,7 +230,8 @@ def define_interconnector_constraints(self, m):
         """Power balance at to node connection point"""
 
         # Loss share applied to from node connection point
-        loss_share = 1 - self.data.get_interconnector_loss_model_attribute(i, 'LossShare')
+        # loss_share = 1 - self.data.get_interconnector_loss_model_attribute(i, 'LossShare')
+        loss_share = 1 - m.P_INTERCONNECTOR_LOSS_SHARE[i]
 
         return m.V_GC_INTERCONNECTOR[i] - (loss_share * m.V_LOSS[i]) - m.V_FLOW_TO_CP[i] == 0
 
@@ -286,7 +302,6 @@ def get_fcas_trapezium_scaled_enablement_max(self, trader_id, trapezium):
     return trapezium
 
 
-@staticmethod
 def get_trapezium_lhs_slope(trapezium):
     """Get slope on LHS of trapezium. Return None if slope is undefined."""
 
@@ -296,7 +311,6 @@ def get_trapezium_lhs_slope(trapezium):
         return None
 
 
-@staticmethod
 def get_trapezium_rhs_slope(trapezium):
     """Get slope on RHS of trapezium. Return None if slope is undefined."""
 
@@ -508,7 +522,6 @@ def check_trader_has_energy_offer(self, trader_id, m):
         return False
 
 
-@staticmethod
 def get_slope(x1, x2, y1, y2):
     """Compute slope. Return None if slope is undefined"""
 
@@ -518,7 +531,6 @@ def get_slope(x1, x2, y1, y2):
         return None
 
 
-@staticmethod
 def get_intercept(slope, x0, y0):
     """Get y-axis intercept given slope and point"""
 
@@ -966,7 +978,6 @@ def define_fcas_constraints(self, m):
     return m
 
 
-@staticmethod
 def define_loss_model_constraints(m):
     """Interconnector loss model constraints"""
 

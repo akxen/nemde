@@ -38,7 +38,7 @@ def define_aggregate_power_expressions(m):
         """Available energy offers in given region"""
 
         return sum(m.V_TRADER_TOTAL_OFFER[i, j] for i, j in m.S_TRADER_OFFERS
-                   if (j == 'ENOF') and (i in m.S_REGION_TRADER_MAP[r]))
+                   if (j == 'ENOF') and (m.P_TRADER_REGION[i] == r))
 
     # Total generation dispatched in a given region
     m.E_REGION_GENERATION = pyo.Expression(m.S_REGIONS, rule=region_generation_rule)
@@ -47,7 +47,7 @@ def define_aggregate_power_expressions(m):
         """Available load offers in given region"""
 
         return sum(m.V_TRADER_TOTAL_OFFER[i, j] for i, j in m.S_TRADER_OFFERS
-                   if (j == 'LDOF') and (i in m.S_REGION_TRADER_MAP[r]))
+                   if (j == 'LDOF') and (m.P_TRADER_REGION[i] == r))
 
     # Total load dispatched in a given region
     m.E_REGION_LOAD = pyo.Expression(m.S_REGIONS, rule=region_load_rule)
@@ -92,16 +92,16 @@ def define_aggregate_power_expressions(m):
         """Total initial scheduled load in a given region"""
 
         total = 0
-        for i, j in self.data.get_trader_offer_index():
+        for i, j in m.S_TRADER_OFFERS:
             if j == 'LDOF':
                 # Semi-dispatch status
-                semi_dispatch_status = self.data.get_trader_attribute(i, 'SemiDispatch')
+                semi_dispatch_status = m.P_TRADER_SEMI_DISPATCH_STATUS[i]
 
                 # Trader region
-                region = self.data.get_trader_period_attribute(i, 'RegionID')
+                region = m.P_TRADER_REGION[i]
 
                 if (r == region) and (semi_dispatch_status == 0):
-                    total += self.data.get_trader_initial_condition_attribute(i, 'InitialMW')
+                    total += m.P_TRADER_INITIAL_MW[i]
 
         return total
 
@@ -116,23 +116,23 @@ def define_aggregate_power_expressions(m):
     # # Total initial allocated losses
     # m.E_TOTAL_INITIAL_ALLOCATED_LOSSES = pyo.Expression(m.S_REGIONS, rule=total_initial_allocated_losses)
     #
-    # def region_demand_rule(m, r):
-    #     """Get demand in each region. Using forecast demand for now."""
-    #
-    #     # Demand in each NEM region
-    #     demand = (
-    #             self.data.get_region_initial_condition_attribute(r, 'InitialDemand')
-    #             + self.data.get_region_initial_condition_attribute(r, 'ADE')
-    #             + self.data.get_region_period_attribute(r, 'DF')
-    #             - m.E_TOTAL_INITIALMW_SCHEDULED_LOAD[r]
-    #             - m.E_TOTAL_INITIAL_ALLOCATED_LOSSES[r]
-    #     )
-    #
-    #     return demand
-    #
-    # # Region Demand
-    # m.E_REGION_DEMAND = pyo.Expression(m.S_REGIONS, rule=region_demand_rule)
-    #
+    def region_demand_rule(m, r):
+        """Get demand in each region. Using forecast demand for now."""
+
+        # Demand in each NEM region
+        demand = (
+                m.P_REGION_INITIAL_DEMAND[r]
+                + m.P_REGION_ADE[r]
+                + m.P_REGION_DF[r]
+                - m.E_TOTAL_INITIALMW_SCHEDULED_LOAD[r]
+            # - m.E_TOTAL_INITIAL_ALLOCATED_LOSSES[r] # TODO: need to add this
+        )
+
+        return demand
+
+    # Region Demand
+    m.E_REGION_DEMAND = pyo.Expression(m.S_REGIONS, rule=region_demand_rule)
+
     # def allocated_interconnector_losses_observed_rule(m, r):
     #     """Losses obtained from model solution and assigned to each region"""
     #
@@ -162,14 +162,17 @@ def define_aggregate_power_expressions(m):
     return m
 
 
-def define_generic_constraint_expressions(m):
+def define_generic_constraint_expressions(m, data):
     """Define expressions used to construct generic constraint components"""
+
+    lhs_terms = data.get('generic_constraint_collection').get('lhs_terms')
 
     def lhs_terms_rule(m, i):
         """Get LHS expression for a given Generic  pyo.Constraint"""
 
         # LHS terms and associated factors
-        terms = self.data.get_generic_constraint_lhs_terms(i)
+        # terms = self.data.get_generic_constraint_lhs_terms(i)
+        terms = lhs_terms[i]
 
         # Trader terms
         t_terms = sum(m.V_GC_TRADER[index] * factor for index, factor in terms['traders'].items())
@@ -192,11 +195,11 @@ def define_constraint_violation_penalty_expressions(m):
     """Define expressions relating constraint violation penalties"""
 
     def generic_constraint_violation_rule(m, i):
-        """ pyo.Constraint violation penalty for generic constraint which is an inequality"""
+        """ Constraint violation penalty for generic constraint which is an inequality"""
 
         return m.P_CVF_GC[i] * m.V_CV[i]
 
-    #  pyo.Constraint violation penalty for inequality constraints
+    # Constraint violation penalty for inequality constraints
     m.E_CV_GC_PENALTY = pyo.Expression(m.S_GENERIC_CONSTRAINTS, rule=generic_constraint_violation_rule)
 
     def generic_constraint_lhs_violation_rule(m, i):
@@ -356,38 +359,26 @@ def define_constraint_violation_penalty_expressions(m):
                                                            rule=interconnector_reverse_penalty_rule)
 
     # Sum of all constraint violation penalties
-    m.E_CV_TOTAL_PENALTY = pyo.Expression(expr=sum(m.E_CV_GC_PENALTY[i] for i in m.S_GENERIC_CONSTRAINTS)
-                                               + sum(m.E_CV_GC_LHS_PENALTY[i] for i in m.S_GENERIC_CONSTRAINTS)
-                                               + sum(m.E_CV_GC_RHS_PENALTY[i] for i in m.S_GENERIC_CONSTRAINTS)
-                                               + sum(m.E_CV_TRADER_OFFER_PENALTY[i, j, k]
-                                                     for i, j in m.S_TRADER_OFFERS for k in m.S_BANDS)
-                                               + sum(m.E_CV_TRADER_CAPACITY_PENALTY[i] for i in m.S_TRADER_OFFERS)
-                                               + sum(m.E_CV_TRADER_RAMP_UP_PENALTY[i] for i in m.S_TRADERS)
-                                               + sum(m.E_CV_TRADER_RAMP_DOWN_PENALTY[i] for i in m.S_TRADERS)
-                                               + sum(m.E_CV_TRADER_TRAPEZIUM_PENALTY[i] for i in m.S_TRADER_OFFERS)
-                                               + sum(
-        m.E_CV_TRADER_FCAS_TRAPEZIUM_PENALTY[i] for i in m.S_TRADER_OFFERS)
-                                               + sum(
-        m.E_CV_TRADER_JOINT_RAMPING_UP_PENALTY[i] for i in m.S_TRADER_OFFERS)
-                                               + sum(
-        m.E_CV_TRADER_JOINT_RAMPING_DOWN_PENALTY[i] for i in m.S_TRADER_OFFERS)
-                                               + sum(
-        m.E_CV_TRADER_JOINT_CAPACITY_UP_PENALTY[i] for i in m.S_TRADER_OFFERS)
-                                               + sum(
-        m.E_CV_TRADER_JOINT_CAPACITY_DOWN_PENALTY[i] for i in m.S_TRADER_OFFERS)
-                                               + sum(
-        m.E_CV_JOINT_REGULATING_CAPACITY_UP_PENALTY[i] for i in m.S_TRADER_OFFERS)
-                                               + sum(
-        m.E_CV_JOINT_REGULATING_CAPACITY_DOWN_PENALTY[i] for i in m.S_TRADER_OFFERS)
-                                               + sum(m.E_CV_MNSP_OFFER_PENALTY[i, j, k] for i, j in m.S_MNSP_OFFERS
-                                                     for k in m.S_BANDS)
-                                               + sum(m.E_CV_MNSP_CAPACITY_PENALTY[i] for i in m.S_MNSP_OFFERS)
-                                               + sum(
-        m.E_CV_INTERCONNECTOR_FORWARD_PENALTY[i] for i in m.S_INTERCONNECTORS)
-                                               + sum(
-        m.E_CV_INTERCONNECTOR_REVERSE_PENALTY[i] for i in m.S_INTERCONNECTORS)
-                                          )
+    m.E_CV_TOTAL_PENALTY = pyo.Expression(
+        expr=sum(m.E_CV_GC_PENALTY[i] for i in m.S_GENERIC_CONSTRAINTS)
+             + sum(m.E_CV_GC_LHS_PENALTY[i] for i in m.S_GENERIC_CONSTRAINTS)
+             + sum(m.E_CV_GC_RHS_PENALTY[i] for i in m.S_GENERIC_CONSTRAINTS)
+             + sum(m.E_CV_TRADER_OFFER_PENALTY[i, j, k] for i, j in m.S_TRADER_OFFERS for k in m.S_BANDS)
+             + sum(m.E_CV_TRADER_CAPACITY_PENALTY[i] for i in m.S_TRADER_OFFERS)
+             + sum(m.E_CV_TRADER_RAMP_UP_PENALTY[i] for i in m.S_TRADERS)
+             + sum(m.E_CV_TRADER_RAMP_DOWN_PENALTY[i] for i in m.S_TRADERS)
+             + sum(m.E_CV_TRADER_TRAPEZIUM_PENALTY[i] for i in m.S_TRADER_OFFERS)
+             + sum(m.E_CV_TRADER_FCAS_TRAPEZIUM_PENALTY[i] for i in m.S_TRADER_OFFERS)
+             + sum(m.E_CV_TRADER_JOINT_RAMPING_UP_PENALTY[i] for i in m.S_TRADER_OFFERS)
+             + sum(m.E_CV_TRADER_JOINT_RAMPING_DOWN_PENALTY[i] for i in m.S_TRADER_OFFERS)
+             + sum(m.E_CV_TRADER_JOINT_CAPACITY_UP_PENALTY[i] for i in m.S_TRADER_OFFERS)
+             + sum(m.E_CV_TRADER_JOINT_CAPACITY_DOWN_PENALTY[i] for i in m.S_TRADER_OFFERS)
+             + sum(m.E_CV_JOINT_REGULATING_CAPACITY_UP_PENALTY[i] for i in m.S_TRADER_OFFERS)
+             + sum(m.E_CV_JOINT_REGULATING_CAPACITY_DOWN_PENALTY[i] for i in m.S_TRADER_OFFERS)
+             + sum(m.E_CV_MNSP_OFFER_PENALTY[i, j, k] for i, j in m.S_MNSP_OFFERS for k in m.S_BANDS)
+             + sum(m.E_CV_MNSP_CAPACITY_PENALTY[i] for i in m.S_MNSP_OFFERS)
+             + sum(m.E_CV_INTERCONNECTOR_FORWARD_PENALTY[i] for i in m.S_INTERCONNECTORS)
+             + sum(m.E_CV_INTERCONNECTOR_REVERSE_PENALTY[i] for i in m.S_INTERCONNECTORS)
+    )
 
     return m
-
-

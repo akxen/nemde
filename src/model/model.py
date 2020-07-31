@@ -12,6 +12,7 @@ from pyomo.util.infeasible import log_infeasible_constraints
 # from components.fcas import FCASHandler
 import components.parser
 import components.expressions
+import components.constraints
 from components.utils.loader import load_dispatch_interval_json
 from components.constructor import ParsedInputConstructor, JSONInputConstructor, XMLInputConstructor
 
@@ -64,49 +65,37 @@ class NEMDEModel:
         # Price / quantity band index
         m.S_BANDS = pyo.RangeSet(1, 10, 1)
 
-        # # Loss model breakpoint index for each interconnector
-        # loss_model_breakpoints_index = self.parser.get_interconnector_loss_model_breakpoints_index(data)
-        #
-        # # TODO: need to speed this up - index list of indices slow to construct
-        # def loss_model_interconnector_breakpoints_rule(m, i):
-        #     """Interconnector loss model breakpoint index"""
-        #
-        #     return loss_model_breakpoints_index[i]
-        #
-        # # Loss model breakpoints
-        # m.S_INTERCONNECTOR_BREAKPOINTS = pyo.Set(m.S_INTERCONNECTORS, rule=loss_model_interconnector_breakpoints_rule)
-
-        # # Loss model segment index for each interconnector
-        # loss_model_intervals_index = self.parser.get_interconnector_loss_model_intervals_index(data)
-        #
-        # # TODO: need to speed this up - index list of indices slow to construct
-        # def loss_model_interconnector_intervals_rule(m, i):
-        #     """Interconnector loss model intervals"""
-        #
-        #     # return range(1, len(segments))
-        #     return loss_model_intervals_index[i]
-        #
-        # # Loss model intervals
-        # m.S_INTERCONNECTOR_INTERVALS = pyo.Set(m.S_INTERCONNECTORS, rule=loss_model_interconnector_intervals_rule)
-        #
-        # def loss_model_breakpoints_rule(m):
-        #     """All interconnector breakpoints"""
-        #
-        #     return [(i, j) for i in m.S_INTERCONNECTORS for j in m.S_INTERCONNECTOR_BREAKPOINTS[i]]
-        #
-        # # All interconnector breakpoints
-        # m.S_BREAKPOINTS = pyo.Set(initialize=loss_model_breakpoints_rule(m))
-        #
-        # def loss_model_intervals_rule(m):
-        #     """All interconnector breakpoints"""
-        #
-        #     return [(i, j) for i in m.S_INTERCONNECTORS for j in m.S_INTERCONNECTOR_INTERVALS[i]]
-        #
-        # # All interconnector intervals
-        # m.S_INTERVALS = pyo.Set(initialize=loss_model_intervals_rule(m))
-
         # Mapping between regions and traders
         m.S_REGION_TRADER_MAP = pyo.Param(m.S_REGIONS, rule=self.constructor.get_region_trader_map(data))
+
+        # TODO: Fix loss model construction
+        # Loss model breakpoints
+        m.S_INTERCONNECTOR_BREAKPOINTS = pyo.Set(m.S_INTERCONNECTORS,
+                                                 rule=self.constructor.get_loss_model_breakpoint_index(data))
+
+        def loss_model_interconnector_intervals_rule(m, i):
+            """Interconnector loss model intervals"""
+
+            return range(len(m.S_INTERCONNECTOR_BREAKPOINTS[i]) - 1)
+
+        # Loss model intervals
+        m.S_INTERCONNECTOR_INTERVALS = pyo.Set(m.S_INTERCONNECTORS, rule=loss_model_interconnector_intervals_rule)
+
+        def loss_model_breakpoints_rule(m):
+            """All interconnector breakpoints"""
+
+            return [(i, j) for i in m.S_INTERCONNECTORS for j in m.S_INTERCONNECTOR_BREAKPOINTS[i]]
+
+        # All interconnector breakpoints
+        m.S_BREAKPOINTS = pyo.Set(initialize=loss_model_breakpoints_rule(m))
+
+        def loss_model_intervals_rule(m):
+            """All interconnector breakpoints"""
+
+            return [(i, j) for i in m.S_INTERCONNECTORS for j in m.S_INTERCONNECTOR_INTERVALS[i]]
+
+        # All interconnector intervals
+        m.S_INTERVALS = pyo.Set(initialize=loss_model_intervals_rule(m))
 
         return m
 
@@ -188,25 +177,6 @@ class NEMDEModel:
         # Interconnector power flow violation price
         m.P_CVF_INTERCONNECTOR_PRICE = pyo.Param(rule=self.constructor.get_case_attribute(data, 'InterconnectorPrice'))
 
-        # Interconnector loss model segments
-        # loss_segments = {i: self.data.get_interconnector_absolute_loss_segments(i) for i in m.S_INTERCONNECTORS}
-
-        # def loss_model_breakpoint_x_rule(m, i, j):
-        #     """Loss model breakpoints"""
-        #
-        #     return loss_segments[i][j - 1][0]
-        #
-        # # Loss model breakpoints
-        # m.P_LOSS_MODEL_BREAKPOINTS_X = pyo.Param(m.S_BREAKPOINTS, rule=loss_model_breakpoint_x_rule)
-        #
-        # def loss_model_breakpoint_y_rule(m, i, j):
-        #     """Loss model breakpoints"""
-        #
-        #     return loss_segments[i][j - 1][1]
-        #
-        # # Loss model breakpoints
-        # m.P_LOSS_MODEL_BREAKPOINTS_Y = pyo.Param(m.S_BREAKPOINTS, rule=loss_model_breakpoint_y_rule)
-        #
         # MNSP loss price
         m.P_MNSP_LOSS_PRICE = pyo.Param(rule=self.constructor.get_case_attribute(data, 'MNSPLossesPrice'))
 
@@ -225,6 +195,49 @@ class NEMDEModel:
         # MNSP from and to region loss factor
         m.P_MNSP_FROM_REGION_LF = pyo.Param(m.S_MNSPS, rule=self.constructor.get_mnsp_from_region_loss_factor(data))
         m.P_MNSP_TO_REGION_LF = pyo.Param(m.S_MNSPS, rule=self.constructor.get_mnsp_to_region_loss_factor(data))
+
+        # Trader region
+        m.P_TRADER_REGION = pyo.Param(m.S_TRADERS, rule=self.constructor.get_trader_regions(data))
+
+        # Semi-dispatch status
+        m.P_TRADER_SEMI_DISPATCH_STATUS = pyo.Param(m.S_TRADERS,
+                                                    rule=self.constructor.get_trader_semi_dispatch_status(data))
+
+        # Initial region demand
+        m.P_REGION_INITIAL_DEMAND = pyo.Param(m.S_REGIONS, rule=self.constructor.get_region_initial_demand(data))
+
+        # Region aggregate dispatch error
+        m.P_REGION_ADE = pyo.Param(m.S_REGIONS, rule=self.constructor.get_region_ade(data))
+
+        # Region demand forecast
+        m.P_REGION_DF = pyo.Param(m.S_REGIONS, rule=self.constructor.get_region_df(data))
+
+        # Loss model breakpoints
+        m.P_LOSS_MODEL_BREAKPOINTS_X = pyo.Param(m.S_BREAKPOINTS,
+                                                 rule=self.constructor.get_loss_model_breakpoints_x(data))
+
+        # Loss model breakpoints
+        m.P_LOSS_MODEL_BREAKPOINTS_Y = pyo.Param(m.S_BREAKPOINTS,
+                                                 rule=self.constructor.get_loss_model_breakpoints_y(data))
+
+        # Generic constraint type
+        m.P_GENERIC_CONSTRAINT_TYPE = pyo.Param(m.S_GENERIC_CONSTRAINTS,
+                                                rule=self.constructor.get_generic_constraint_type(data))
+
+        # Trader ramp-up and down rates
+        m.P_TRADER_RAMP_UP_RATE = pyo.Param(m.S_TRADERS, rule=self.constructor.get_trader_ramp_up_rate(data))
+        m.P_TRADER_RAMP_DOWN_RATE = pyo.Param(m.S_TRADERS, rule=self.constructor.get_trader_ramp_down_rate(data))
+
+        # Interconnector upper and lower limits
+        m.P_INTERCONNECTOR_UPPER_LIMIT = pyo.Param(m.S_INTERCONNECTORS,
+                                                   rule=self.constructor.get_interconnector_upper_limits(data))
+
+        m.P_INTERCONNECTOR_LOWER_LIMIT = pyo.Param(m.S_INTERCONNECTORS,
+                                                   rule=self.constructor.get_interconnector_lower_limits(data))
+
+        # Interconnector loss share
+        m.P_INTERCONNECTOR_LOSS_SHARE = pyo.Param(m.S_INTERCONNECTORS,
+                                                  rule=self.constructor.get_interconnector_loss_share(data))
 
         return m
 
@@ -290,8 +303,8 @@ class NEMDEModel:
 
         # Loss model breakpoints and intervals
         m.V_LOSS = pyo.Var(m.S_INTERCONNECTORS)
-        # m.V_LOSS_LAMBDA = pyo.Var(m.S_BREAKPOINTS, within=pyo.NonNegativeReals)
-        # m.V_LOSS_Y = pyo.Var(m.S_INTERVALS, within=pyo.Binary)
+        m.V_LOSS_LAMBDA = pyo.Var(m.S_BREAKPOINTS, within=pyo.NonNegativeReals)
+        m.V_LOSS_Y = pyo.Var(m.S_INTERVALS, within=pyo.Binary)
 
         # Flow between region and interconnector connection points
         m.V_FLOW_FROM_CP = pyo.Var(m.S_INTERCONNECTORS)
@@ -300,51 +313,52 @@ class NEMDEModel:
         return m
 
     @staticmethod
-    def define_expressions(m):
+    def define_expressions(m, data):
         """Define model expressions"""
 
         # Define all expression types
         m = components.expressions.define_cost_function_expressions(m)
         m = components.expressions.define_aggregate_power_expressions(m)
 
-        # m = self.define_generic_constraint_expressions(m, data)
-        # m = self.define_constraint_violation_penalty_expressions(m)
+        m = components.expressions.define_generic_constraint_expressions(m, data)
+        m = components.expressions.define_constraint_violation_penalty_expressions(m)
 
         return m
 
-    def define_constraints(self, m, data):
+    @staticmethod
+    def define_constraints(m):
         """Define model constraints"""
 
         t0 = time.time()
 
         # Ensure offer bands aren't violated
         print('Starting to define constraints:', time.time() - t0)
-        m = self.define_offer_constraints(m)
+        m = components.constraints.define_offer_constraints(m)
         print('Defined offer constraints:', time.time() - t0)
 
         # Construct generic constraints and link pyo.Variables to those found in objective
-        m = self.define_generic_constraints(m)
+        m = components.constraints.define_generic_constraints(m)
         print('Defined generic constraints:', time.time() - t0)
 
         # Construct unit constraints (e.g. ramp rate constraints)
-        m = self.define_unit_constraints(m)
+        m = components.constraints.define_unit_constraints(m)
         print('Defined unit constraints:', time.time() - t0)
 
         # Construct region power balance constraints
-        m = self.define_region_constraints(m)
+        m = components.constraints.define_region_constraints(m)
         print('Defined region constraints:', time.time() - t0)
 
         # Construct interconnector constraints
-        m = self.define_interconnector_constraints(m)
+        m = components.constraints.define_interconnector_constraints(m)
         print('Defined interconnector constraints:', time.time() - t0)
 
-        # Construct FCAS constraints
-        m = self.define_fcas_constraints(m)
-        print('Defined FCAS constraints:', time.time() - t0)
+        # # Construct FCAS constraints
+        # m = components.constraints.define_fcas_constraints(m)
+        # print('Defined FCAS constraints:', time.time() - t0)
 
-        # SOS2 interconnector loss model constraints
-        m = self.define_loss_model_constraints(m)
-        print('Defined loss model constraints:', time.time() - t0)
+        # # SOS2 interconnector loss model constraints
+        # m = self.define_loss_model_constraints(m)
+        # print('Defined loss model constraints:', time.time() - t0)
 
         return m
 
@@ -354,9 +368,8 @@ class NEMDEModel:
 
         # Total cost for energy and ancillary services
         m.OBJECTIVE = pyo.Objective(expr=sum(m.E_TRADER_COST_FUNCTION[t] for t in m.S_TRADER_OFFERS)
-                                         + sum(m.E_MNSP_COST_FUNCTION[t] for t in m.S_MNSP_OFFERS)
-                                         + m.E_CV_TOTAL_PENALTY
-                                    # + m.E_LOSS_COST
+                                         # + sum(m.E_MNSP_COST_FUNCTION[t] for t in m.S_MNSP_OFFERS)
+                                         # + m.E_CV_TOTAL_PENALTY
                                     ,
                                     sense=pyo.minimize)
 
@@ -385,17 +398,17 @@ class NEMDEModel:
         m = self.define_variables(m)
         print('Defined variables:', time.time() - t0)
 
-        m = self.define_expressions(m)
+        m = self.define_expressions(m, data)
         print('Defined expressions:', time.time() - t0)
+
+        m = self.define_constraints(m)
+        print('Defined constraints:', time.time() - t0)
+
+        m = self.define_objective(m)
+        print('Defined objective:', time.time() - t0)
 
         return m
 
-        # m = self.define_constraints(m)
-        # print('Defined constraints:', time.time() - t0)
-        #
-        # m = self.define_objective(m)
-        # print('Defined objective:', time.time() - t0)
-        #
         # # Fix interconnector solution
         # m = self.fix_interconnector_solution(m)
         # # m = self.fix_fcas_solution(m)
@@ -490,8 +503,8 @@ if __name__ == '__main__':
     # Construct model for given trading interval
     nemde_model = nemde.construct_model(parsed_data)
 
-    # # Solve model
-    # nemde_model, status = nemde.solve_model(nemde_model)
+    # Solve model
+    nemde_model, status = nemde.solve_model(nemde_model)
 
     # # Process solution
     # nemde_solution = nemde.get_solution(nemde_model)

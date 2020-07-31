@@ -73,7 +73,7 @@ class ParsedInputConstructor:
         """Get generic constraint trader variable index"""
 
         # All constraints
-        constraints = data.get('generic_constraint_collection')
+        constraints = data.get('generic_constraint_collection').get('constraints')
 
         # Container for variables
         variables = []
@@ -100,7 +100,7 @@ class ParsedInputConstructor:
         """Get generic constraint interconnector variable index"""
 
         # All constraints
-        constraints = data.get('generic_constraint_collection')
+        constraints = data.get('generic_constraint_collection').get('constraints')
 
         # Container for variables
         variables = []
@@ -130,7 +130,7 @@ class ParsedInputConstructor:
         """Get generic constraint region variable index"""
 
         # All constraints
-        constraints = data.get('generic_constraint_collection')
+        constraints = data.get('generic_constraint_collection').get('constraints')
 
         # Container for variables
         variables = []
@@ -190,9 +190,9 @@ class ParsedInputConstructor:
 
             for trade_type, trade_data in trader_data.get('trader_period').items():
                 if (uigf is not None) and (trade_type == 'ENOF'):
-                    max_available[(trader_id, trade_type)] = uigf
+                    max_available[(trader_id, trade_type)] = float(uigf)
                 else:
-                    max_available[(trader_id, trade_type)] = trade_data.get('MaxAvail')
+                    max_available[(trader_id, trade_type)] = float(trade_data.get('MaxAvail'))
 
         return max_available
 
@@ -200,8 +200,7 @@ class ParsedInputConstructor:
     def get_trader_initial_mw(data):
         """Get trader initial MW"""
 
-        return {trader_id: trader_data.get('initial_conditions').get('InitialMW')
-                for trader_id, trader_data in data.get('trader_collection').items()}
+        return {k: v.get('initial_conditions').get('InitialMW') for k, v in data.get('trader_collection').items()}
 
     @staticmethod
     def get_mnsp_price_bands(data):
@@ -273,7 +272,8 @@ class ParsedInputConstructor:
     def get_generic_constraint_violation_factors(data):
         """Get generic constraint violation factors"""
 
-        return {i.get('ConstraintID'): i.get('ViolationPrice') for i in data.get('generic_constraint_collection')
+        return {i.get('ConstraintID'): float(i.get('ViolationPrice'))
+                for i in data.get('generic_constraint_collection').get('constraints')
                 if i.get('LHSFactorCollection') is not None}
 
     @staticmethod
@@ -347,6 +347,257 @@ class ParsedInputConstructor:
 
         return loss_factors
 
+    @staticmethod
+    def get_trader_regions(data):
+        """Get region for each trader"""
+
+        return {k: v.get('RegionID') for k, v in data.get('trader_period_collection').items()}
+
+    @staticmethod
+    def get_trader_semi_dispatch_status(data):
+        """Get trader semi-dispatch status"""
+
+        return {k: bool(v.get('SemiDispatch')) for k, v in data.get('trader_collection').items()}
+
+    @staticmethod
+    def get_region_initial_demand(data):
+        """Get region initial demand"""
+
+        return {k: v.get('initial_conditions').get('InitialDemand') for k, v in data.get('region_collection').items()}
+
+    @staticmethod
+    def get_region_ade(data):
+        """Get region aggregate dispatch error"""
+
+        return {k: v.get('initial_conditions').get('ADE') for k, v in data.get('region_collection').items()}
+
+    @staticmethod
+    def get_region_df(data):
+        """Get region demand forecast"""
+
+        return {k: v.get('DF') for k, v in data.get('region_period_collection').items()}
+
+    # TODO: need to fix loss model construction
+    @staticmethod
+    def get_loss_model_breakpoint_index(data):
+        """Get loss model breakpoints index"""
+
+        return {k: range(0, len(v.get('loss_model').get('segment_collection').keys()) + 1)
+                for k, v in data.get('interconnector_collection').items()}
+
+    @staticmethod
+    def get_loss_model_breakpoints_x(data):
+        """Get loss model breakpoint x-coordinate"""
+
+        # Container for loss model breakpoint x-coordinates
+        breakpoints_x = {}
+
+        for interconnector_id, interconnector_data in data.get('interconnector_collection').items():
+            # Get all loss model segments segments
+            segments = interconnector_data.get('loss_model').get('segment_collection')
+
+            for i in range(0, len(segments.keys()) + 1):
+                # First element is loss lower limit
+                if i == 0:
+                    breakpoints_x[(interconnector_id, i)] = -interconnector_data.get('loss_model').get('LossLowerLimit')
+                # Remaining elements are from loss model segments
+                else:
+                    breakpoints_x[(interconnector_id, i)] = segments[i - 1].get('Limit')
+
+        return breakpoints_x
+
+    @staticmethod
+    def get_interconnector_loss_estimate(data, interconnector_id, flow):
+        """Estimate interconnector loss - numerically integrating loss model segments"""
+
+        # Construct segments based on loss model
+        # segments = self.get_segments(interconnector_id)
+        segments = (data.get('interconnector_collection').get(interconnector_id).get('loss_model')
+                    .get('segment_collection'))
+
+        # First segment
+        # start = -self.get_interconnector_loss_model_attribute(interconnector_id, 'LossLowerLimit')
+        start = -data.get('interconnector_collection').get(interconnector_id).get('loss_model').get('LossLowerLimit')
+
+        # Format segments with start, end, and factor
+        new_segments = []
+        for _, s in segments.items():
+            segment = {'start': start, 'end': s['Limit'], 'factor': s['Factor']}
+            start = s['Limit']
+            new_segments.append(segment)
+
+        # Initialise total in
+        total_area = 0
+        for s in new_segments:
+            if flow > 0:
+                # Only want segments to right of origin
+                if s['end'] <= 0:
+                    proportion = 0
+
+                # Only want segments that are less than or equal to flow
+                elif s['start'] > flow:
+                    proportion = 0
+
+                # Take positive part of segment if segment crosses origin
+                elif (s['start'] < 0) and (s['end'] > 0):
+                    # Part of segment that is positive
+                    positive_proportion = s['end'] / (s['end'] - s['start'])
+
+                    # Flow proportion (if flow close to zero)
+                    flow_proportion = flow / (s['end'] - s['start'])
+
+                    # Take min value
+                    proportion = min(positive_proportion, flow_proportion)
+
+                # If flow within segment
+                elif (flow >= s['start']) and (flow <= s['end']):
+                    # Segment proportion
+                    proportion = (flow - s['start']) / (s['end'] - s['start'])
+
+                # Use full segment if flow greater than end of segment - use full segment
+                elif flow > s['end']:
+                    proportion = 1
+
+                else:
+                    raise Exception('Unhandled case')
+
+                # Compute block area
+                area = (s['end'] - s['start']) * s['factor'] * proportion
+
+                # Update total area
+                total_area += area
+
+            # Flow is <= 0
+            else:
+                # Only want segments to left of origin
+                if s['start'] >= 0:
+                    proportion = 0
+
+                # Only want segments that are >= flow
+                elif s['end'] < flow:
+                    proportion = 0
+
+                # Take negative part of segment if segment crosses origin
+                elif (s['start'] < 0) and (s['end'] > 0):
+                    # Part of segment that is negative
+                    negative_proportion = - s['start'] / (s['end'] - s['start'])
+
+                    # Flow proportion (if flow close to zero)
+                    flow_proportion = -flow / (s['end'] - s['start'])
+
+                    # Take min value
+                    proportion = min(negative_proportion, flow_proportion)
+
+                # If flow within segment
+                elif (flow >= s['start']) and (flow <= s['end']):
+                    # Segment proportion
+                    proportion = -1 * (flow - s['end']) / (s['end'] - s['start'])
+
+                # Use full segment if flow less than start of segment - use full segment
+                elif flow <= s['start']:
+                    proportion = 1
+
+                else:
+                    raise Exception('Unhandled case')
+
+                # Compute block area
+                area = -1 * (s['end'] - s['start']) * s['factor'] * proportion
+
+                # Update total area
+                total_area += area
+
+        return total_area
+
+    # TODO: need to fix this
+    def get_loss_model_breakpoints_y(self, data):
+        """Compute absolute loss at each breakpoint"""
+
+        # Container for all losses
+        losses = {}
+
+        for i, i_data in data.get('interconnector_collection').items():
+            for segment_id, segment_data in i_data.get('loss_model').get('segment_collection').items():
+                losses[(i, segment_id + 1)] = self.get_interconnector_loss_estimate(data, i, segment_data.get('Limit'))
+
+            # Loss lower limit as first element
+            losses[(i, 0)] = self.get_interconnector_loss_estimate(data, i,
+                                                                   -i_data.get('loss_model').get('LossLowerLimit'))
+
+        return losses
+
+    @staticmethod
+    def get_generic_constraint_type(data):
+        """Get generic constraint types"""
+
+        # All constraints
+        constraints = data.get('generic_constraint_collection').get('constraints')
+
+        return {i.get('ConstraintID'): i.get('Type') for i in constraints if i.get('LHSFactorCollection') is not None}
+
+    @staticmethod
+    def get_trader_ramp_up_rate(data):
+        """Get trader ramp-up rate"""
+
+        # All traders
+        traders = data.get('trader_period_collection')
+
+        # Container for parsed data
+        parsed = {}
+
+        for trader_id, trader_data in traders.items():
+            if 'ENOF' in trader_data.get('trader_period').keys():
+                ramp_rate = trader_data.get('trader_period').get('ENOF').get('RampUpRate')
+            elif 'LDOF' in trader_data.get('trader_period').keys():
+                ramp_rate = trader_data.get('trader_period').get('LDOF').get('RampUpRate')
+            else:
+                ramp_rate = None
+
+            # Append to container
+            parsed[trader_id] = ramp_rate
+
+        return parsed
+
+    @staticmethod
+    def get_trader_ramp_down_rate(data):
+        """Get trader ramp-down rate"""
+
+        # All traders
+        traders = data.get('trader_period_collection')
+
+        # Container for parsed data
+        parsed = {}
+
+        for trader_id, trader_data in traders.items():
+            if 'ENOF' in trader_data.get('trader_period').keys():
+                ramp_rate = trader_data.get('trader_period').get('ENOF').get('RampDnRate')
+            elif 'LDOF' in trader_data.get('trader_period').keys():
+                ramp_rate = trader_data.get('trader_period').get('LDOF').get('RampDnRate')
+            else:
+                ramp_rate = None
+
+            # Append to container
+            parsed[trader_id] = ramp_rate
+
+        return parsed
+
+    @staticmethod
+    def get_interconnector_upper_limits(data):
+        """Get interconnector upper limits"""
+
+        return {k: v.get('UpperLimit') for k, v in data.get('interconnector_period_collection').items()}
+
+    @staticmethod
+    def get_interconnector_lower_limits(data):
+        """Get interconnector lower limits"""
+
+        return {k: v.get('LowerLimit') for k, v in data.get('interconnector_period_collection').items()}
+
+    @staticmethod
+    def get_interconnector_loss_share(data):
+        """Get interconnector loss share"""
+
+        return {k: v.get('loss_model').get('LossShare') for k, v in data.get('interconnector_collection').items()}
+
 
 class JSONInputConstructor:
     @staticmethod
@@ -374,3 +625,5 @@ if __name__ == '__main__':
     # Convert to dictionary
     cdata_r = json.loads(case_data_json)
     cdata = parser.parse_data(cdata_r)
+
+    ParsedInputConstructor().get_interconnector_loss_estimate(cdata, 'V-SA', 100)

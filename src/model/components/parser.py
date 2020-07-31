@@ -2,6 +2,7 @@
 
 import os
 import json
+from collections import OrderedDict
 
 try:
     from .utils.loader import load_dispatch_interval_json
@@ -124,7 +125,7 @@ def parse_interconnector_loss_model_segment_collection(loss_model_data):
     # All loss models segments
     segments = loss_model_data.get('SegmentCollection').get('Segment')
 
-    return {i: {k: str_to_float(v) for k, v in j.items()} for i, j in enumerate(segments)}
+    return OrderedDict({i: {k: str_to_float(v) for k, v in j.items()} for i, j in enumerate(segments)})
 
 
 def parse_interconnector_loss_model_collection(interconnector_data):
@@ -288,16 +289,6 @@ def parse_generic_constraint_period_collection(data):
     return constraints
 
 
-def parse_generic_constraint_collection(data):
-    """Parse generic constraint collection data"""
-
-    # All constraints
-    constraints = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('GenericConstraintCollection')
-                   .get('GenericConstraint'))
-
-    return constraints
-
-
 def parse_constraint_solution(data):
     """Parse constraint solution"""
 
@@ -317,6 +308,108 @@ def parse_case_attributes(data):
     """Parse case attributes"""
 
     return {k: str_to_float(v) for k, v in data.get('NEMSPDCaseFile').get('NemSpdInputs').get('Case').items()}
+
+
+def parse_generic_constraint_trader_terms(constraint_data):
+    """Parse generic constraint trader terms"""
+
+    # All trader factor terms for a given constraint
+    terms = constraint_data.get('LHSFactorCollection').get('TraderFactor')
+
+    # Return empty dictionary if no terms
+    if terms is None:
+        return {}
+
+    # Container for parsed trader terms
+    parsed = {}
+    if isinstance(terms, dict):
+        parsed[(terms.get('TraderID'), terms.get('TradeType'))] = float(terms.get('Factor'))
+    elif isinstance(terms, list):
+        for i in terms:
+            parsed[(i.get('TraderID'), i.get('TradeType'))] = float(i.get('Factor'))
+    else:
+        raise Exception(f'Unexpected type: {constraint_data}')
+
+    return parsed
+
+
+def parse_generic_constraint_interconnector_terms(constraint_data):
+    """Parse generic constraint interconnector terms"""
+
+    # All interconnector factor terms for a given constraint
+    terms = constraint_data.get('LHSFactorCollection').get('InterconnectorFactor')
+
+    # Return empty dictionary if no terms
+    if terms is None:
+        return {}
+
+    # Container for parsed interconnector terms
+    parsed = {}
+    if isinstance(terms, dict):
+        parsed[(terms.get('InterconnectorID'))] = float(terms.get('Factor'))
+    elif isinstance(terms, list):
+        for i in terms:
+            parsed[(i.get('InterconnectorID'))] = float(i.get('Factor'))
+    else:
+        raise Exception(f'Unexpected type: {constraint_data}')
+
+    return parsed
+
+
+def parse_generic_constraint_region_terms(constraint_data):
+    """Parse generic constraint region terms"""
+
+    # All region factor terms for a given constraint
+    terms = constraint_data.get('LHSFactorCollection').get('RegionFactor')
+
+    # Return empty dictionary if no terms
+    if terms is None:
+        return {}
+
+    # Container for parsed region terms
+    parsed = {}
+    if isinstance(terms, dict):
+        parsed[(terms.get('RegionID'), terms.get('TradeType'))] = float(terms.get('Factor'))
+    elif isinstance(terms, list):
+        for i in terms:
+            parsed[(i.get('RegionID'), i.get('TradeType'))] = float(i.get('Factor'))
+    else:
+        raise Exception(f'Unexpected type: {constraint_data}')
+
+    return parsed
+
+
+def parse_generic_constraint_collection(data):
+    """Parse generic constraint collection data"""
+
+    # All constraints
+    constraints = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('GenericConstraintCollection')
+                   .get('GenericConstraint'))
+
+    # Parsed dictionary
+    lhs_terms = {}
+
+    # Dictionaries containing parsed data
+    trader_factors = {}
+    interconnector_factors = {}
+    region_factors = {}
+
+    for i in constraints:
+        if i.get('LHSFactorCollection') is None:
+            continue
+
+        # Extract terms for traders, interconnectors, and regions
+        trader_factors = {**trader_factors, **parse_generic_constraint_trader_terms(i)}
+        interconnector_factors = {**interconnector_factors, **parse_generic_constraint_interconnector_terms(i)}
+        region_factors = {**region_factors, **parse_generic_constraint_region_terms(i)}
+
+        # Combine terms into a single dictionary
+        terms = {'traders': trader_factors, 'interconnectors': interconnector_factors, 'regions': region_factors}
+        lhs_terms[i.get('ConstraintID')] = terms
+
+    parsed = {'constraints': constraints, 'lhs_terms': lhs_terms}
+
+    return parsed
 
 
 def parse_data(data):
@@ -362,6 +455,11 @@ if __name__ == '__main__':
     trader_period_collection_parsed = parse_trader_period_collection(cdata)
     interconnector_period_collection_parsed = parse_interconnector_period_collection(cdata)
     generic_constraint_period_collection_parsed = parse_generic_constraint_period_collection(cdata)
+    h = parse_generic_constraint_collection(cdata)
     print(time.time() - t0)
 
     parsed_data = parse_data(cdata)
+
+
+    # with open('cdata.json', 'w') as f:
+    #     json.dump(parsed_data, f)
