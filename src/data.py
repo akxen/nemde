@@ -42,6 +42,8 @@ class MMSDMDataHandler:
 
         z_1_name = f'MMSDM_{year}_{month:02}.zip'
 
+        print(os.listdir(self.mmsdm_dir))
+
         with zipfile.ZipFile(os.path.join(self.mmsdm_dir, z_1_name)) as z_1:
             z_2_name = f'MMSDM_{year}_{month:02}/MMSDM_Historical_Data_SQLLoader/DATA/PUBLIC_DVD_{name}_{year}{month:02}010000.zip'
             with z_1.open(z_2_name) as z_2:
@@ -89,6 +91,8 @@ class NEMDEDataHandler:
 
         z_1_name = f'NEMDE_{year}_{month:02}.zip'
 
+        print(os.listdir(self.nemde_dir))
+
         with zipfile.ZipFile(os.path.join(self.nemde_dir, z_1_name)) as z_1:
             if f'NEMDE_{year}_{month:02}/NEMDE_Market_Data/' in z_1.namelist():
                 z_2_name = f'NEMDE_{year}_{month:02}/NEMDE_Market_Data/NEMDE_Files/NemSpdOutputs_{year}{month:02}{day:02}_loaded.zip'
@@ -125,17 +129,6 @@ class NEMDEDataHandler:
         info = xmltodict.parse(data)
 
         return info
-
-    def get_nemde_json(self, year, month, day, interval):
-        """Get NEMDE input / output file in dictionary format"""
-
-        # Load NEMDE inputs / outputs
-        data = self.load_file(year, month, day, interval)
-
-        # Convert to dictionary
-        info = xmltodict.parse(data, attr_prefix='')
-
-        return json.dumps(info)
 
     def load_interval(self, year, month, day, interval):
         """Load xml data for a given interval"""
@@ -1393,27 +1386,27 @@ if __name__ == '__main__':
     # Load interval
     nemde_data.load_interval(2019, 10, 10, 1)
 
-    # # for i in nemde_data.get_interconnector_index():
-    # for i in ['V-SA']:
-    #     segments = nemde_data.get_interconnector_absolute_loss_segments(i)
-    #     x, y = [i[0] for i in segments], [i[1] for i in segments]
-    #     fig, ax = plt.subplots()
-    #     ax.plot(x, y)
-    #     ax.set_title(i)
-    #
-    #     # Solution loss
-    #     solution_loss = nemde_data.get_interconnector_solution_attribute(i, 'Losses')
-    #     flow_min, flow_max = segments[0][0], segments[-1][0]
-    #
-    #     # Min and max flow
-    #     ax.plot([flow_min, flow_max], [solution_loss, solution_loss], linewidth=1.2, alpha=0.7, linestyle=':')
-    #
-    #     # Solution flow
-    #     solution_flow = nemde_data.get_interconnector_solution_attribute(i, 'Flow')
-    #     loss_max = max([i[1] for i in segments]) + 10
-    #     loss_min = min([i[1] for i in segments]) - 10
-    #     ax.plot([solution_flow, solution_flow], [loss_min, loss_max], linewidth=1.2, alpha=0.7, linestyle=':')
-    #
-    #     plt.show()
+    # for i in nemde_data.get_interconnector_index():
+    for i in ['V-SA']:
+        segments = nemde_data.get_interconnector_absolute_loss_segments(i)
+        x, y = [i[0] for i in segments], [i[1] for i in segments]
+        fig, ax = plt.subplots()
+        ax.plot(x, y)
+        ax.set_title(i)
 
-    j = nemde_data.get_interconnector_absolute_loss_segments('N-Q-MNSP1')
+        # Solution loss
+        solution_loss = nemde_data.get_interconnector_solution_attribute(i, 'Losses')
+        flow_min, flow_max = segments[0][0], segments[-1][0]
+
+        # Min and max flow
+        ax.plot([flow_min, flow_max], [solution_loss, solution_loss], linewidth=1.2, alpha=0.7, linestyle=':')
+
+        # Solution flow
+        solution_flow = nemde_data.get_interconnector_solution_attribute(i, 'Flow')
+        loss_max = max([i[1] for i in segments]) + 10
+        loss_min = min([i[1] for i in segments]) - 10
+        ax.plot([solution_flow, solution_flow], [loss_min, loss_max], linewidth=1.2, alpha=0.7, linestyle=':')
+
+        plt.show()
+
+

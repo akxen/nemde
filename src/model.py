@@ -117,6 +117,14 @@ class NEMDEModel:
         def trader_price_band_rule(m, i, j, k):
             """Price bands for traders"""
 
+            # NOTE: Including MLFs seem to lead to better results. May not be required.
+            # mlf = self.mmsdm_data.get_marginal_loss_factor(i)
+            #
+            # if j == 'LDOF':
+            #     return self.data.get_trader_price_band_attribute(i, j, f'PriceBand{k}') * mlf
+            # else:
+            #     return self.data.get_trader_price_band_attribute(i, j, f'PriceBand{k}') / mlf
+
             return self.data.get_trader_price_band_attribute(i, j, f'PriceBand{k}')
 
         # Price bands for traders (generators / loads)
@@ -2102,73 +2110,6 @@ class NEMDESolution:
         return m
 
 
-def check_solution(model):
-    """Check model solution"""
-
-    # Check solution
-    enof = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'ENOF', 'EnergyTarget')
-    ldof = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'LDOF', 'EnergyTarget')
-
-    r6se = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'R6SE', 'R6Target')
-    r60s = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'R60S', 'R60Target')
-    r5mi = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'R5MI', 'R5Target')
-    r5reg = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'R5RE', 'R5RegTarget')
-
-    l6se = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'L6SE', 'L6Target')
-    l60s = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'L60S', 'L60Target')
-    l5mi = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'L5MI', 'L5Target')
-    l5reg = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'L5RE', 'L5RegTarget')
-
-    # Scheduled units
-    scheduled_traders = analysis.get_scheduled_traders()
-
-    # Filter scheduled generators and loads
-    enof_scheduled = enof.loc[enof.index.intersection(scheduled_traders), :]
-    ldof_scheduled = ldof.loc[ldof.index.intersection(scheduled_traders), :]
-
-    # Write generic constraints
-    nemde.save_generic_constraints(model)
-
-    # Combine into single DataFrame
-    duid = 'JBUTTERS'
-    analysis.check_trader_solution(model, duid)
-    analysis.print_fcas_constraints(model, duid)
-
-    # Check interconnector solution
-    analysis.check_interconnector_solution(model)
-
-    def sa_v_loss(flow):
-        """Loss equation for V-SA interconnector"""
-        vic_demand = nemde.data.get_region_period_attribute('VIC1', 'DemandForecast')
-        sa_demand = nemde.data.get_region_period_attribute('SA1', 'DemandForecast')
-        return (0.0138 + (1.3598E-06 * vic_demand) + (-1.3290E-05 * sa_demand)) * flow + (1.4761E-04 * (flow ** 2))
-
-    interconnectors = ['N-Q-MNSP1', 'NSW1-QLD1', 'T-V-MNSP1', 'V-S-MNSP1', 'V-SA', 'VIC1-NSW1']
-    total_loss = sum(nemde.data.get_interconnector_solution_attribute(i, 'Losses') for i in interconnectors)
-
-    gen_surplus = enof['difference'].sum()
-    load_surplus = ldof['difference'].sum()
-
-    x = [i[1] for i in model.P_LOSS_MODEL_BREAKPOINTS_X.items() if i[0][0] == 'V-S-MNSP1']
-    y = [i[1] for i in model.P_LOSS_MODEL_BREAKPOINTS_Y.items() if i[0][0] == 'V-S-MNSP1']
-
-    print('V-S-MNSP1 solution loss', nemde.data.get_interconnector_solution_attribute('V-S-MNSP1', 'Losses'))
-    print('V-S-MNSP1 model loss', model.V_LOSS['V-S-MNSP1'].value)
-
-    print('V-S-MNSP1 solution flow', nemde.data.get_interconnector_solution_attribute('V-S-MNSP1', 'Flow'))
-    print('V-S-MNSP1 model flow', model.V_GC_INTERCONNECTOR['V-S-MNSP1'].value)
-
-    fig, ax = plt.subplots()
-    ax.plot(x, y)
-    plt.show()
-
-    interconnector_loss_solution = {i: nemde.data.get_interconnector_solution_attribute(i, 'Losses')
-                                    for i in model.S_INTERCONNECTORS}
-
-    interconnector_flow_solution = {i: nemde.data.get_interconnector_solution_attribute(i, 'Flow')
-                                    for i in model.S_INTERCONNECTORS}
-
-
 if __name__ == '__main__':
     # Data directory
     output_directory = os.path.join(os.path.dirname(__file__), 'output')
@@ -2187,7 +2128,72 @@ if __name__ == '__main__':
     analysis.fcas.data.load_interval(2019, 10, 10, 1)
 
     # Construct model for given trading interval
-    nemde_model = nemde.construct_model(2019, 10, 10, 1)
+    model = nemde.construct_model(2019, 10, 10, 1)
 
     # Solve model
-    nemde_model, status = nemde.solve_model(nemde_model)
+    model, status = nemde.solve_model(model)
+
+    # # Check solution
+    # enof = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'ENOF', 'EnergyTarget')
+    # ldof = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'LDOF', 'EnergyTarget')
+    #
+    # r6se = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'R6SE', 'R6Target')
+    # r60s = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'R60S', 'R60Target')
+    # r5mi = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'R5MI', 'R5Target')
+    # r5reg = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'R5RE', 'R5RegTarget')
+    #
+    # l6se = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'L6SE', 'L6Target')
+    # l60s = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'L60S', 'L60Target')
+    # l5mi = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'L5MI', 'L5Target')
+    # l5reg = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'L5RE', 'L5RegTarget')
+    #
+    # # Scheduled units
+    # scheduled_traders = analysis.get_scheduled_traders()
+    #
+    # # Filter scheduled generators and loads
+    # enof_scheduled = enof.loc[enof.index.intersection(scheduled_traders), :]
+    # ldof_scheduled = ldof.loc[ldof.index.intersection(scheduled_traders), :]
+    #
+    # # Write generic constraints
+    # nemde.save_generic_constraints(model)
+    #
+    # # Combine into single DataFrame
+    # duid = 'JBUTTERS'
+    # analysis.check_trader_solution(model, duid)
+    # analysis.print_fcas_constraints(model, duid)
+    #
+    # # Check interconnector solution
+    # analysis.check_interconnector_solution(model)
+    #
+    #
+    # def sa_v_loss(flow):
+    #     """Loss equation for V-SA interconnector"""
+    #     vic_demand = nemde.data.get_region_period_attribute('VIC1', 'DemandForecast')
+    #     sa_demand = nemde.data.get_region_period_attribute('SA1', 'DemandForecast')
+    #     return (0.0138 + (1.3598E-06 * vic_demand) + (-1.3290E-05 * sa_demand)) * flow + (1.4761E-04 * (flow ** 2))
+    #
+    #
+    # interconnectors = ['N-Q-MNSP1', 'NSW1-QLD1', 'T-V-MNSP1', 'V-S-MNSP1', 'V-SA', 'VIC1-NSW1']
+    # total_loss = sum(nemde.data.get_interconnector_solution_attribute(i, 'Losses') for i in interconnectors)
+    #
+    # gen_surplus = enof['difference'].sum()
+    # load_surplus = ldof['difference'].sum()
+    #
+    # x = [i[1] for i in model.P_LOSS_MODEL_BREAKPOINTS_X.items() if i[0][0] == 'V-S-MNSP1']
+    # y = [i[1] for i in model.P_LOSS_MODEL_BREAKPOINTS_Y.items() if i[0][0] == 'V-S-MNSP1']
+    #
+    # print('V-S-MNSP1 solution loss', nemde.data.get_interconnector_solution_attribute('V-S-MNSP1', 'Losses'))
+    # print('V-S-MNSP1 model loss', model.V_LOSS['V-S-MNSP1'].value)
+    #
+    # print('V-S-MNSP1 solution flow', nemde.data.get_interconnector_solution_attribute('V-S-MNSP1', 'Flow'))
+    # print('V-S-MNSP1 model flow', model.V_GC_INTERCONNECTOR['V-S-MNSP1'].value)
+    #
+    # fig, ax = plt.subplots()
+    # ax.plot(x, y)
+    # plt.show()
+    #
+    # interconnector_loss_solution = {i: nemde.data.get_interconnector_solution_attribute(i, 'Losses')
+    #                                 for i in model.S_INTERCONNECTORS}
+    #
+    # interconnector_flow_solution = {i: nemde.data.get_interconnector_solution_attribute(i, 'Flow')
+    #                                 for i in model.S_INTERCONNECTORS}
