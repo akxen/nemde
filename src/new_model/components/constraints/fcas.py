@@ -39,10 +39,10 @@ def as_profile_1_rule(m, i, j):
     # Get slope between enablement min and low breakpoint
     x1, y1 = trapezium['enablement_min'], 0
     x2, y2 = trapezium['low_breakpoint'], trapezium['max_available']
-    slope = self.get_slope(x1, x2, y1, y2)
+    slope = get_slope(x1, x2, y1, y2)
 
     if slope is not None:
-        y_intercept = self.get_intercept(slope, x1, y1)
+        y_intercept = get_intercept(slope, x1, y1)
         try:
             return (m.V_TRADER_TOTAL_OFFER[i, j] <= slope * m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + y_intercept
                     + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j]
@@ -100,10 +100,10 @@ def as_profile_3_rule(m, i, j):
     # Get slope between enablement min and low breakpoint
     x1, y1 = trapezium['high_breakpoint'], trapezium['max_available']
     x2, y2 = trapezium['enablement_max'], 0
-    slope = self.get_slope(x1, x2, y1, y2)
+    slope = get_slope(x1, x2, y1, y2)
 
     if slope is not None:
-        y_intercept = self.get_intercept(slope, x1, y1)
+        y_intercept = get_intercept(slope, x1, y1)
         try:
             return (m.V_TRADER_TOTAL_OFFER[i, j] <= slope * m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + y_intercept
                     + m.V_CV_TRADER_FCAS_AS_PROFILE_3[i, j])

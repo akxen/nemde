@@ -13,11 +13,15 @@ from utils.loaders import load_dispatch_interval_json
 from components.expressions.cost_functions import define_cost_function_expressions
 from components.expressions.constraint_violation import define_constraint_violation_penalty_expressions
 from components.expressions.aggregate_power import define_aggregate_power_expressions
+from components.expressions.generic_constraints import define_generic_constraint_expressions
 
 from components.constraints.offers import define_offer_constraints
 from components.constraints.units import define_unit_constraints
 from components.constraints.regions import define_region_constraints
 from components.constraints.interconnectors import define_interconnector_constraints
+from components.constraints.generic_constraints import define_generic_constraints
+
+
 # from components.constraints.fcas import define_fcas_constraints
 # from components.constraints.loss import define_loss_model_constraints
 
@@ -105,6 +109,22 @@ class NEMDEModel:
                                                    initialize=data['P_TRADER_PERIOD_RAMP_UP_RATE'])
         m.P_TRADER_PERIOD_RAMP_DOWN_RATE = pyo.Param(m.S_TRADER_ENERGY_OFFERS,
                                                      initialize=data['P_TRADER_PERIOD_RAMP_DOWN_RATE'])
+
+        # Trader FCAS enablement min
+        m.P_TRADER_FCAS_ENABLEMENT_MIN = pyo.Param(m.S_TRADER_FCAS_OFFERS,
+                                                   initialize=data['P_TRADER_FCAS_ENABLEMENT_MIN'])
+
+        # Trader FCAS low breakpoint
+        m.P_TRADER_FCAS_LOW_BREAKPOINT = pyo.Param(m.S_TRADER_FCAS_OFFERS,
+                                                   initialize=data['P_TRADER_FCAS_LOW_BREAKPOINT'])
+
+        # Trader FCAS high breakpoint
+        m.P_TRADER_FCAS_HIGH_BREAKPOINT = pyo.Param(m.S_TRADER_FCAS_OFFERS,
+                                                    initialize=data['P_TRADER_FCAS_HIGH_BREAKPOINT'])
+
+        # Trader FCAS enablement max
+        m.P_TRADER_FCAS_ENABLEMENT_MAX = pyo.Param(m.S_TRADER_FCAS_OFFERS,
+                                                   initialize=data['P_TRADER_FCAS_ENABLEMENT_MAX'])
 
         # Interconnector 'to' and 'from' regions
         m.P_INTERCONNECTOR_TO_REGION = pyo.Param(m.S_INTERCONNECTORS, initialize=data['P_INTERCONNECTOR_TO_REGION'])
@@ -209,7 +229,7 @@ class NEMDEModel:
         m.P_CVF_INTERCONNECTOR_PRICE = pyo.Param(initialize=data['P_CVF_INTERCONNECTOR_PRICE'])
 
         return m
-    
+
     @staticmethod
     def define_variables(m):
         """Define model pyo.Variables"""
@@ -282,12 +302,12 @@ class NEMDEModel:
         return m
 
     @staticmethod
-    def define_expressions(m):
+    def define_expressions(m, data):
         """Define model expressions"""
 
         # Cost function expressions
         m = define_cost_function_expressions(m)
-        # m = define_generic_constraint_expressions(m)
+        m = define_generic_constraint_expressions(m, data)
         m = define_constraint_violation_penalty_expressions(m)
         m = define_aggregate_power_expressions(m)
 
@@ -303,9 +323,9 @@ class NEMDEModel:
         m = define_offer_constraints(m)
         print('Defined offer constraints:', time.time() - t0)
 
-        # # Construct generic constraints and link variables to those found in objective
-        # m = self.define_generic_constraints(m)
-        # print('Defined generic constraints:', time.time() - t0)
+        # Construct generic constraints and link variables to those found in objective
+        m = define_generic_constraints(m)
+        print('Defined generic constraints:', time.time() - t0)
 
         # Construct unit constraints (e.g. ramp rate constraints)
         m = define_unit_constraints(m)
@@ -329,6 +349,20 @@ class NEMDEModel:
 
         return m
 
+    @staticmethod
+    def define_objective(m):
+        """Define model objective"""
+
+        # Total cost for energy and ancillary services
+        m.OBJECTIVE = pyo.Objective(expr=sum(m.E_TRADER_COST_FUNCTION[t] for t in m.S_TRADER_OFFERS)
+                                         + sum(m.E_MNSP_COST_FUNCTION[t] for t in m.S_MNSP_OFFERS)
+                                         + m.E_CV_TOTAL_PENALTY
+                                    # + m.E_LOSS_COST
+                                    ,
+                                    sense=pyo.minimize)
+
+        return m
+
     def construct_model(self, data):
         """Create model object"""
 
@@ -340,15 +374,28 @@ class NEMDEModel:
         m = self.define_sets(m, data)
         m = self.define_parameters(m, data)
         m = self.define_variables(m)
-        m = self.define_expressions(m)
+        m = self.define_expressions(m, data)
         m = self.define_constraints(m)
+        m = self.define_objective(m)
         print('Constructed model in:', time.time() - t0)
 
         return m
 
-    def solve_model(self):
+    @staticmethod
+    def solve_model(m):
         """Solve model"""
-        pass
+        # Setup solver
+        solver_options = {}  # 'MIPGap': 0.0005,
+        opt = pyo.SolverFactory('cplex', solver_io='lp')
+
+        # Solve model
+        t0 = time.time()
+
+        print('Starting solve:', time.time() - t0)
+        solve_status = opt.solve(m, tee=False, options=solver_options, keepfiles=False)
+        print('Finished solve:', time.time() - t0)
+
+        return m, solve_status
 
 
 if __name__ == '__main__':
@@ -373,7 +420,5 @@ if __name__ == '__main__':
     # Construct model
     nemde_model = nemde.construct_model(case_data)
 
-    # # Solve model
-    # nemde_model, status = nemde.solve_model(nemde_model)
-
-
+    # Solve model
+    nemde_model, status = nemde.solve_model(nemde_model)

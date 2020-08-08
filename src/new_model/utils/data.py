@@ -11,6 +11,8 @@ def convert_to_list(dict_or_list) -> list:
         return [dict_or_list]
     elif isinstance(dict_or_list, list):
         return dict_or_list
+    elif dict_or_list is None:
+        return []
     else:
         raise Exception(f'Unexpected type: {dict_or_list}')
 
@@ -303,6 +305,25 @@ def get_trader_period_ramp_rate(data, attribute, func) -> dict:
             for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
                       .get('TraderPeriodCollection').get('TraderPeriod'))
             for j in convert_to_list(i.get('TradeCollection').get('Trade')) if j['@TradeType'] in ['ENOF', 'LDOF']}
+
+
+def get_trader_fcas_offer_attribute(data, attribute, func) -> dict:
+    """Get trader FCAS offer attribute"""
+
+    # All traders
+    traders = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
+               .get('TraderPeriodCollection').get('TraderPeriod'))
+
+    # NEMSPDCaseFile.NemSpdInputs.PeriodCollection.Period.TraderPeriodCollection.TraderPeriod[3].TradeCollection.Trade[1].@MaxAvail
+    # Container for values
+    return {(i['@TraderID'], j['@TradeType']): func(j[attribute])
+            for i in traders for j in convert_to_list(i.get('TradeCollection').get('Trade'))
+            if j['@TradeType'] in ['L6SE', 'L60S', 'L5MI', 'L5RE', 'R6SE', 'R60S', 'R5MI', 'R5RE']}
+
+
+def get_trader_fcas_trapezium_offer(data) -> dict:
+    """Get FCAS trapeziums"""
+    pass
 
 
 def get_interconnector_collection_attribute(data, attribute, func) -> dict:
@@ -791,6 +812,42 @@ def get_generic_constraint_collection_attribute(data, attribute, func) -> dict:
     return values
 
 
+def parse_constraint(constraint_data):
+    """Constraint data"""
+
+    lhs = constraint_data.get('LHSFactorCollection')
+
+    if lhs is None:
+        return {}
+
+    # Trader factors
+    traders = {(i['@TraderID'], i['@TradeType']): float(i['@Factor'])
+               for i in convert_to_list(lhs.get('TraderFactor', []))}
+
+    # Interconnector factors
+    interconnectors = {(i['@InterconnectorID']): float(i['@Factor'])
+                       for i in convert_to_list(lhs.get('InterconnectorFactor', []))}
+
+    # Region factors
+    regions = {(i['@RegionID'], i['@TradeType']): float(i['@Factor'])
+               for i in convert_to_list(lhs.get('RegionFactor', []))}
+
+    # Combine constraint terms into single dictionary
+    terms = {'traders': traders, 'interconnectors': interconnectors, 'regions': regions}
+
+    return terms
+
+
+def get_generic_constraint_lhs_terms(data) -> dict:
+    """Generic constraint LHS terms"""
+
+    # All constraints
+    constraints = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('GenericConstraintCollection')
+                   .get('GenericConstraint'))
+
+    return {i.get('@ConstraintID'): parse_constraint(i) for i in constraints}
+
+
 def get_case_attribute(data, attribute) -> float:
     """Extract case attribute"""
 
@@ -839,6 +896,11 @@ def parse_case_data_json(data) -> dict:
         'P_TRADER_REGION': get_trader_regions(data_dict),
         'P_TRADER_PERIOD_RAMP_UP_RATE': get_trader_period_ramp_rate(data_dict, '@RampUpRate', float),
         'P_TRADER_PERIOD_RAMP_DOWN_RATE': get_trader_period_ramp_rate(data_dict, '@RampDnRate', float),
+        'P_TRADER_FCAS_ENABLEMENT_MIN': get_trader_fcas_offer_attribute(data_dict, '@EnablementMin', float),
+        'P_TRADER_FCAS_LOW_BREAKPOINT': get_trader_fcas_offer_attribute(data_dict, '@LowBreakpoint', float),
+        'P_TRADER_FCAS_HIGH_BREAKPOINT': get_trader_fcas_offer_attribute(data_dict, '@HighBreakpoint', float),
+        'P_TRADER_FCAS_ENABLEMENT_MAX': get_trader_fcas_offer_attribute(data_dict, '@EnablementMax', float),
+        'P_TRADER_FCAS_MAX_AVAILABLE': get_trader_fcas_offer_attribute(data_dict, '@MaxAvail', float),
         'P_INTERCONNECTOR_INITIAL_MW': get_interconnector_collection_attribute(data_dict, 'InitialMW', float),
         'P_INTERCONNECTOR_TO_REGION': get_interconnector_period_collection_attribute(data_dict, '@ToRegion', str),
         'P_INTERCONNECTOR_FROM_REGION': get_interconnector_period_collection_attribute(data_dict, '@FromRegion', str),
@@ -876,6 +938,7 @@ def parse_case_data_json(data) -> dict:
         'P_CVF_AS_ENABLEMENT_MIN_PRICE': get_case_attribute(data_dict, '@ASEnablementMinPrice'),
         'P_CVF_AS_ENABLEMENT_MAX_PRICE': get_case_attribute(data_dict, '@ASEnablementMaxPrice'),
         'P_CVF_INTERCONNECTOR_PRICE': get_case_attribute(data_dict, '@InterconnectorPrice'),
+        'parameters': {'GC_LHS_TERMS': get_generic_constraint_lhs_terms(data_dict)}
     }
 
     return case_data
