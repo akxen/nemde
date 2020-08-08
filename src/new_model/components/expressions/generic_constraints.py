@@ -7,7 +7,7 @@ def define_generic_constraint_expressions(m, data):
     """Define generic constraint expressions"""
 
     # LHS terms in generic constraints
-    terms = data['parameters']['GC_LHS_TERMS']
+    terms = data['preprocessed']['GC_LHS_TERMS']
 
     def lhs_terms_rule(m, i):
         """Get LHS expression for a given Generic Constraint"""

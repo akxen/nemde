@@ -59,45 +59,22 @@ def get_new_breakpoint(slope, x_intercept, max_available):
         return x_intercept
 
 
-def get_fcas_trapezium_offer(trader_id, trade_type):
-    """Get FCAS trapezium offer for a given trader and trade type"""
-
-    # Trapezium information
-    enablement_min = self.data.get_trader_quantity_band_attribute(trader_id, trade_type, 'EnablementMin')
-    enablement_max = self.data.get_trader_quantity_band_attribute(trader_id, trade_type, 'EnablementMax')
-    low_breakpoint = self.data.get_trader_quantity_band_attribute(trader_id, trade_type, 'LowBreakpoint')
-    high_breakpoint = self.data.get_trader_quantity_band_attribute(trader_id, trade_type, 'HighBreakpoint')
-    max_available = self.data.get_trader_quantity_band_attribute(trader_id, trade_type, 'MaxAvail')
-
-    # Store FCAS trapezium information in a dictionary
-    trapezium = {'enablement_min': enablement_min, 'enablement_max': enablement_max, 'max_available': max_available,
-                 'low_breakpoint': low_breakpoint, 'high_breakpoint': high_breakpoint}
-
-    return trapezium
-
-
-def get_scaled_fcas_trapezium_agc_enablement_limits_lhs(trader_id, trapezium):
+def get_scaled_fcas_trapezium_agc_enablement_limits_lhs(trapezium, agc_enablement_min):
     """Compute scaled FCAS trapezium - taking into account minimum AGC enablement limit"""
 
     # Input FCAS trapezium
     trap = dict(trapezium)
 
-    # AGC enablement limits
-    try:
-        agc_enablement_min = data.get_trader_initial_condition_attribute(trader_id, 'LMW')
-    except:
-        agc_enablement_min = None
-
-    if (agc_enablement_min is not None) and (agc_enablement_min > trap['enablement_min']):
+    if (agc_enablement_min is not None) and (agc_enablement_min > trap['EnablementMin']):
         # Compute slope between enablement min and lower breakpoint
         try:
-            lhs_slope = trap['max_available'] / (trap['low_breakpoint'] - trap['enablement_min'])
+            lhs_slope = trap['MaxAvail'] / (trap['LowBreakpoint'] - trap['EnablementMin'])
         except ZeroDivisionError:
             lhs_slope = None
 
         # Compute slope between high breakpoint and enablement max
         try:
-            rhs_slope = - trap['max_available'] / (trap['enablement_max'] - trap['high_breakpoint'])
+            rhs_slope = - trap['MaxAvail'] / (trap['EnablementMax'] - trap['HighBreakpoint'])
         except ZeroDivisionError:
             rhs_slope = None
 
@@ -105,54 +82,48 @@ def get_scaled_fcas_trapezium_agc_enablement_limits_lhs(trader_id, trapezium):
         lhs_line = get_line_from_slope_and_x_intercept(lhs_slope, agc_enablement_min)
 
         # RHS line (original)
-        rhs_line = get_line_from_slope_and_x_intercept(rhs_slope, trap['enablement_max'])
+        rhs_line = get_line_from_slope_and_x_intercept(rhs_slope, trap['EnablementMax'])
 
         # Intersection between LHS and RHS lines
-        intersection = get_intersection(lhs_line, rhs_line)
+        intersection_x, intersection_y = get_intersection(lhs_line, rhs_line)
 
         # Update max available if required
-        if intersection[1] < trap['max_available']:
-            trap['max_available'] = intersection[1]
+        if intersection_y < trap['MaxAvail']:
+            trap['MaxAvail'] = intersection_y
 
         # New low breakpoint
-        trap['low_breakpoint'] = get_new_breakpoint(lhs_line['slope'], lhs_line['x_intercept'], trap['max_available'])
+        trap['LowBreakpoint'] = get_new_breakpoint(lhs_line['slope'], lhs_line['x_intercept'], trap['MaxAvail'])
 
         # New high breakpoint
-        trap['high_breakpoint'] = get_new_breakpoint(rhs_line['slope'], rhs_line['x_intercept'], trap['max_available'])
+        trap['HighBreakpoint'] = get_new_breakpoint(rhs_line['slope'], rhs_line['x_intercept'], trap['MaxAvail'])
 
         # Update enablement min
-        trap['enablement_min'] = agc_enablement_min
+        trap['EnablementMin'] = agc_enablement_min
 
     return trap
 
 
-def get_scaled_fcas_trapezium_agc_enablement_limits_rhs(trader_id, trapezium):
+def get_scaled_fcas_trapezium_agc_enablement_limits_rhs(trapezium, agc_enablement_max):
     """Compute scaled FCAS trapezium - taking into account minimum AGC enablement limit"""
 
     # Input FCAS trapezium
     trap = dict(trapezium)
 
-    # AGC enablement limits
-    try:
-        agc_enablement_max = self.data.get_trader_initial_condition_attribute(trader_id, 'HMW')
-    except:
-        agc_enablement_max = None
-
-    if (agc_enablement_max is not None) and (agc_enablement_max < trap['enablement_max']):
+    if (agc_enablement_max is not None) and (agc_enablement_max < trap['EnablementMax']):
         # Compute slope between enablement min and lower breakpoint
         try:
-            lhs_slope = trap['max_available'] / (trap['low_breakpoint'] - trap['enablement_min'])
+            lhs_slope = trap['MaxAvail'] / (trap['LowBreakpoint'] - trap['EnablementMin'])
         except ZeroDivisionError:
             lhs_slope = None
 
         # Compute slope between high breakpoint and enablement max
         try:
-            rhs_slope = - trap['max_available'] / (trap['enablement_max'] - trap['high_breakpoint'])
+            rhs_slope = - trap['MaxAvail'] / (trap['EnablementMax'] - trap['HighBreakpoint'])
         except ZeroDivisionError:
             rhs_slope = None
 
         # LHS line (original)
-        lhs_line = get_line_from_slope_and_x_intercept(lhs_slope, trap['enablement_min'])
+        lhs_line = get_line_from_slope_and_x_intercept(lhs_slope, trap['EnablementMin'])
 
         # RHS line with new min enablement limit
         rhs_line = get_line_from_slope_and_x_intercept(rhs_slope, agc_enablement_max)
@@ -161,115 +132,184 @@ def get_scaled_fcas_trapezium_agc_enablement_limits_rhs(trader_id, trapezium):
         intersection = get_intersection(lhs_line, rhs_line)
 
         # Update max available if required
-        if (intersection is not None) and (intersection[1] < trap['max_available']):
-            trap['max_available'] = intersection[1]
+        if (intersection is not None) and (intersection[1] < trap['MaxAvail']):
+            trap['MaxAvail'] = intersection[1]
 
         # New low breakpoint
-        trap['low_breakpoint'] = get_new_breakpoint(lhs_line['slope'], lhs_line['x_intercept'], trap['max_available'])
+        trap['LowBreakpoint'] = get_new_breakpoint(lhs_line['slope'], lhs_line['x_intercept'], trap['MaxAvail'])
 
         # New high breakpoint
-        trap['high_breakpoint'] = get_new_breakpoint(rhs_line['slope'], rhs_line['x_intercept'], trap['max_available'])
+        trap['HighBreakpoint'] = get_new_breakpoint(rhs_line['slope'], rhs_line['x_intercept'], trap['MaxAvail'])
 
         # Update enablement min
-        trap['enablement_max'] = agc_enablement_max
+        trap['EnablementMax'] = agc_enablement_max
 
     return trap
 
+# def get_scaled_fcas_trapezium_agc_enablement_limits(trader_id, trapezium):
+#     """Compute scaled FCAS trapezium - taking into account AGC enablement limits"""
+#
+#     # Input FCAS trapezium
+#     trap = dict(trapezium)
+#
+#     # Scale trapezium LHS and RHS
+#     trap = get_scaled_fcas_trapezium_agc_enablement_limits_lhs(trader_id, trap)
+#     trap = get_scaled_fcas_trapezium_agc_enablement_limits_rhs(trader_id, trap)
+#
+#     return trap
 
-def get_scaled_fcas_trapezium_agc_enablement_limits(trader_id, trapezium):
-    """Compute scaled FCAS trapezium - taking into account AGC enablement limits"""
+
+# def get_scaled_fcas_trapezium_agc_ramp_rates(trader_id, trade_type, trapezium):
+#     """FCAS trapezium taking into account AGC ramp rates"""
+#
+#     # Input FCAS trapezium
+#     trap = dict(trapezium)
+#
+#     # AGC up and down ramp rates
+#     if trade_type == 'R5RE':
+#         try:
+#             agc_ramp = self.data.get_trader_initial_condition_attribute(trader_id, 'SCADARampUpRate')
+#         except:
+#             return trap
+#     elif trade_type == 'L5RE':
+#         try:
+#             agc_ramp = self.data.get_trader_initial_condition_attribute(trader_id, 'SCADARampDnRate')
+#         except:
+#             return trap
+#     else:
+#         raise Exception(f'Unexpected trade type: {trade_type}')
+#
+#     # Max available
+#     max_available = min(trap['MaxAvail'], agc_ramp / 12)
+#
+#     if max_available < trap['MaxAvail']:
+#         # Low breakpoint calculation
+#         try:
+#             slope = trap['MaxAvail'] / (trap['LowBreakpoint'] - trap['EnablementMin'])
+#             trap['LowBreakpoint'] = get_new_breakpoint(slope, trap['EnablementMin'], max_available)
+#         except ZeroDivisionError:
+#             pass
+#
+#         # High breakpoint calculation
+#         try:
+#             slope = -trap['MaxAvail'] / (trap['EnablementMax'] - trap['HighBreakpoint'])
+#             trap['HighBreakpoint'] = get_new_breakpoint(slope, trap['EnablementMax'], max_available)
+#         except ZeroDivisionError:
+#             pass
+#
+#     # Update max available
+#     trap['MaxAvail'] = max_available
+#
+#     return trap
+
+
+def get_scaled_fcas_trapezium_agc_ramp_rate(trapezium, scada_ramp_rate):
+    """
+    FCAS trapezium taking into account AGC ramp rates
+    Note: must use SCADARampUpRate for R5RE and SCADARampDnRate for L5RE
+    """
+
+    # Return input trapezium if scada_ramp_rate is None
+    if scada_ramp_rate is None:
+        return trapezium
 
     # Input FCAS trapezium
     trap = dict(trapezium)
-
-    # Scale trapezium LHS and RHS
-    trap = get_scaled_fcas_trapezium_agc_enablement_limits_lhs(trader_id, trap)
-    trap = get_scaled_fcas_trapezium_agc_enablement_limits_rhs(trader_id, trap)
-
-    return trap
-
-
-def get_scaled_fcas_trapezium_agc_ramp_rates(trader_id, trade_type, trapezium):
-    """FCAS trapezium taking into account AGC ramp rates"""
-
-    # Input FCAS trapezium
-    trap = dict(trapezium)
-
-    # AGC up and down ramp rates
-    if trade_type == 'R5RE':
-        try:
-            agc_ramp = self.data.get_trader_initial_condition_attribute(trader_id, 'SCADARampUpRate')
-        except:
-            return trap
-    elif trade_type == 'L5RE':
-        try:
-            agc_ramp = self.data.get_trader_initial_condition_attribute(trader_id, 'SCADARampDnRate')
-        except:
-            return trap
-    else:
-        raise Exception(f'Unexpected trade type: {trade_type}')
 
     # Max available
-    max_available = min(trap['max_available'], agc_ramp / 12)
+    max_available = min(trap['MaxAvail'], scada_ramp_rate / 12)
 
-    if max_available < trap['max_available']:
+    if max_available < trap['MaxAvail']:
         # Low breakpoint calculation
         try:
-            slope = trap['max_available'] / (trap['low_breakpoint'] - trap['enablement_min'])
-            trap['low_breakpoint'] = get_new_breakpoint(slope, trap['enablement_min'], max_available)
+            slope = trap['MaxAvail'] / (trap['LowBreakpoint'] - trap['EnablementMin'])
+            trap['LowBreakpoint'] = get_new_breakpoint(slope, trap['EnablementMin'], max_available)
         except ZeroDivisionError:
             pass
 
         # High breakpoint calculation
         try:
-            slope = -trap['max_available'] / (trap['enablement_max'] - trap['high_breakpoint'])
-            trap['high_breakpoint'] = get_new_breakpoint(slope, trap['enablement_max'], max_available)
+            slope = -trap['MaxAvail'] / (trap['EnablementMax'] - trap['HighBreakpoint'])
+            trap['HighBreakpoint'] = get_new_breakpoint(slope, trap['EnablementMax'], max_available)
         except ZeroDivisionError:
             pass
 
     # Update max available
-    trap['max_available'] = max_available
+    trap['MaxAvail'] = max_available
 
     return trap
 
 
-def get_scaled_fcas_trapezium_uigf(trader_id, trapezium):
+def get_scaled_fcas_trapezium_uigf(trapezium, uigf):
     """Trapezium scaling for semi-scheduled units"""
+
+    # UIGF is not None for semi-scheduled units
+    if uigf is None:
+        return trapezium
 
     # Input FCAS trapezium
     trap = dict(trapezium)
 
-    # Try and get UIGF value if it exists for a given unit (only will exist for semi-scheduled units)
-    try:
-        uigf = self.data.get_trader_period_attribute(trader_id, 'UIGF')
-    except TypeError:
-        return trap
-
-    if uigf < trap['enablement_max']:
+    if uigf < trap['EnablementMax']:
         # High breakpoint calculation
         try:
-            slope = -trap['max_available'] / (trap['enablement_max'] - trap['high_breakpoint'])
-            trap['high_breakpoint'] = get_new_breakpoint(slope, trap['enablement_max'], uigf)
+            slope = -trap['MaxAvail'] / (trap['EnablementMax'] - trap['HighBreakpoint'])
+            trap['HighBreakpoint'] = get_new_breakpoint(slope, trap['EnablementMax'], uigf)
         except ZeroDivisionError:
             pass
 
         # Update enablement max
-        trap['enablement_max'] = uigf
+        trap['EnablementMax'] = uigf
 
     return trap
+#
+#
+# def get_scaled_fcas_trapezium(trader_id, trade_type):
+#     """Get scaled FCAS trapezium"""
+#
+#     # Get unscaled FCAS offer
+#     trapezium_1 = dict(get_fcas_trapezium_offer(trader_id, trade_type))
+#
+#     assert trade_type in ['R5RE', 'L5RE'], Exception(f'{trade_type}: can only scale regulating FCAS trapeziums')
+#
+#     # Only scale regulating FCAS offers
+#     trapezium_2 = get_scaled_fcas_trapezium_agc_enablement_limits(trader_id, trapezium_1)
+#     trapezium_3 = get_scaled_fcas_trapezium_agc_ramp_rates(trader_id, trade_type, trapezium_2)
+#     trapezium_4 = get_scaled_fcas_trapezium_uigf(trader_id, trapezium_3)
+#
+#     return trapezium_4
 
 
-def get_scaled_fcas_trapezium(trader_id, trade_type):
-    """Get scaled FCAS trapezium"""
+def get_fcas_availability(trapezium, trade_type, max_quantity, initial_mw, agc_status, energy_max_avail):
+    """Check FCAS availability"""
 
-    # Get unscaled FCAS offer
-    trapezium_1 = dict(get_fcas_trapezium_offer(trader_id, trade_type))
+    # Max availability must be greater than 0
+    cond_1 = trapezium['MaxAvail'] > 0
 
-    assert trade_type in ['R5RE', 'L5RE'], Exception(f'{trade_type}: can only scale regulating FCAS trapeziums')
+    # Quantity greater than 0 for at least one quantity band for the given service
+    cond_2 = max_quantity > 0
 
-    # Only scale regulating FCAS offers
-    trapezium_2 = get_scaled_fcas_trapezium_agc_enablement_limits(trader_id, trapezium_1)
-    trapezium_3 = get_scaled_fcas_trapezium_agc_ramp_rates(trader_id, trade_type, trapezium_2)
-    trapezium_4 = get_scaled_fcas_trapezium_uigf(trader_id, trapezium_3)
+    # Try and use specified FCAS condition, but if energy offer doesn't exist, then set cond_3=True by default
+    if energy_max_avail is None:
+        cond_3 = True
+    else:
+        cond_3 = energy_max_avail >= trapezium['EnablementMin']
 
-    return trapezium_4
+    # FCAS enablement max >= 0
+    cond_4 = trapezium['EnablementMax'] >= 0
+
+    # Initial MW within enablement min and max
+    cond_5 = trapezium['EnablementMin'] <= initial_mw <= trapezium['EnablementMax']
+
+    # AGC is activate for regulating FCAS
+    if trade_type in ['R5RE', 'L5RE']:
+        if agc_status == '1':
+            cond_6 = True
+        else:
+            cond_6 = False
+    else:
+        # Set cond_6 to True if non-regulating FCAS offer
+        cond_6 = True
+
+    # All conditions must be true in order for FCAS to be enabled
+    return all([cond_1, cond_2, cond_3, cond_4, cond_5, cond_6])

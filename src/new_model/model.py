@@ -40,6 +40,9 @@ class NEMDEModel:
         # Market participants (generators and loads)
         m.S_TRADERS = pyo.Set(initialize=data['S_TRADERS'])
 
+        # Semi-dispatchable traders
+        m.S_TRADERS_SEMI_DISPATCH = pyo.Set(initialize=data['S_TRADERS_SEMI_DISPATCH'])
+
         # Trader offer types
         m.S_TRADER_OFFERS = pyo.Set(initialize=data['S_TRADER_OFFERS'])
 
@@ -91,6 +94,9 @@ class NEMDEModel:
         # Initial MW output for generators / loads
         m.P_TRADER_INITIAL_MW = pyo.Param(m.S_TRADERS, initialize=data['P_TRADER_INITIAL_MW'])
 
+        # UIGF for semi-dispatchable plant
+        m.P_TRADER_UIGF = pyo.Param(m.S_TRADERS_SEMI_DISPATCH, initialize=data['P_TRADER_UIGF'])
+
         # Trader HMW and LMW
         m.P_TRADER_HMW = pyo.Param(m.S_TRADERS, initialize=data['P_TRADER_HMW'])
         m.P_TRADER_LMW = pyo.Param(m.S_TRADERS, initialize=data['P_TRADER_LMW'])
@@ -112,19 +118,26 @@ class NEMDEModel:
 
         # Trader FCAS enablement min
         m.P_TRADER_FCAS_ENABLEMENT_MIN = pyo.Param(m.S_TRADER_FCAS_OFFERS,
-                                                   initialize=data['P_TRADER_FCAS_ENABLEMENT_MIN'])
+                                                   initialize={k: v['EnablementMin'] for k, v in
+                                                               data['preprocessed']['FCAS_TRAPEZIUM_SCALED'].items()})
 
         # Trader FCAS low breakpoint
         m.P_TRADER_FCAS_LOW_BREAKPOINT = pyo.Param(m.S_TRADER_FCAS_OFFERS,
-                                                   initialize=data['P_TRADER_FCAS_LOW_BREAKPOINT'])
+                                                   initialize={k: v['LowBreakpoint'] for k, v in
+                                                               data['preprocessed']['FCAS_TRAPEZIUM_SCALED'].items()})
 
         # Trader FCAS high breakpoint
         m.P_TRADER_FCAS_HIGH_BREAKPOINT = pyo.Param(m.S_TRADER_FCAS_OFFERS,
-                                                    initialize=data['P_TRADER_FCAS_HIGH_BREAKPOINT'])
+                                                    initialize={k: v['HighBreakpoint'] for k, v in
+                                                                data['preprocessed']['FCAS_TRAPEZIUM_SCALED'].items()})
 
         # Trader FCAS enablement max
         m.P_TRADER_FCAS_ENABLEMENT_MAX = pyo.Param(m.S_TRADER_FCAS_OFFERS,
-                                                   initialize=data['P_TRADER_FCAS_ENABLEMENT_MAX'])
+                                                   initialize={k: v['EnablementMax'] for k, v in
+                                                               data['preprocessed']['FCAS_TRAPEZIUM_SCALED'].items()})
+
+        # Trader FCAS availability
+        m.P_TRADER_FCAS_AVAILABILITY = pyo.Param(m.S_TRADERS, initialize=data['preprocessed']['FCAS_AVAILABILITY'])
 
         # Interconnector 'to' and 'from' regions
         m.P_INTERCONNECTOR_TO_REGION = pyo.Param(m.S_INTERCONNECTORS, initialize=data['P_INTERCONNECTOR_TO_REGION'])
@@ -392,7 +405,7 @@ class NEMDEModel:
         t0 = time.time()
 
         print('Starting solve:', time.time() - t0)
-        solve_status = opt.solve(m, tee=False, options=solver_options, keepfiles=False)
+        solve_status = opt.solve(m, tee=True, options=solver_options, keepfiles=False)
         print('Finished solve:', time.time() - t0)
 
         return m, solve_status

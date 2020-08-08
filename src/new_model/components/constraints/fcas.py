@@ -12,7 +12,7 @@ def fcas_available_rule(m, i, j):
         return pyo.Constraint.Skip
 
     # Check energy output in previous interval within enablement minutes (else trapped outside trapezium)
-    if not fcas_availability[(i, j)]:
+    if not m.P_TRADER_FCAS_AVAILABILITY[(i, j)]:
         # Set FCAS to 0 if unavailable
         return m.V_TRADER_TOTAL_OFFER[i, j] == 0
     else:
@@ -27,7 +27,7 @@ def as_profile_1_rule(m, i, j):
         return pyo.Constraint.Skip
 
     # Check FCAS is available
-    if not fcas_availability[(i, j)]:
+    if not m.P_TRADER_FCAS_AVAILABILITY[(i, j)]:
         return pyo.Constraint.Skip
 
     # Get FCAS trapezium

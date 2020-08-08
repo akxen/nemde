@@ -1,13 +1,7 @@
 """Convert case data into format that can be used to construct model instance"""
 
 import os
-import sys
 import json
-
-sys.path.append(os.path.join(os.path.dirname(__file__)))
-
-import fcas
-from loaders import load_dispatch_interval_json
 
 
 def convert_to_list(dict_or_list) -> list:
@@ -35,13 +29,6 @@ def get_trader_index(data) -> list:
 
     return [i['@TraderID'] for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection')
                                      .get('Period').get('TraderPeriodCollection').get('TraderPeriod'))]
-
-
-def get_trader_semi_dispatch_index(data) -> list:
-    """Get index of semi-dispatchable plant"""
-
-    return [i['@TraderID'] for i in data.get('NEMSPDCaseFile').get('NemSpdInputs').get('TraderCollection').get('Trader')
-            if i['@SemiDispatch'] == '1']
 
 
 def get_trader_offer_index(data) -> list:
@@ -227,7 +214,32 @@ def get_trader_quantity_bands(data):
     return quantity_bands
 
 
-def get_trader_initial_condition_attribute(data, attribute, func) -> dict:
+def get_trader_max_available(data) -> dict:
+    """Get trader max available"""
+
+    # All traders
+    traders = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
+               .get('TraderPeriodCollection').get('TraderPeriod'))
+
+    # Container for max available
+    max_available = {}
+    for i in traders:
+        # UIGF for semi-dispatchable plant - Note: UIGF will override MaxAvail for semi-dispatchable plant
+        uigf = i.get('@UIGF')
+
+        for j in convert_to_list(i.get('TradeCollection').get('Trade')):
+            # Use UIGF if trader is semi-dispatchable and an energy offer is provided
+            if (j.get('@TradeType') in ['ENOF', 'LDOF']) and (uigf is not None):
+                max_available[(i['@TraderID'], j['@TradeType'])] = float(uigf)
+
+            # Else, use max available specified for the trade type
+            else:
+                max_available[(i['@TraderID'], j['@TradeType'])] = float(j['@MaxAvail'])
+
+    return max_available
+
+
+def get_trader_initial_condition_attributes(data, attribute) -> dict:
     """Get trader initial MW"""
 
     # All traders
@@ -240,136 +252,76 @@ def get_trader_initial_condition_attribute(data, attribute, func) -> dict:
         for j in i.get('TraderInitialConditionCollection').get('TraderInitialCondition'):
             # Check matching attribute and extract value
             if j.get('@InitialConditionID') == attribute:
-                values[i.get('@TraderID')] = func(j.get('@Value'))
+                values[i.get('@TraderID')] = float(j.get('@Value'))
 
     return values
 
 
-def get_trader_period_attribute(data, attribute, func) -> dict:
-    """Get trader period attribute"""
+def get_trader_agc_status(data) -> dict:
+    """
+    Get trader AGC status. Returns a dict with trader IDs as keys and a bool indicating the trader's AGC status.
+    True -> AGC enable, False -> AGC not enabled.
+    """
 
-    return {i['@TraderID']: func(i[attribute])
-            for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
-                      .get('TraderPeriodCollection').get('TraderPeriod')) if i.get(attribute) is not None}
+    # All traders
+    traders = data.get('NEMSPDCaseFile').get('NemSpdInputs').get('TraderCollection').get('Trader')
+
+    # Container for initial MW data
+    values = {}
+    for i in traders:
+        # Initial conditions
+        for j in i.get('TraderInitialConditionCollection').get('TraderInitialCondition'):
+            # Check matching attribute and extract value
+            if j.get('@InitialConditionID') == 'AGCStatus':
+                if j.get('@Value') == '0':
+                    values[i.get('@TraderID')] = False
+                elif j.get('@Value') == '1':
+                    values[i.get('@TraderID')] = True
+                else:
+                    raise Exception(f'Unexpected type: {i}')
+
+    return values
 
 
-def get_trader_collection_attribute(data, attribute, func) -> dict:
-    """Get trader collection attribute"""
+def get_trader_semi_dispatch_status(data) -> dict:
+    """Get trader semi-dispatch status"""
 
-    return {i['@TraderID']: func(i[attribute])
+    return {i['@TraderID']: i['@SemiDispatch']
             for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('TraderCollection').get('Trader'))}
 
 
-def get_trader_period_trade_attribute(data, attribute, func) -> dict:
-    """Get trader quantity band attribute"""
+def get_trader_regions(data) -> dict:
+    """Get trader regions"""
+
+    return {i['@TraderID']: i['@RegionID']
+            for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
+                      .get('TraderPeriodCollection').get('TraderPeriod'))}
+
+
+def get_trader_period_ramp_rate(data, attribute, func) -> dict:
+    """Get trader period ramp rate"""
 
     return {(i['@TraderID'], j['@TradeType']): func(j[attribute])
             for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
                       .get('TraderPeriodCollection').get('TraderPeriod'))
-            for j in convert_to_list(i.get('TradeCollection').get('Trade')) if j.get(attribute) is not None}
+            for j in convert_to_list(i.get('TradeCollection').get('Trade')) if j['@TradeType'] in ['ENOF', 'LDOF']}
 
 
-def get_trader_fcas_trapezium(data) -> dict:
+def get_trader_fcas_offer_attribute(data, attribute, func) -> dict:
+    """Get trader FCAS offer attribute"""
+
+    # All traders
+    traders = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
+               .get('TraderPeriodCollection').get('TraderPeriod'))
+
+    return {(i['@TraderID'], j['@TradeType']): func(j[attribute])
+            for i in traders for j in convert_to_list(i.get('TradeCollection').get('Trade'))
+            if j['@TradeType'] in ['L6SE', 'L60S', 'L5MI', 'L5RE', 'R6SE', 'R60S', 'R5MI', 'R5RE']}
+
+
+def get_trader_fcas_trapezium_offer(data) -> dict:
     """Get FCAS trapeziums"""
-
-    return {(i['@TraderID'], j['@TradeType']):
-        {
-            'EnablementMin': float(j['@EnablementMin']),
-            'LowBreakpoint': float(j['@LowBreakpoint']),
-            'HighBreakpoint': float(j['@HighBreakpoint']),
-            'EnablementMax': float(j['@EnablementMax']),
-            'MaxAvail': float(j['@MaxAvail']),
-        }
-        for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
-                  .get('TraderPeriodCollection').get('TraderPeriod'))
-        for j in convert_to_list(i.get('TradeCollection').get('Trade'))
-        if j['@TradeType'] in ['R6SE', 'R60S', 'R5MI', 'R5RE', 'L6SE', 'L60S', 'L5MI', 'L5RE']}
-
-
-def get_trader_fcas_trapezium_scaled(data) -> dict:
-    """Get scaled FCAS trapezium"""
-
-    # FCAS offer trapezium
-    offers = get_trader_fcas_trapezium(data)
-
-    # AGC status
-    agc_status = get_trader_initial_condition_attribute(data, 'AGCStatus', float)
-    initial_mw = get_trader_initial_condition_attribute(data, 'InitialMW', float)
-    hmw = get_trader_initial_condition_attribute(data, 'HMW', float)
-    lmw = get_trader_initial_condition_attribute(data, 'LMW', float)
-    scada_ramp_rate_up = get_trader_initial_condition_attribute(data, 'SCADARampUpRate', float)
-    scada_ramp_rate_down = get_trader_initial_condition_attribute(data, 'SCADARampDnRate', float)
-    uigf = get_trader_period_attribute(data, '@UIGF', float)
-
-    # Scaled trapezium - AGC enablement min - LHS
-    scaled_1 = {
-        k: fcas.get_scaled_fcas_trapezium_agc_enablement_limits_lhs(v, lmw.get(k)) if k[1] in ['L5RE', 'R5RE'] else v
-        for k, v in offers.items()
-    }
-
-    # Scaled trapezium - AGC enablement min - RHS
-    scaled_2 = {
-        k: fcas.get_scaled_fcas_trapezium_agc_enablement_limits_rhs(v, hmw.get(k)) if k[1] in ['L5RE', 'R5RE'] else v
-        for k, v in scaled_1.items()
-    }
-
-    # Scaled trapezium - AGC ramp-rates - R5RE offers
-    scaled_3 = {
-        k: fcas.get_scaled_fcas_trapezium_agc_ramp_rate(v, scada_ramp_rate_up.get(k)) if k[1] in ['R5RE'] else v
-        for k, v in scaled_2.items()
-    }
-
-    # Scaled trapezium - AGC ramp-rates - L5RE offers
-    scaled_4 = {
-        k: fcas.get_scaled_fcas_trapezium_agc_ramp_rate(v, scada_ramp_rate_down.get(k)) if k[1] in ['L5RE'] else v
-        for k, v in scaled_3.items()
-    }
-
-    # Scaled trapezium - UIGF scaling for semi-scheduled units
-    scaled_5 = {
-        k: fcas.get_scaled_fcas_trapezium_uigf(v, uigf.get(k))
-        if (uigf.get(k) is not None) and (k[1] in ['L5RE', 'R5RE']) else v
-        for k, v in scaled_4.items()
-    }
-
-    return scaled_5
-
-
-def get_trader_fcas_availability(data) -> dict:
-    """Get FCAS availability"""
-
-    # All FCAS offers
-    offers = get_trader_offer_index(data)
-    trapeziums = get_trader_fcas_trapezium_scaled(data)
-    initial_mw = get_trader_initial_condition_attribute(data, 'InitialMW', float)
-    agc_status = get_trader_initial_condition_attribute(data, 'AGCStatus', str)
-    max_available = get_trader_period_trade_attribute(data, '@MaxAvail', float)
-    quantity_bands = get_trader_quantity_bands(data)
-
-    # Max available for given trader and trade type over all quantity bands
-    max_quantity = {(trader_id, trade_type): max(quantity_bands[(trader_id, trade_type, i)] for i in range(1, 11))
-                    for trader_id, trade_type in offers}
-
-    # TODO check there is only one energy offer per DUID (can't have LDOF and ENOF for same DUID)
-    max_energy_available = {trader_id: v for (trader_id, trade_type), v in max_available.items()
-                            if trade_type in ['ENOF', 'LDOF']}
-
-    # Available FCAS
-    fcas_available = {
-        trader_id:
-            fcas.get_fcas_availability(
-                trapezium,
-                trade_type,
-                max_quantity.get((trader_id, trade_type)),
-                initial_mw.get(trader_id),
-                agc_status.get(trader_id),
-                max_energy_available.get(trader_id)
-            )
-        for (trader_id, trade_type), trapezium in trapeziums.items()}
-
-    return fcas_available
-
-    # def get_fcas_availability(trapezium, trade_type, quantity_bands, initial_mw, agc_status, energy_max_avail)
+    pass
 
 
 def get_interconnector_collection_attribute(data, attribute, func) -> dict:
@@ -921,7 +873,6 @@ def parse_case_data_json(data) -> dict:
     case_data = {
         'S_REGIONS': get_region_index(data_dict),
         'S_TRADERS': get_trader_index(data_dict),
-        'S_TRADERS_SEMI_DISPATCH': get_trader_semi_dispatch_index(data_dict),
         'S_TRADER_OFFERS': get_trader_offer_index(data_dict),
         'S_TRADER_FCAS_OFFERS': get_trader_fcas_offer_index(data_dict),
         'S_TRADER_ENERGY_OFFERS': get_trader_energy_offer_index(data_dict),
@@ -934,21 +885,20 @@ def parse_case_data_json(data) -> dict:
         'S_INTERCONNECTORS': get_interconnector_index(data_dict),
         'P_TRADER_PRICE_BAND': get_trader_price_bands(data_dict),
         'P_TRADER_QUANTITY_BAND': get_trader_quantity_bands(data_dict),
-        'P_TRADER_MAX_AVAILABLE': get_trader_period_trade_attribute(data_dict, '@MaxAvail', float),
-        'P_TRADER_UIGF': get_trader_period_attribute(data_dict, '@UIGF', float),
-        'P_TRADER_INITIAL_MW': get_trader_initial_condition_attribute(data_dict, 'InitialMW', float),
-        'P_TRADER_HMW': get_trader_initial_condition_attribute(data_dict, 'HMW', float),
-        'P_TRADER_LMW': get_trader_initial_condition_attribute(data_dict, 'LMW', float),
-        'P_TRADER_AGC_STATUS': get_trader_initial_condition_attribute(data_dict, 'AGCStatus', str),
-        'P_TRADER_SEMI_DISPATCH_STATUS': get_trader_collection_attribute(data_dict, '@SemiDispatch', float),
-        'P_TRADER_REGION': get_trader_period_attribute(data_dict, '@RegionID', str),
-        'P_TRADER_PERIOD_RAMP_UP_RATE': get_trader_period_trade_attribute(data_dict, '@RampUpRate', float),
-        'P_TRADER_PERIOD_RAMP_DOWN_RATE': get_trader_period_trade_attribute(data_dict, '@RampDnRate', float),
-        # 'P_TRADER_FCAS_ENABLEMENT_MIN': get_trader_period_trade_attribute(data_dict, '@EnablementMin', float),
-        # 'P_TRADER_FCAS_LOW_BREAKPOINT': get_trader_period_trade_attribute(data_dict, '@LowBreakpoint', float),
-        # 'P_TRADER_FCAS_HIGH_BREAKPOINT': get_trader_period_trade_attribute(data_dict, '@HighBreakpoint', float),
-        # 'P_TRADER_FCAS_ENABLEMENT_MAX': get_trader_period_trade_attribute(data_dict, '@EnablementMax', float),
-        # 'P_TRADER_FCAS_MAX_AVAILABLE': get_trader_period_trade_attribute(data_dict, '@MaxAvail', float),
+        'P_TRADER_MAX_AVAILABLE': get_trader_max_available(data_dict),
+        'P_TRADER_INITIAL_MW': get_trader_initial_condition_attributes(data_dict, 'InitialMW'),
+        'P_TRADER_HMW': get_trader_initial_condition_attributes(data_dict, 'HMW'),
+        'P_TRADER_LMW': get_trader_initial_condition_attributes(data_dict, 'LMW'),
+        'P_TRADER_AGC_STATUS': get_trader_agc_status(data_dict),
+        'P_TRADER_SEMI_DISPATCH_STATUS': get_trader_semi_dispatch_status(data_dict),
+        'P_TRADER_REGION': get_trader_regions(data_dict),
+        'P_TRADER_PERIOD_RAMP_UP_RATE': get_trader_period_ramp_rate(data_dict, '@RampUpRate', float),
+        'P_TRADER_PERIOD_RAMP_DOWN_RATE': get_trader_period_ramp_rate(data_dict, '@RampDnRate', float),
+        'P_TRADER_FCAS_ENABLEMENT_MIN': get_trader_fcas_offer_attribute(data_dict, '@EnablementMin', float),
+        'P_TRADER_FCAS_LOW_BREAKPOINT': get_trader_fcas_offer_attribute(data_dict, '@LowBreakpoint', float),
+        'P_TRADER_FCAS_HIGH_BREAKPOINT': get_trader_fcas_offer_attribute(data_dict, '@HighBreakpoint', float),
+        'P_TRADER_FCAS_ENABLEMENT_MAX': get_trader_fcas_offer_attribute(data_dict, '@EnablementMax', float),
+        'P_TRADER_FCAS_MAX_AVAILABLE': get_trader_fcas_offer_attribute(data_dict, '@MaxAvail', float),
         'P_INTERCONNECTOR_INITIAL_MW': get_interconnector_collection_attribute(data_dict, 'InitialMW', float),
         'P_INTERCONNECTOR_TO_REGION': get_interconnector_period_collection_attribute(data_dict, '@ToRegion', str),
         'P_INTERCONNECTOR_FROM_REGION': get_interconnector_period_collection_attribute(data_dict, '@FromRegion', str),
@@ -986,12 +936,7 @@ def parse_case_data_json(data) -> dict:
         'P_CVF_AS_ENABLEMENT_MIN_PRICE': get_case_attribute(data_dict, '@ASEnablementMinPrice'),
         'P_CVF_AS_ENABLEMENT_MAX_PRICE': get_case_attribute(data_dict, '@ASEnablementMaxPrice'),
         'P_CVF_INTERCONNECTOR_PRICE': get_case_attribute(data_dict, '@InterconnectorPrice'),
-        'preprocessed': {
-            'GC_LHS_TERMS': get_generic_constraint_lhs_terms(data_dict),
-            'FCAS_TRAPEZIUM': get_trader_fcas_trapezium(data_dict),
-            'FCAS_TRAPEZIUM_SCALED': get_trader_fcas_trapezium_scaled(data_dict),
-            'FCAS_AVAILABILITY': get_trader_fcas_availability(data_dict)
-        }
+        'parameters': {'GC_LHS_TERMS': get_generic_constraint_lhs_terms(data_dict)}
     }
 
     return case_data
@@ -1002,11 +947,3 @@ if __name__ == '__main__':
     data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
                                   os.path.pardir, os.path.pardir, os.path.pardir, 'nemweb', 'Reports', 'Data_Archive',
                                   'NEMDE', 'zipped')
-
-    # Case data in json format
-    case_data_json = load_dispatch_interval_json(data_directory, 2019, 10, 10, 1)
-
-    # Get NEMDE model data as a Python dictionary
-    cdata = json.loads(case_data_json)
-
-    case_data = parse_case_data_json(case_data_json)
