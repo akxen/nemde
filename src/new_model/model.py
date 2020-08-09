@@ -6,7 +6,6 @@ import time
 
 import pyomo.environ as pyo
 
-import utils.data
 from utils.data import parse_case_data_json
 from utils.loaders import load_dispatch_interval_json
 
@@ -20,10 +19,8 @@ from components.constraints.units import define_unit_constraints
 from components.constraints.regions import define_region_constraints
 from components.constraints.interconnectors import define_interconnector_constraints
 from components.constraints.generic_constraints import define_generic_constraints
-
-
-# from components.constraints.fcas import define_fcas_constraints
-# from components.constraints.loss import define_loss_model_constraints
+from components.constraints.fcas import define_fcas_constraints
+from components.constraints.loss import define_loss_model_constraints
 
 
 class NEMDEModel:
@@ -75,6 +72,12 @@ class NEMDEModel:
 
         # All interconnectors (interconnector_id)
         m.S_INTERCONNECTORS = pyo.Set(initialize=data['S_INTERCONNECTORS'])
+
+        # Interconnector loss model breakpoints
+        m.S_INTERCONNECTOR_LOSS_MODEL_BREAKPOINTS = pyo.Set(initialize=data['S_INTERCONNECTOR_LOSS_MODEL_BREAKPOINTS'])
+
+        # Interconnector loss model intervals
+        m.S_INTERCONNECTOR_LOSS_MODEL_INTERVALS = pyo.Set(initialize=data['S_INTERCONNECTOR_LOSS_MODEL_INTERVALS'])
 
         return m
 
@@ -136,8 +139,21 @@ class NEMDEModel:
                                                    initialize={k: v['EnablementMax'] for k, v in
                                                                data['preprocessed']['FCAS_TRAPEZIUM_SCALED'].items()})
 
+        # Trader FCAS max available
+        m.P_TRADER_FCAS_MAX_AVAILABLE = pyo.Param(m.S_TRADER_FCAS_OFFERS,
+                                                  initialize={k: v['MaxAvail'] for k, v in
+                                                              data['preprocessed']['FCAS_TRAPEZIUM_SCALED'].items()})
+
         # Trader FCAS availability
-        m.P_TRADER_FCAS_AVAILABILITY = pyo.Param(m.S_TRADERS, initialize=data['preprocessed']['FCAS_AVAILABILITY'])
+        m.P_TRADER_FCAS_AVAILABILITY = pyo.Param(m.S_TRADER_FCAS_OFFERS,
+                                                 initialize=data['preprocessed']['FCAS_AVAILABILITY'])
+
+        # Trader type  TODO: check trader {'GENERATOR', 'LOAD', 'NORMALLY_ON_LOAD'}
+        m.P_TRADER_TYPE = pyo.Param(m.S_TRADERS, initialize=data['P_TRADER_TYPE'])
+
+        # Trader SCADA ramp up and down rates
+        m.P_TRADER_SCADA_RAMP_UP_RATE = pyo.Param(m.S_TRADERS, initialize=data['P_TRADER_SCADA_RAMP_UP_RATE'])
+        m.P_TRADER_SCADA_RAMP_DOWN_RATE = pyo.Param(m.S_TRADERS, initialize=data['P_TRADER_SCADA_RAMP_DOWN_RATE'])
 
         # Interconnector 'to' and 'from' regions
         m.P_INTERCONNECTOR_TO_REGION = pyo.Param(m.S_INTERCONNECTORS, initialize=data['P_INTERCONNECTOR_TO_REGION'])
@@ -153,13 +169,17 @@ class NEMDEModel:
         # Interconnector loss share
         m.P_INTERCONNECTOR_LOSS_SHARE = pyo.Param(m.S_INTERCONNECTORS, initialize=data['P_INTERCONNECTOR_LOSS_SHARE'])
 
-        # Interconnector loss model lower limit. Note: absolute value is given
-        m.P_INTERCONNECTOR_LOSS_LOWER_LIMIT = pyo.Param(m.S_INTERCONNECTORS,
-                                                        initialize=data['P_INTERCONNECTOR_LOSS_LOWER_LIMIT'])
-
         # Interconnector initial loss estimate
         m.P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE = pyo.Param(m.S_INTERCONNECTORS,
                                                              initialize=data['P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE'])
+
+        # Interconnector loss model segment limit
+        m.P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_X = pyo.Param(
+            m.S_INTERCONNECTOR_LOSS_MODEL_BREAKPOINTS, initialize=data['P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_X'])
+
+        # Interconnector loss model segment factor
+        m.P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y = pyo.Param(
+            m.S_INTERCONNECTOR_LOSS_MODEL_BREAKPOINTS, initialize=data['P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y'])
 
         # Observed interconnector loss (obtained from NEMDE solution)
         m.P_INTERCONNECTOR_SOLUTION_LOSS = pyo.Param(m.S_INTERCONNECTORS,
@@ -305,8 +325,8 @@ class NEMDEModel:
 
         # Loss model breakpoints and intervals
         m.V_LOSS = pyo.Var(m.S_INTERCONNECTORS)
-        # m.V_LOSS_LAMBDA = pyo.Var(m.S_BREAKPOINTS, within=pyo.NonNegativeReals)
-        # m.V_LOSS_Y = pyo.Var(m.S_INTERVALS, within=pyo.Binary)
+        m.V_LOSS_LAMBDA = pyo.Var(m.S_INTERCONNECTOR_LOSS_MODEL_BREAKPOINTS, within=pyo.NonNegativeReals)
+        m.V_LOSS_Y = pyo.Var(m.S_INTERCONNECTOR_LOSS_MODEL_INTERVALS, within=pyo.Binary)
 
         # Flow between region and interconnector connection points
         m.V_FLOW_FROM_CP = pyo.Var(m.S_INTERCONNECTORS)
@@ -326,7 +346,8 @@ class NEMDEModel:
 
         return m
 
-    def define_constraints(self, m):
+    @staticmethod
+    def define_constraints(m):
         """Define model constraints"""
 
         t0 = time.time()
@@ -352,13 +373,13 @@ class NEMDEModel:
         m = define_interconnector_constraints(m)
         print('Defined interconnector constraints:', time.time() - t0)
 
-        # # Construct FCAS constraints
-        # m = define_fcas_constraints(m)
-        # print('Defined FCAS constraints:', time.time() - t0)
-        #
-        # # SOS2 interconnector loss model constraints
-        # m = define_loss_model_constraints(m)
-        # print('Defined loss model constraints:', time.time() - t0)
+        # Construct FCAS constraints
+        m = define_fcas_constraints(m)
+        print('Defined FCAS constraints:', time.time() - t0)
+
+        # SOS2 interconnector loss model constraints
+        m = define_loss_model_constraints(m)
+        print('Defined loss model constraints:', time.time() - t0)
 
         return m
 
@@ -370,7 +391,6 @@ class NEMDEModel:
         m.OBJECTIVE = pyo.Objective(expr=sum(m.E_TRADER_COST_FUNCTION[t] for t in m.S_TRADER_OFFERS)
                                          + sum(m.E_MNSP_COST_FUNCTION[t] for t in m.S_MNSP_OFFERS)
                                          + m.E_CV_TOTAL_PENALTY
-                                    # + m.E_LOSS_COST
                                     ,
                                     sense=pyo.minimize)
 

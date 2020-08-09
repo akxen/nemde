@@ -188,6 +188,44 @@ def get_interconnector_index(data) -> list:
                                              .get('InterconnectorPeriod'))]
 
 
+def get_interconnector_loss_model_breakpoint_index(data) -> list:
+    """Get interconnector loss model breakpoint index"""
+
+    # All interconnectors
+    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('InterconnectorCollection')
+                       .get('Interconnector'))
+
+    # Container for indices
+    values = []
+    for i in interconnectors:
+        # Loss model segments
+        segments = i.get('LossModelCollection').get('LossModel').get('SegmentCollection').get('Segment')
+        for j in range(len(segments) + 1):
+            # Append index to container
+            values.append((i['@InterconnectorID'], j))
+
+    return values
+
+
+def get_interconnector_loss_model_interval_index(data) -> list:
+    """Get interconnector loss model interval index"""
+
+    # All interconnectors
+    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('InterconnectorCollection')
+                       .get('Interconnector'))
+
+    # Container for indices
+    values = []
+    for i in interconnectors:
+        # Loss model segments
+        segments = i.get('LossModelCollection').get('LossModel').get('SegmentCollection').get('Segment')
+        for j in range(len(segments)):
+            # Append index to container
+            values.append((i['@InterconnectorID'], j))
+
+    return values
+
+
 def get_trader_price_bands(data) -> dict:
     """Trader price bands"""
 
@@ -356,7 +394,7 @@ def get_trader_fcas_availability(data) -> dict:
 
     # Available FCAS
     fcas_available = {
-        trader_id:
+        (trader_id, trade_type):
             fcas.get_fcas_availability(
                 trapezium,
                 trade_type,
@@ -591,6 +629,58 @@ def get_interconnector_initial_loss_estimate(data) -> dict:
         loss_estimate[i] = get_interconnector_loss_estimate(data, i, initial_mw[i])
 
     return loss_estimate
+
+
+def get_interconnector_loss_model_segment_attribute(data, attribute, func) -> dict:
+    """Get interconnector loss model segment collection"""
+
+    # NEMSPDCaseFile.NemSpdInputs.InterconnectorCollection.Interconnector[0].LossModelCollection.LossModel.SegmentCollection.Segment[0].@Limit
+    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('InterconnectorCollection')
+                       .get('Interconnector'))
+
+    # Container for values
+    values = {}
+    for i in interconnectors:
+        for j, k in enumerate(i.get('LossModelCollection').get('LossModel').get('SegmentCollection').get('Segment')):
+            # Extract loss model segment attribute
+            values[(i['@InterconnectorID'], j)] = func(k[attribute])
+
+    return values
+
+
+def get_interconnector_loss_model_breakpoints_x(data) -> dict:
+    """Get interconnector loss model breakpoints - x-coordinate (power output)"""
+
+    # Get loss model segments
+    limit = get_interconnector_loss_model_segment_attribute(data, '@Limit', float)
+    lower_limit = get_interconnector_loss_model_attribute(data, '@LossLowerLimit', float)
+
+    # Container for break point values - offset segment ID - first segment should be loss lower limit
+    values = {(interconnector_id, segment_id + 1): v for (interconnector_id, segment_id), v in limit.items()}
+
+    # Add loss lower limit with zero index (corresponds to first segment)
+    for i in get_interconnector_index(data):
+        values[(i, 0)] = -lower_limit[i]
+
+    return values
+
+
+def get_interconnector_loss_model_breakpoints_y(data) -> dict:
+    """Get interconnector loss model breakpoints - y-coordinate (estimated loss)"""
+
+    # Get loss model segments
+    limit = get_interconnector_loss_model_segment_attribute(data, '@Limit', float)
+    lower_limit = get_interconnector_loss_model_attribute(data, '@LossLowerLimit', float)
+
+    # Container for break point values - offset segment ID - first segment should be loss lower limit
+    values = {(interconnector_id, segment_id + 1): get_interconnector_loss_estimate(data, interconnector_id, v)
+              for (interconnector_id, segment_id), v in limit.items()}
+
+    # Add loss lower limit with zero index (corresponds to first segment)
+    for i in get_interconnector_index(data):
+        values[(i, 0)] = get_interconnector_loss_estimate(data, i, -lower_limit[i])
+
+    return values
 
 
 def get_interconnector_solution_attribute(data, attribute, func, intervention=0) -> dict:
@@ -932,6 +1022,8 @@ def parse_case_data_json(data) -> dict:
         'S_MNSPS': get_mnsp_index(data_dict),
         'S_MNSP_OFFERS': get_mnsp_offer_index(data_dict),
         'S_INTERCONNECTORS': get_interconnector_index(data_dict),
+        'S_INTERCONNECTOR_LOSS_MODEL_BREAKPOINTS': get_interconnector_loss_model_breakpoint_index(data_dict),
+        'S_INTERCONNECTOR_LOSS_MODEL_INTERVALS': get_interconnector_loss_model_interval_index(data_dict),
         'P_TRADER_PRICE_BAND': get_trader_price_bands(data_dict),
         'P_TRADER_QUANTITY_BAND': get_trader_quantity_bands(data_dict),
         'P_TRADER_MAX_AVAILABLE': get_trader_period_trade_attribute(data_dict, '@MaxAvail', float),
@@ -944,6 +1036,9 @@ def parse_case_data_json(data) -> dict:
         'P_TRADER_REGION': get_trader_period_attribute(data_dict, '@RegionID', str),
         'P_TRADER_PERIOD_RAMP_UP_RATE': get_trader_period_trade_attribute(data_dict, '@RampUpRate', float),
         'P_TRADER_PERIOD_RAMP_DOWN_RATE': get_trader_period_trade_attribute(data_dict, '@RampDnRate', float),
+        'P_TRADER_TYPE': get_trader_collection_attribute(data_dict, '@TraderType', str),
+        'P_TRADER_SCADA_RAMP_UP_RATE': get_trader_initial_condition_attribute(data_dict, 'SCADARampUpRate', float),
+        'P_TRADER_SCADA_RAMP_DOWN_RATE': get_trader_initial_condition_attribute(data_dict, 'SCADARampDnRate', float),
         # 'P_TRADER_FCAS_ENABLEMENT_MIN': get_trader_period_trade_attribute(data_dict, '@EnablementMin', float),
         # 'P_TRADER_FCAS_LOW_BREAKPOINT': get_trader_period_trade_attribute(data_dict, '@LowBreakpoint', float),
         # 'P_TRADER_FCAS_HIGH_BREAKPOINT': get_trader_period_trade_attribute(data_dict, '@HighBreakpoint', float),
@@ -956,8 +1051,16 @@ def parse_case_data_json(data) -> dict:
         'P_INTERCONNECTOR_UPPER_LIMIT': get_interconnector_period_collection_attribute(data_dict, '@UpperLimit', float),
         'P_INTERCONNECTOR_MNSP_STATUS': get_interconnector_period_collection_attribute(data_dict, '@MNSP', str),
         'P_INTERCONNECTOR_LOSS_SHARE': get_interconnector_loss_model_attribute(data_dict, '@LossShare', float),
-        'P_INTERCONNECTOR_LOSS_LOWER_LIMIT': get_interconnector_loss_model_attribute(data_dict, '@LossLowerLimit',
-                                                                                     float),
+        # 'P_INTERCONNECTOR_LOSS_LOWER_LIMIT':
+        #     get_interconnector_loss_model_attribute(data_dict, '@LossLowerLimit', float),
+        # 'P_INTERCONNECTOR_LOSS_MODEL_SEGMENT_LIMIT':
+        #     get_interconnector_loss_model_segment_attribute(data_dict, '@Limit', float),
+        # 'P_INTERCONNECTOR_LOSS_MODEL_SEGMENT_FACTOR':
+        #     get_interconnector_loss_model_segment_attribute(data_dict, '@Factor', float),
+        'P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_X':
+            get_interconnector_loss_model_breakpoints_x(data_dict),
+        'P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y':
+            get_interconnector_loss_model_breakpoints_y(data_dict),
         'P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE': get_interconnector_initial_loss_estimate(data_dict),
         'P_INTERCONNECTOR_SOLUTION_LOSS': get_interconnector_solution_attribute(data_dict, '@Losses', float),
         'P_MNSP_PRICE_BAND': get_mnsp_price_bands(data_dict),

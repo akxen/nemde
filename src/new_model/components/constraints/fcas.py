@@ -5,6 +5,21 @@ import time
 import pyomo.environ as pyo
 
 
+def get_slope(x1, x2, y1, y2):
+    """Compute slope. Return None if slope is undefined"""
+
+    try:
+        return (y2 - y1) / (x2 - x1)
+    except ZeroDivisionError:
+        return None
+
+
+def get_intercept(slope, x0, y0):
+    """Get y-axis intercept given slope and point"""
+
+    return y0 - (slope * x0)
+
+
 def fcas_available_rule(m, i, j):
     """Set FCAS to zero if conditions not met"""
 
@@ -13,7 +28,6 @@ def fcas_available_rule(m, i, j):
 
     # Check energy output in previous interval within enablement minutes (else trapped outside trapezium)
     if not m.P_TRADER_FCAS_AVAILABILITY[(i, j)]:
-        # Set FCAS to 0 if unavailable
         return m.V_TRADER_TOTAL_OFFER[i, j] == 0
     else:
         return pyo.Constraint.Skip
@@ -30,33 +44,30 @@ def as_profile_1_rule(m, i, j):
     if not m.P_TRADER_FCAS_AVAILABILITY[(i, j)]:
         return pyo.Constraint.Skip
 
-    # Get FCAS trapezium
-    if j in ['R5RE', 'L5RE']:
-        trapezium = self.fcas.get_scaled_fcas_trapezium(i, j)
-    else:
-        trapezium = self.fcas.get_fcas_trapezium_offer(i, j)
-
     # Get slope between enablement min and low breakpoint
-    x1, y1 = trapezium['enablement_min'], 0
-    x2, y2 = trapezium['low_breakpoint'], trapezium['max_available']
+    x1, y1 = m.P_TRADER_FCAS_ENABLEMENT_MIN[(i, j)], 0
+    x2, y2 = m.P_TRADER_FCAS_LOW_BREAKPOINT[(i, j)], m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)]
     slope = get_slope(x1, x2, y1, y2)
 
-    if slope is not None:
-        y_intercept = get_intercept(slope, x1, y1)
-        try:
-            return (m.V_TRADER_TOTAL_OFFER[i, j] <= slope * m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + y_intercept
-                    + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j]
-                    )
-
-        except KeyError:
-            return (m.V_TRADER_TOTAL_OFFER[i, j] <= slope * m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] + y_intercept
-                    + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j]
-                    )
-
-    else:
-        # TODO: need to consider if vertical line
-        return (m.V_TRADER_TOTAL_OFFER[i, j] <= trapezium['max_available']
+    # Case with vertical line
+    if slope is None:
+        return (m.V_TRADER_TOTAL_OFFER[i, j] <= m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)]
                 + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j])
+
+    # Compute y-intercept
+    y_intercept = get_intercept(slope, x1, y1)
+
+    # Handle generator case
+    if m.P_TRADER_TYPE[i] in ['GENERATOR']:
+        return (m.V_TRADER_TOTAL_OFFER[i, j] <= (slope * m.V_TRADER_TOTAL_OFFER[i, 'ENOF']) + y_intercept
+                + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j])
+
+    # Handle loads
+    elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
+        return (m.V_TRADER_TOTAL_OFFER[i, j] <= (slope * m.V_TRADER_TOTAL_OFFER[i, 'LDOF']) + y_intercept
+                + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j])
+    else:
+        raise Exception(f'Unexpected trader type: {m.P_TRADER_TYPE[i]}')
 
 
 def as_profile_2_rule(m, i, j):
@@ -67,17 +78,11 @@ def as_profile_2_rule(m, i, j):
         return pyo.Constraint.Skip
 
     # Check FCAS is available
-    if not fcas_availability[(i, j)]:
+    if not m.P_TRADER_FCAS_AVAILABILITY[(i, j)]:
         return pyo.Constraint.Skip
 
-    # Get FCAS trapezium
-    if j in ['R5RE', 'L5RE']:
-        trapezium = self.fcas.get_scaled_fcas_trapezium(i, j)
-    else:
-        trapezium = self.fcas.get_fcas_trapezium_offer(i, j)
-
     # Ensure FCAS is less than max FCAS available
-    return m.V_TRADER_TOTAL_OFFER[i, j] <= trapezium['max_available'] + m.V_CV_TRADER_FCAS_AS_PROFILE_2[i, j]
+    return m.V_TRADER_TOTAL_OFFER[i, j] <= m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)] + m.V_CV_TRADER_FCAS_AS_PROFILE_2[i, j]
 
 
 def as_profile_3_rule(m, i, j):
@@ -88,34 +93,34 @@ def as_profile_3_rule(m, i, j):
         return pyo.Constraint.Skip
 
     # Check FCAS is available
-    if not fcas_availability[(i, j)]:
+    if not m.P_TRADER_FCAS_AVAILABILITY[(i, j)]:
         return pyo.Constraint.Skip
 
-    # Get FCAS trapezium
-    if j in ['R5RE', 'L5RE']:
-        trapezium = self.fcas.get_scaled_fcas_trapezium(i, j)
-    else:
-        trapezium = self.fcas.get_fcas_trapezium_offer(i, j)
-
     # Get slope between enablement min and low breakpoint
-    x1, y1 = trapezium['high_breakpoint'], trapezium['max_available']
-    x2, y2 = trapezium['enablement_max'], 0
+    x1, y1 = m.P_TRADER_FCAS_HIGH_BREAKPOINT[(i, j)], m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)]
+    x2, y2 = m.P_TRADER_FCAS_ENABLEMENT_MAX[(i, j)], 0
     slope = get_slope(x1, x2, y1, y2)
 
-    if slope is not None:
-        y_intercept = get_intercept(slope, x1, y1)
-        try:
-            return (m.V_TRADER_TOTAL_OFFER[i, j] <= slope * m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + y_intercept
-                    + m.V_CV_TRADER_FCAS_AS_PROFILE_3[i, j])
+    # Vertical line between high breakpoint and enablement max
+    if slope is None:
+        return (m.V_TRADER_TOTAL_OFFER[i, j] <= m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)]
+                + m.V_CV_TRADER_FCAS_AS_PROFILE_3[i, j])
 
-        except KeyError:
-            return (m.V_TRADER_TOTAL_OFFER[i, j] <= slope * m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] + y_intercept
-                    + m.V_CV_TRADER_FCAS_AS_PROFILE_3[i, j])
+    # Compute y-intercept
+    y_intercept = get_intercept(slope, x1, y1)
+
+    # Constraint for generators - depends on energy offer
+    if m.P_TRADER_TYPE[i] in ['GENERATOR']:
+        return (m.V_TRADER_TOTAL_OFFER[i, j] <= (slope * m.V_TRADER_TOTAL_OFFER[i, 'ENOF']) + y_intercept
+                + m.V_CV_TRADER_FCAS_AS_PROFILE_3[i, j])
+
+    # Constraint for loads - depends on load offer
+    elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
+        return (m.V_TRADER_TOTAL_OFFER[i, j] <= (slope * m.V_TRADER_TOTAL_OFFER[i, 'LDOF']) + y_intercept
+                + m.V_CV_TRADER_FCAS_AS_PROFILE_3[i, j])
 
     else:
-        # TODO: need to consider if vertical line
-        return (m.V_TRADER_TOTAL_OFFER[i, j] <= trapezium['max_available']
-                + m.V_CV_TRADER_FCAS_AS_PROFILE_3[i, j])
+        raise Exception(f'Unexpected generator type: {m.P_TRADER_TYPE[i]}')
 
 
 def joint_ramp_up_rule(m, i, j):
@@ -126,27 +131,28 @@ def joint_ramp_up_rule(m, i, j):
         return pyo.Constraint.Skip
 
     # Check FCAS is available
-    if not fcas_availability[(i, j)]:
+    if not m.P_TRADER_FCAS_AVAILABILITY[(i, j)]:
         return pyo.Constraint.Skip
 
     # SCADA ramp-up - divide by 12 to get max ramp over 5 minutes (assuming SCADARampUpRate is MW/h)
-    scada_ramp = self.data.get_trader_initial_condition_attribute(i, 'SCADARampUpRate') / 12
+    scada_ramp = m.P_TRADER_SCADA_RAMP_UP_RATE[i] / 12
 
     # TODO: Check what to do if no SCADARampUpRate
-    if (not scada_ramp) or (scada_ramp <= 0):
+    # if (not scada_ramp) or (scada_ramp <= 0):
+    if scada_ramp <= 0:
         return pyo.Constraint.Skip
 
-    # Initial MW
-    initial_mw = self.data.get_trader_initial_condition_attribute(i, 'InitialMW')
+    # Construct constraint depending on trader type
+    if m.P_TRADER_TYPE[i] in ['GENERATOR']:
+        return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + m.V_TRADER_TOTAL_OFFER[i, 'R5RE']
+                <= m.P_TRADER_INITIAL_MW[i] + scada_ramp + m.V_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, j])
 
-    try:
-        return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + m.V_TRADER_TOTAL_OFFER[i, 'R5RE'] <= initial_mw + scada_ramp
-                + m.V_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, j])
+    elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
+        return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] + m.V_TRADER_TOTAL_OFFER[i, 'L5RE']
+                <= m.P_TRADER_INITIAL_MW[i] + scada_ramp + m.V_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, j])
 
-    # TODO: check structure of constraint when considering loads
-    except:
-        return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] + m.V_TRADER_TOTAL_OFFER[i, 'L5RE'] <= initial_mw + scada_ramp
-                + m.V_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, j])
+    else:
+        raise Exception(f'Unexpected trader type: {m.P_TRADER_TYPE[i]}')
 
 
 def joint_ramp_down_rule(m, i, j):
@@ -157,27 +163,27 @@ def joint_ramp_down_rule(m, i, j):
         return pyo.Constraint.Skip
 
     # Check FCAS is available
-    if not fcas_availability[(i, j)]:
+    if not m.P_TRADER_FCAS_AVAILABILITY[(i, j)]:
         return pyo.Constraint.Skip
 
     # SCADA ramp-up - divide by 12 to get max ramp over 5 minutes (assuming SCADARampDnRate is MW/h)
-    scada_ramp = self.data.get_trader_initial_condition_attribute(i, 'SCADARampDnRate') / 12
+    scada_ramp = m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] / 12
 
-    # TODO: Check what to do if no SCADARampUpRate
-    if (not scada_ramp) or (scada_ramp <= 0):
+    # No constraint if SCADA ramp rate <= 0
+    if scada_ramp <= 0:
         return pyo.Constraint.Skip
 
-    # Initial MW
-    initial_mw = self.data.get_trader_initial_condition_attribute(i, 'InitialMW')
-
-    try:
+    # Construct constraint based on trader type - differs for generators and loads
+    if m.P_TRADER_TYPE[i] in ['GENERATOR']:
         return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] - m.V_TRADER_TOTAL_OFFER[i, 'L5RE']
-                + m.V_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, j] >= initial_mw - scada_ramp)
+                + m.V_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, j] >= m.P_TRADER_INITIAL_MW[i] - scada_ramp)
 
-    # TODO: check structure of constraint when considering loads
-    except:
+    elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
         return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] - m.V_TRADER_TOTAL_OFFER[i, 'R5RE']
-                + m.V_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, j] >= initial_mw - scada_ramp)
+                + m.V_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, j] >= m.P_TRADER_INITIAL_MW[i] - scada_ramp)
+
+    else:
+        raise Exception(f'Unexpected trader type: {m.P_TRADER_TYPE[i]}')
 
 
 def joint_capacity_up_rule(m, i, j):
@@ -185,39 +191,34 @@ def joint_capacity_up_rule(m, i, j):
 
     # Only consider contingency FCAS offers
     if j not in ['R6SE', 'R60S', 'R5MI', 'L6SE', 'L60S', 'L5MI']:
-        # if j not in ['R6SE', 'R60S', 'R5MI']:
         return pyo.Constraint.Skip
 
     # Check FCAS is available
-    if not fcas_availability[(i, j)]:
+    if not m.P_TRADER_FCAS_AVAILABILITY[(i, j)]:
         return pyo.Constraint.Skip
-
-    # Get FCAS trapezium
-    trapezium = self.fcas.get_fcas_trapezium_offer(i, j)
 
     # Check if raise regulation FCAS available for unit
     try:
-        raise_available = int(self.get_fcas_availability(i, 'R5RE'))
-    except:
+        raise_available = int(m.P_TRADER_FCAS_AVAILABILITY[(i, 'R5RE')])
+    except KeyError:
         return pyo.Constraint.Skip
 
     # Slope coefficient
-    coefficient = (trapezium['enablement_max'] - trapezium['high_breakpoint']) / trapezium['max_available']
+    coefficient = ((m.P_TRADER_FCAS_ENABLEMENT_MAX[(i, j)] - m.P_TRADER_FCAS_HIGH_BREAKPOINT[(i, j)])
+                   / m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)])
 
-    try:
+    if m.P_TRADER_TYPE[i] in ['GENERATOR']:
         return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
                 + (raise_available * m.V_TRADER_TOTAL_OFFER[i, 'R5RE'])
-                <= trapezium['enablement_max'] + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_UP[i, j])
-    except:
-        pass
+                <= m.P_TRADER_FCAS_ENABLEMENT_MAX[(i, j)] + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_UP[i, j])
 
-    try:
+    elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
         return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] + (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
                 + (raise_available * m.V_TRADER_TOTAL_OFFER[i, 'L5RE'])
-                <= trapezium['enablement_max'] + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_UP[i, j])
+                <= m.P_TRADER_FCAS_ENABLEMENT_MAX[(i, j)] + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_UP[i, j])
 
-    except:
-        return pyo.Constraint.Skip
+    else:
+        raise Exception(f'Unexpected trader type: {m.P_TRADER_TYPE[i]}')
 
 
 def joint_capacity_down_rule(m, i, j):
@@ -225,117 +226,101 @@ def joint_capacity_down_rule(m, i, j):
 
     # Only consider contingency FCAS offers
     if j not in ['R6SE', 'R60S', 'R5MI', 'L6SE', 'L60S', 'L5MI']:
-        # if j not in ['L6SE', 'L60S', 'L5MI']:
         return pyo.Constraint.Skip
 
     # Check FCAS is available
-    if not fcas_availability[(i, j)]:
+    if not m.P_TRADER_FCAS_AVAILABILITY[(i, j)]:
         return pyo.Constraint.Skip
 
-    # Get FCAS trapezium
-    trapezium = self.fcas.get_fcas_trapezium_offer(i, j)
-
-    # """Energy Dispatch Target − Lower Slope Coeff × Contingency FCAS Target
-    # − [Lower Regulation FCAS enablment status] × Lower Regulating FCAS Target
-    # ≥ EnablementMin7
-    # """
-
     # Check if raise regulation FCAS available for unit
-    # TODO: Check what needs to be done if raise regulating FCAS offer missing. Assuming no constraint.
     try:
-        lower_available = int(self.get_fcas_availability(i, 'L5RE'))
-    except:
+        lower_available = int(m.P_TRADER_FCAS_AVAILABILITY[(i, 'L5RE')])
+    except KeyError:
         return pyo.Constraint.Skip
 
     # Slope coefficient
-    coefficient = (trapezium['low_breakpoint'] - trapezium['enablement_min']) / trapezium['max_available']
+    coefficient = ((m.P_TRADER_FCAS_LOW_BREAKPOINT[(i, j)] - m.P_TRADER_FCAS_ENABLEMENT_MIN[(i, j)])
+                   / m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)])
 
-    try:
+    # Construct constraint depending on generator type - differs for generators and loads
+    if m.P_TRADER_TYPE[i] in ['GENERATOR']:
         return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] - (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
                 - (lower_available * m.V_TRADER_TOTAL_OFFER[i, 'L5RE'])
-                + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_DOWN[i, j] >= trapezium['enablement_min'])
-    except:
-        pass
+                + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_DOWN[i, j] >= m.P_TRADER_FCAS_ENABLEMENT_MIN[(i, j)])
 
-    # TODO: Check if LDOF should have positive or negative coefficient
-    try:
+    elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
         return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] - (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
                 - (lower_available * m.V_TRADER_TOTAL_OFFER[i, 'R5RE'])
-                + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_DOWN[i, j] >= trapezium['enablement_min'])
-    except:
-        return pyo.Constraint.Skip
+                + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_DOWN[i, j] >= m.P_TRADER_FCAS_ENABLEMENT_MIN[(i, j)])
+    else:
+        raise Exception(f'Unexpected trader type: {m.P_TRADER_TYPE[i]}')
 
 
 def energy_regulating_up_rule(m, i, j):
-    """Joint energy and regulating FCAS constraints"""
+    """
+    Joint energy and regulating FCAS constraints
+
+    Energy Dispatch Target + Upper Slope Coeff x Regulating FCAS Target <= EnablementMax8
+    """
 
     # Only consider contingency FCAS offers
     if j not in ['R5RE', 'L5RE']:
         return pyo.Constraint.Skip
 
     # Check FCAS is available
-    if not fcas_availability[(i, j)]:
+    if not m.P_TRADER_FCAS_AVAILABILITY[(i, j)]:
         return pyo.Constraint.Skip
-
-    # Get FCAS trapezium
-    trapezium = self.fcas.get_scaled_fcas_trapezium(i, j)
 
     # Slope coefficient
-    coefficient = (trapezium['enablement_max'] - trapezium['high_breakpoint']) / trapezium['max_available']
+    coefficient = ((m.P_TRADER_FCAS_ENABLEMENT_MAX[(i, j)] - m.P_TRADER_FCAS_HIGH_BREAKPOINT[(i, j)])
+                   / m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)])
 
-    # """Energy Dispatch Target + Upper Slope Coeff × Regulating FCAS Target ≤ EnablementMax8"""
-
-    try:
+    # Construct constraint depending on generator type - differs for generators and loads
+    if m.P_TRADER_TYPE[i] in ['GENERATOR']:
         return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
-                <= trapezium['enablement_max'])
-    except:
-        pass
+                <= m.P_TRADER_FCAS_ENABLEMENT_MAX[(i, j)])
 
-    try:
+    elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
         return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] + (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
-                <= trapezium['enablement_max'])
-    except:
-        return pyo.Constraint.Skip
+                <= m.P_TRADER_FCAS_ENABLEMENT_MAX[(i, j)])
+    else:
+        raise Exception(f'Unexpected trader type: {m.P_TRADER_TYPE[i]}')
 
 
 def energy_regulating_down_rule(m, i, j):
-    """Joint energy and regulating FCAS constraints"""
+    """
+    Joint energy and regulating FCAS constraints
+
+    Energy Dispatch Target - Lower Slope Coeff x Regulating FCAS Target >= EnablementMin
+    """
 
     # Only consider contingency FCAS offers
     if j not in ['R5RE', 'L5RE']:
         return pyo.Constraint.Skip
 
     # Check FCAS is available
-    if not fcas_availability[(i, j)]:
+    if not m.P_TRADER_FCAS_AVAILABILITY[(i, j)]:
         return pyo.Constraint.Skip
-
-    # Get FCAS trapezium
-    trapezium = self.fcas.get_scaled_fcas_trapezium(i, j)
 
     # Slope coefficient
-    coefficient = (trapezium['low_breakpoint'] - trapezium['enablement_min']) / trapezium['max_available']
+    coefficient = ((m.P_TRADER_FCAS_LOW_BREAKPOINT[(i, j)] - m.P_TRADER_FCAS_ENABLEMENT_MIN[(i, j)])
+                   / m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)])
 
-    # Energy Dispatch Target − Lower Slope Coeff × Regulating FCAS Target ≥ EnablementMin
-
-    try:
+    # Construct constraint depending on generator type - differs for generators and loads
+    if m.P_TRADER_TYPE[i] in ['GENERATOR']:
         return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] - (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
-                >= trapezium['enablement_min'])
-    except:
-        pass
+                >= m.P_TRADER_FCAS_ENABLEMENT_MIN[(i, j)])
 
-    try:
+    elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
         return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] - (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
-                >= trapezium['enablement_min'])
-    except:
-        return pyo.Constraint.Skip
+                >= m.P_TRADER_FCAS_ENABLEMENT_MIN[(i, j)])
+
+    else:
+        raise Exception(f'Unexpected trader type: {m.P_TRADER_TYPE[i]}')
 
 
-def define_fcas_constraints(self, m):
+def define_fcas_constraints(m):
     """FCAS constraints"""
-
-    # Get FCAS availability for each unit and offer type (run once and store result in dictionary)
-    fcas_availability = {(i, j): self.get_fcas_availability(i, j) for i, j in m.S_TRADER_OFFERS
-                         if j not in ['ENOF', 'LDOF']}
 
     # Start timer
     t0 = time.time()
