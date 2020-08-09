@@ -60,11 +60,6 @@ def total_initial_scheduled_load(m, r):
     return total
 
 
-def get_region_initial_net_allocated_losses(self, region_id):
-    """Compute net import into region from interconnectors"""
-    pass
-
-
 def total_initial_allocated_losses(m, r):
     """Total losses assigned to region as a result of interconnector flow"""
 

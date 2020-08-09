@@ -990,6 +990,103 @@ def get_case_attribute(data, attribute) -> float:
     return float(data.get('NEMSPDCaseFile').get('NemSpdInputs').get('Case')[attribute])
 
 
+def get_trader_solution(data) -> dict:
+    """Get trader solution"""
+
+    # All traders
+    traders = data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('TraderSolution')
+
+    # Keys that should be converted to type string. All other keys to be converted to type float.
+    str_keys = ['@TraderID', '@PeriodID', '@Intervention', '@FSTargetMode', '@SemiDispatchCap']
+
+    # Container for extracted values
+    solutions = {}
+    for i in traders:
+        # Parse values - only consider no intervention case
+        if i['@Intervention'] == '0':
+            solutions[i['@TraderID']] = {k: str(v) if k in str_keys else float(v) for k, v in i.items()}
+
+    return solutions
+
+
+def get_interconnector_solution(data) -> dict:
+    """Get interconnector solution"""
+
+    # All interconnectors
+    interconnectors = data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('InterconnectorSolution')
+
+    # Keys that should be converted to type string. All other keys to be converted to type float.
+    str_keys = ['@InterconnectorID', '@PeriodID', '@Intervention', '@NPLExists']
+
+    # Container for extracted interconnector solutions
+    solutions = {}
+    for i in interconnectors:
+        # Parse values - only consider no intervention case
+        if i['@Intervention'] == '0':
+            solutions[i['@InterconnectorID']] = {k: str(v) if k in str_keys else float(v) for k, v in i.items()}
+
+    return solutions
+
+
+def get_region_solution(data) -> dict:
+    """Get region solution"""
+
+    # All regions
+    regions = data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('RegionSolution')
+
+    # Keys that should be converted to type string. All other keys to be converted to type float.
+    str_keys = ['@RegionID', '@PeriodID', '@Intervention']
+
+    # Container for extracted region solutions
+    solutions = {}
+    for i in regions:
+        # Parse values - only consider no intervention case
+        if i['@Intervention'] == '0':
+            solutions[i['@RegionID']] = {k: str(v) if k in str_keys else float(v) for k, v in i.items()}
+
+    return solutions
+
+
+def get_constraint_solution(data) -> dict:
+    """Get constraint solution"""
+
+    # NEMSPDCaseFile.NemSpdOutputs.ConstraintSolution[0].@PeriodID
+    # All constraints
+    constraints = data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('ConstraintSolution')
+
+    # Keys that should be converted to type string. All other keys to be converted to type float.
+    str_keys = ['@ConstraintID', '@Version', '@PeriodID', '@Intervention']
+
+    # Container for extracted region solutions
+    solutions = {}
+    for i in constraints:
+        # Parse values - only consider no intervention case
+        if i['@Intervention'] == '0':
+            solutions[i['@ConstraintID']] = {k: str(v) if k in str_keys else float(v) for k, v in i.items()}
+
+    return solutions
+
+
+def get_case_solution(data) -> dict:
+    """Get case solution"""
+
+    # Keys that should be converted to type string. All other keys to be converted to type float.
+    str_keys = ['@SolverStatus', '@Terminal', '@InterventionStatus', '@SolverVersion', '@NPLStatus', '@OCD_Status']
+
+    return {k: str(v) if k in str_keys else float(v)
+            for k, v in data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('CaseSolution').items()}
+
+
+def get_period_solution(data) -> dict:
+    """Get period solution"""
+
+    # Keys that should be converted to type string. All other keys to be converted to type float.
+    str_keys = ['@PeriodID', '@Intervention', '@SwitchRunBestStatus', '@SolverStatus', '@NPLStatus']
+
+    return {k: str(v) if k in str_keys else float(v)
+            for k, v in data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('PeriodSolution').items()}
+
+
 def parse_case_data_json(data) -> dict:
     """
     Parse json data
@@ -1039,11 +1136,6 @@ def parse_case_data_json(data) -> dict:
         'P_TRADER_TYPE': get_trader_collection_attribute(data_dict, '@TraderType', str),
         'P_TRADER_SCADA_RAMP_UP_RATE': get_trader_initial_condition_attribute(data_dict, 'SCADARampUpRate', float),
         'P_TRADER_SCADA_RAMP_DOWN_RATE': get_trader_initial_condition_attribute(data_dict, 'SCADARampDnRate', float),
-        # 'P_TRADER_FCAS_ENABLEMENT_MIN': get_trader_period_trade_attribute(data_dict, '@EnablementMin', float),
-        # 'P_TRADER_FCAS_LOW_BREAKPOINT': get_trader_period_trade_attribute(data_dict, '@LowBreakpoint', float),
-        # 'P_TRADER_FCAS_HIGH_BREAKPOINT': get_trader_period_trade_attribute(data_dict, '@HighBreakpoint', float),
-        # 'P_TRADER_FCAS_ENABLEMENT_MAX': get_trader_period_trade_attribute(data_dict, '@EnablementMax', float),
-        # 'P_TRADER_FCAS_MAX_AVAILABLE': get_trader_period_trade_attribute(data_dict, '@MaxAvail', float),
         'P_INTERCONNECTOR_INITIAL_MW': get_interconnector_collection_attribute(data_dict, 'InitialMW', float),
         'P_INTERCONNECTOR_TO_REGION': get_interconnector_period_collection_attribute(data_dict, '@ToRegion', str),
         'P_INTERCONNECTOR_FROM_REGION': get_interconnector_period_collection_attribute(data_dict, '@FromRegion', str),
@@ -1051,12 +1143,6 @@ def parse_case_data_json(data) -> dict:
         'P_INTERCONNECTOR_UPPER_LIMIT': get_interconnector_period_collection_attribute(data_dict, '@UpperLimit', float),
         'P_INTERCONNECTOR_MNSP_STATUS': get_interconnector_period_collection_attribute(data_dict, '@MNSP', str),
         'P_INTERCONNECTOR_LOSS_SHARE': get_interconnector_loss_model_attribute(data_dict, '@LossShare', float),
-        # 'P_INTERCONNECTOR_LOSS_LOWER_LIMIT':
-        #     get_interconnector_loss_model_attribute(data_dict, '@LossLowerLimit', float),
-        # 'P_INTERCONNECTOR_LOSS_MODEL_SEGMENT_LIMIT':
-        #     get_interconnector_loss_model_segment_attribute(data_dict, '@Limit', float),
-        # 'P_INTERCONNECTOR_LOSS_MODEL_SEGMENT_FACTOR':
-        #     get_interconnector_loss_model_segment_attribute(data_dict, '@Factor', float),
         'P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_X':
             get_interconnector_loss_model_breakpoints_x(data_dict),
         'P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y':
@@ -1094,6 +1180,14 @@ def parse_case_data_json(data) -> dict:
             'FCAS_TRAPEZIUM': get_trader_fcas_trapezium(data_dict),
             'FCAS_TRAPEZIUM_SCALED': get_trader_fcas_trapezium_scaled(data_dict),
             'FCAS_AVAILABILITY': get_trader_fcas_availability(data_dict)
+        },
+        'solution': {
+            'traders': get_trader_solution(data_dict),  # TODO: check DUID is unique
+            'interconnectors': get_interconnector_solution(data_dict),  # TODO: check interconnector ID unique
+            'regions': get_region_solution(data_dict),  # TODO: check region ID is unique
+            'constraints': get_constraint_solution(data_dict),  # TODO: check constraint ID is unique
+            'case': get_case_solution(data_dict),  # TODO: check constraint ID is unique
+            'period': get_period_solution(data_dict),  # TODO: check constraint ID is unique
         }
     }
 
@@ -1109,7 +1203,11 @@ if __name__ == '__main__':
     # Case data in json format
     case_data_json = load_dispatch_interval_json(data_directory, 2019, 10, 10, 1)
 
+    import time
+    t0 = time.time()
+
     # Get NEMDE model data as a Python dictionary
     cdata = json.loads(case_data_json)
 
     case_data = parse_case_data_json(case_data_json)
+    print(f'Parsed in: {time.time() - t0}s')
