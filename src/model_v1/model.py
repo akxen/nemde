@@ -2114,7 +2114,7 @@ if __name__ == '__main__':
     # Data directory
     output_directory = os.path.join(os.path.dirname(__file__), 'output')
     data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
-                                  os.path.pardir, 'nemweb', 'Reports', 'Data_Archive')
+                                  os.path.pardir, os.path.pardir, 'nemweb', 'Reports', 'Data_Archive')
 
     # Object used to construct and run NEMDE approximate model
     nemde = NEMDEModel(data_directory, output_directory)

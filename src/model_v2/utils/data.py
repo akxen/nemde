@@ -341,32 +341,43 @@ def get_trader_fcas_trapezium_scaled(data) -> dict:
 
     # Scaled trapezium - AGC enablement min - LHS
     scaled_1 = {
-        k: fcas.get_scaled_fcas_trapezium_agc_enablement_limits_lhs(v, lmw.get(k)) if k[1] in ['L5RE', 'R5RE'] else v
+        k: fcas.get_scaled_fcas_trapezium_agc_enablement_limits_lhs(v, lmw.get(k[0])) if k[1] in ['L5RE', 'R5RE'] else v
         for k, v in offers.items()
     }
 
+    # TODO: remove this
+    # scaled_1 = {}
+    # for k, v in offers.items():
+    #     if (k[0] == 'POAT220') and (k[1] == 'R5RE'):
+    #         a = 10
+    #
+    #     if k[1] in ['L5RE', 'R5RE']:
+    #         scaled_1[k] = fcas.get_scaled_fcas_trapezium_agc_enablement_limits_lhs(v, lmw.get(k[0]))
+    #     else:
+    #         scaled_1[k] = v
+
     # Scaled trapezium - AGC enablement min - RHS
     scaled_2 = {
-        k: fcas.get_scaled_fcas_trapezium_agc_enablement_limits_rhs(v, hmw.get(k)) if k[1] in ['L5RE', 'R5RE'] else v
+        k: fcas.get_scaled_fcas_trapezium_agc_enablement_limits_rhs(v, hmw.get(k[0])) if k[1] in ['L5RE', 'R5RE'] else v
         for k, v in scaled_1.items()
     }
 
     # Scaled trapezium - AGC ramp-rates - R5RE offers
     scaled_3 = {
-        k: fcas.get_scaled_fcas_trapezium_agc_ramp_rate(v, scada_ramp_rate_up.get(k)) if k[1] in ['R5RE'] else v
+        k: fcas.get_scaled_fcas_trapezium_agc_ramp_rate(v, scada_ramp_rate_up.get(k[0])) if k[1] in ['R5RE'] else v
         for k, v in scaled_2.items()
     }
 
     # Scaled trapezium - AGC ramp-rates - L5RE offers
     scaled_4 = {
-        k: fcas.get_scaled_fcas_trapezium_agc_ramp_rate(v, scada_ramp_rate_down.get(k)) if k[1] in ['L5RE'] else v
+        k: fcas.get_scaled_fcas_trapezium_agc_ramp_rate(v, scada_ramp_rate_down.get(k[0])) if k[1] in ['L5RE'] else v
         for k, v in scaled_3.items()
     }
 
     # Scaled trapezium - UIGF scaling for semi-scheduled units
     scaled_5 = {
-        k: fcas.get_scaled_fcas_trapezium_uigf(v, uigf.get(k))
-        if (uigf.get(k) is not None) and (k[1] in ['L5RE', 'R5RE']) else v
+        k: fcas.get_scaled_fcas_trapezium_uigf(v, uigf.get(k[0]))
+        if (uigf.get(k[0]) is not None) and (k[1] in ['L5RE', 'R5RE']) else v
         for k, v in scaled_4.items()
     }
 
@@ -1211,3 +1222,6 @@ if __name__ == '__main__':
 
     case_data = parse_case_data_json(case_data_json)
     print(f'Parsed in: {time.time() - t0}s')
+
+    print(case_data['preprocessed']['FCAS_TRAPEZIUM_SCALED'][('POAT220', 'R5RE')])
+    lmw = get_trader_initial_condition_attribute(cdata, 'LMW', float)

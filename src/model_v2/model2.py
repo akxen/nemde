@@ -22,6 +22,9 @@ from components.constraints.generic_constraints import define_generic_constraint
 from components.constraints.fcas import define_fcas_constraints
 from components.constraints.loss import define_loss_model_constraints
 
+import utils.solution
+import utils.analysis
+
 
 class NEMDEModel:
     def __init__(self):
@@ -396,6 +399,30 @@ class NEMDEModel:
 
         return m
 
+    @staticmethod
+    def fix_interconnector_solution(m, data):
+        """Fix interconnector solution to observed values"""
+
+        for i in m.S_GC_INTERCONNECTOR_VARS:
+            observed_flow = float(data['solution']['interconnectors'][i]['@Flow'])
+            m.V_GC_INTERCONNECTOR[i].fix(observed_flow)
+
+        return m
+
+    @staticmethod
+    def fix_fcas_solution(m, data):
+        """Fix FCAS solution"""
+
+        # Map between NEMDE output keys and keys used in solution dictionary
+        key_map = {'ENOF': '@EnergyTarget', 'LDOF': '@EnergyTarget',
+                   'R6SE': '@R6Target', 'R60S': '@R60Target', 'R5MI': '@R5Target', 'R5RE': '@R5RegTarget',
+                   'L6SE': '@L6Target', 'L60S': '@L60Target', 'L5MI': '@L5Target', 'L5RE': '@L5RegTarget'}
+
+        for i, j in m.S_TRADER_FCAS_OFFERS:
+            m.V_TRADER_TOTAL_OFFER[(i, j)].fix(data['solution']['traders'][i][key_map[j]])
+
+        return m
+
     def construct_model(self, data):
         """Create model object"""
 
@@ -411,6 +438,10 @@ class NEMDEModel:
         m = self.define_constraints(m)
         m = self.define_objective(m)
         print('Constructed model in:', time.time() - t0)
+
+        # Fixing interconnector and FCAS solutions
+        m = self.fix_interconnector_solution(m, data)
+        m = self.fix_fcas_solution(m, data)
 
         return m
 
@@ -445,6 +476,10 @@ if __name__ == '__main__':
 
     # Get NEMDE model data as a Python dictionary
     cdata = json.loads(case_data_json)
+
+    # # Drop keys
+    # for k in ['ConstraintScadaDataCollection', 'GenericEquationCollection']:
+    #     cdata['NEMSPDCaseFile']['NemSpdInputs'].pop(k)
     # with open('example.json', 'w') as f:
     #     json.dump(cdata, f)
 
@@ -455,3 +490,23 @@ if __name__ == '__main__':
 
     # Solve model
     nemde_model, status = nemde.solve_model(nemde_model)
+
+    # Extract solution
+    solution = utils.solution.get_model_solution(nemde_model)
+
+    # with open('solution_example.json', 'w') as f:
+    #     json.dump(solution, f)
+
+    # Difference
+    trader_solution = utils.analysis.check_trader_solution(cdata, solution)
+
+    # Interconnector solutions
+    interconnector_flow_solution = utils.analysis.check_interconnector_solution(cdata, solution, 'Flow')
+    interconnector_losses_solution = utils.analysis.check_interconnector_solution(cdata, solution, 'Losses')
+
+    # Plot interconnector solution
+    utils.analysis.plot_interconnector_solution(cdata, solution)
+    utils.analysis.plot_trader_solution_difference(cdata, solution)
+
+    # FCAS solution
+    # utils.analysis.plot_fcas_solution(cdata, case_data, solution)
