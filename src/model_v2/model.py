@@ -460,8 +460,8 @@ class NEMDEModel:
         print('Constructed model in:', time.time() - t0)
 
         # Fixing interconnector and FCAS solutions
-        m = self.fix_interconnector_solution(m, data)
-        m = self.fix_fcas_solution(m, data)
+        # m = self.fix_interconnector_solution(m, data)
+        # m = self.fix_fcas_solution(m, data)
 
         return m
 
@@ -529,4 +529,4 @@ if __name__ == '__main__':
     utils.analysis.plot_trader_solution_difference(cdata, solution)
 
     # FCAS solution
-    # utils.analysis.plot_fcas_solution(cdata, case_data, solution)
+    utils.analysis.plot_fcas_solution(cdata, case_data, solution)

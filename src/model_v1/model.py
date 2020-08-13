@@ -1355,15 +1355,18 @@ class NEMDEModel:
             x2, y2 = trapezium['low_breakpoint'], trapezium['max_available']
             slope = self.get_slope(x1, x2, y1, y2)
 
+            # print(f'({i}, {j})-{x1}-{y1}-{x2}-{y2}-{slope}')
+
             if slope is not None:
                 y_intercept = self.get_intercept(slope, x1, y1)
+                # print(f'({i}, {j})-{y_intercept}')
                 try:
-                    return (m.V_TRADER_TOTAL_OFFER[i, j] <= slope * m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + y_intercept
+                    return (m.V_TRADER_TOTAL_OFFER[i, j] <= (slope * m.V_TRADER_TOTAL_OFFER[i, 'ENOF']) + y_intercept
                             + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j]
                             )
 
                 except KeyError:
-                    return (m.V_TRADER_TOTAL_OFFER[i, j] <= slope * m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] + y_intercept
+                    return (m.V_TRADER_TOTAL_OFFER[i, j] <= (slope * m.V_TRADER_TOTAL_OFFER[i, 'LDOF']) + y_intercept
                             + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j]
                             )
 
@@ -1398,7 +1401,7 @@ class NEMDEModel:
             return m.V_TRADER_TOTAL_OFFER[i, j] <= trapezium['max_available'] + m.V_CV_TRADER_FCAS_AS_PROFILE_2[i, j]
 
         # AS profile constraint - between enablement min and low breakpoint
-        m.C_AS_PROFILE_2 = Constraint(m.S_TRADER_OFFERS, rule=as_profile_2_rule)
+        # m.C_AS_PROFILE_2 = Constraint(m.S_TRADER_OFFERS, rule=as_profile_2_rule)
         print('Finished constructing C_AS_PROFILE_2:', time.time() - t0)
 
         def as_profile_3_rule(m, i, j):
@@ -1440,7 +1443,7 @@ class NEMDEModel:
                         + m.V_CV_TRADER_FCAS_AS_PROFILE_3[i, j])
 
         # AS profile constraint - between enablement min and low breakpoint
-        m.C_AS_PROFILE_3 = Constraint(m.S_TRADER_OFFERS, rule=as_profile_3_rule)
+        # m.C_AS_PROFILE_3 = Constraint(m.S_TRADER_OFFERS, rule=as_profile_3_rule)
         print('Finished constructing C_AS_PROFILE_3:', time.time() - t0)
 
         def joint_ramp_up_rule(m, i, j):
@@ -1475,7 +1478,7 @@ class NEMDEModel:
                         + m.V_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, j])
 
         # Joint ramp up constraint
-        m.C_JOINT_RAMP_UP = Constraint(m.S_TRADER_OFFERS, rule=joint_ramp_up_rule)
+        # m.C_JOINT_RAMP_UP = Constraint(m.S_TRADER_OFFERS, rule=joint_ramp_up_rule)
         print('Finished constructing C_JOINT_RAMP_UP:', time.time() - t0)
 
         def joint_ramp_down_rule(m, i, j):
@@ -1510,7 +1513,7 @@ class NEMDEModel:
                         + m.V_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, j] >= initial_mw - scada_ramp)
 
         # Joint ramp up constraint
-        m.C_JOINT_RAMP_DOWN = Constraint(m.S_TRADER_OFFERS, rule=joint_ramp_down_rule)
+        # m.C_JOINT_RAMP_DOWN = Constraint(m.S_TRADER_OFFERS, rule=joint_ramp_down_rule)
         print('Finished constructing C_JOINT_RAMP_DOWN:', time.time() - t0)
 
         def joint_capacity_up_rule(m, i, j):
@@ -1556,7 +1559,7 @@ class NEMDEModel:
                 return Constraint.Skip
 
         # Joint capacity constraint up
-        m.C_JOINT_CAPACITY_UP = Constraint(m.S_TRADER_OFFERS, rule=joint_capacity_up_rule)
+        # m.C_JOINT_CAPACITY_UP = Constraint(m.S_TRADER_OFFERS, rule=joint_capacity_up_rule)
         print('Finished constructing C_JOINT_CAPACITY_UP:', time.time() - t0)
 
         def joint_capacity_down_rule(m, i, j):
@@ -1607,7 +1610,7 @@ class NEMDEModel:
                 return Constraint.Skip
 
         # Joint capacity constraint down
-        m.C_JOINT_CAPACITY_DOWN = Constraint(m.S_TRADER_OFFERS, rule=joint_capacity_down_rule)
+        # m.C_JOINT_CAPACITY_DOWN = Constraint(m.S_TRADER_OFFERS, rule=joint_capacity_down_rule)
         print('Finished constructing C_JOINT_CAPACITY_DOWN:', time.time() - t0)
 
         def energy_regulating_up_rule(m, i, j):
@@ -1643,7 +1646,7 @@ class NEMDEModel:
                 return Constraint.Skip
 
         # Joint energy and regulating FCAS constraint
-        m.C_JOINT_REGULATING_UP = Constraint(m.S_TRADER_OFFERS, rule=energy_regulating_up_rule)
+        # m.C_JOINT_REGULATING_UP = Constraint(m.S_TRADER_OFFERS, rule=energy_regulating_up_rule)
         print('Finished constructing C_JOINT_REGULATING_UP:', time.time() - t0)
 
         def energy_regulating_down_rule(m, i, j):
@@ -1679,7 +1682,7 @@ class NEMDEModel:
                 return Constraint.Skip
 
         # Joint energy and regulating FCAS constraint
-        m.C_JOINT_REGULATING_DOWN = Constraint(m.S_TRADER_OFFERS, rule=energy_regulating_down_rule)
+        # m.C_JOINT_REGULATING_DOWN = Constraint(m.S_TRADER_OFFERS, rule=energy_regulating_down_rule)
         print('Finished constructing C_JOINT_REGULATING_DOWN:', time.time() - t0)
 
         return m
@@ -2138,67 +2141,67 @@ if __name__ == '__main__':
     # Solve model
     model, status = nemde.solve_model(model)
 
-    # # Check solution
-    # enof = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'ENOF', 'EnergyTarget')
-    # ldof = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'LDOF', 'EnergyTarget')
-    #
-    # r6se = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'R6SE', 'R6Target')
-    # r60s = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'R60S', 'R60Target')
-    # r5mi = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'R5MI', 'R5Target')
-    # r5reg = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'R5RE', 'R5RegTarget')
-    #
-    # l6se = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'L6SE', 'L6Target')
-    # l60s = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'L60S', 'L60Target')
-    # l5mi = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'L5MI', 'L5Target')
-    # l5reg = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'L5RE', 'L5RegTarget')
-    #
-    # # Scheduled units
-    # scheduled_traders = analysis.get_scheduled_traders()
-    #
-    # # Filter scheduled generators and loads
-    # enof_scheduled = enof.loc[enof.index.intersection(scheduled_traders), :]
-    # ldof_scheduled = ldof.loc[ldof.index.intersection(scheduled_traders), :]
-    #
-    # # Write generic constraints
+    # Check solution
+    enof = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'ENOF', 'EnergyTarget')
+    ldof = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'LDOF', 'EnergyTarget')
+
+    r6se = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'R6SE', 'R6Target')
+    r60s = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'R60S', 'R60Target')
+    r5mi = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'R5MI', 'R5Target')
+    r5reg = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'R5RE', 'R5RegTarget')
+
+    l6se = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'L6SE', 'L6Target')
+    l60s = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'L60S', 'L60Target')
+    l5mi = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'L5MI', 'L5Target')
+    l5reg = analysis.check_energy_solution(model, 'V_TRADER_TOTAL_OFFER', 'L5RE', 'L5RegTarget')
+
+    # Scheduled units
+    scheduled_traders = analysis.get_scheduled_traders()
+
+    # Filter scheduled generators and loads
+    enof_scheduled = enof.loc[enof.index.intersection(scheduled_traders), :]
+    ldof_scheduled = ldof.loc[ldof.index.intersection(scheduled_traders), :]
+
+    # Write generic constraints
     # nemde.save_generic_constraints(model)
-    #
-    # # Combine into single DataFrame
-    # duid = 'JBUTTERS'
-    # analysis.check_trader_solution(model, duid)
-    # analysis.print_fcas_constraints(model, duid)
-    #
-    # # Check interconnector solution
-    # analysis.check_interconnector_solution(model)
-    #
-    #
-    # def sa_v_loss(flow):
-    #     """Loss equation for V-SA interconnector"""
-    #     vic_demand = nemde.data.get_region_period_attribute('VIC1', 'DemandForecast')
-    #     sa_demand = nemde.data.get_region_period_attribute('SA1', 'DemandForecast')
-    #     return (0.0138 + (1.3598E-06 * vic_demand) + (-1.3290E-05 * sa_demand)) * flow + (1.4761E-04 * (flow ** 2))
-    #
-    #
-    # interconnectors = ['N-Q-MNSP1', 'NSW1-QLD1', 'T-V-MNSP1', 'V-S-MNSP1', 'V-SA', 'VIC1-NSW1']
-    # total_loss = sum(nemde.data.get_interconnector_solution_attribute(i, 'Losses') for i in interconnectors)
-    #
-    # gen_surplus = enof['difference'].sum()
-    # load_surplus = ldof['difference'].sum()
-    #
-    # x = [i[1] for i in model.P_LOSS_MODEL_BREAKPOINTS_X.items() if i[0][0] == 'V-S-MNSP1']
-    # y = [i[1] for i in model.P_LOSS_MODEL_BREAKPOINTS_Y.items() if i[0][0] == 'V-S-MNSP1']
-    #
-    # print('V-S-MNSP1 solution loss', nemde.data.get_interconnector_solution_attribute('V-S-MNSP1', 'Losses'))
-    # print('V-S-MNSP1 model loss', model.V_LOSS['V-S-MNSP1'].value)
-    #
-    # print('V-S-MNSP1 solution flow', nemde.data.get_interconnector_solution_attribute('V-S-MNSP1', 'Flow'))
-    # print('V-S-MNSP1 model flow', model.V_GC_INTERCONNECTOR['V-S-MNSP1'].value)
-    #
-    # fig, ax = plt.subplots()
-    # ax.plot(x, y)
-    # plt.show()
-    #
-    # interconnector_loss_solution = {i: nemde.data.get_interconnector_solution_attribute(i, 'Losses')
-    #                                 for i in model.S_INTERCONNECTORS}
-    #
-    # interconnector_flow_solution = {i: nemde.data.get_interconnector_solution_attribute(i, 'Flow')
-    #                                 for i in model.S_INTERCONNECTORS}
+
+    # Combine into single DataFrame
+    duid = 'JBUTTERS'
+    analysis.check_trader_solution(model, duid)
+    analysis.print_fcas_constraints(model, duid)
+
+    # Check interconnector solution
+    analysis.check_interconnector_solution(model)
+
+
+    def sa_v_loss(flow):
+        """Loss equation for V-SA interconnector"""
+        vic_demand = nemde.data.get_region_period_attribute('VIC1', 'DemandForecast')
+        sa_demand = nemde.data.get_region_period_attribute('SA1', 'DemandForecast')
+        return (0.0138 + (1.3598E-06 * vic_demand) + (-1.3290E-05 * sa_demand)) * flow + (1.4761E-04 * (flow ** 2))
+
+
+    interconnectors = ['N-Q-MNSP1', 'NSW1-QLD1', 'T-V-MNSP1', 'V-S-MNSP1', 'V-SA', 'VIC1-NSW1']
+    total_loss = sum(nemde.data.get_interconnector_solution_attribute(i, 'Losses') for i in interconnectors)
+
+    gen_surplus = enof['difference'].sum()
+    load_surplus = ldof['difference'].sum()
+
+    x = [i[1] for i in model.P_LOSS_MODEL_BREAKPOINTS_X.items() if i[0][0] == 'V-S-MNSP1']
+    y = [i[1] for i in model.P_LOSS_MODEL_BREAKPOINTS_Y.items() if i[0][0] == 'V-S-MNSP1']
+
+    print('V-S-MNSP1 solution loss', nemde.data.get_interconnector_solution_attribute('V-S-MNSP1', 'Losses'))
+    print('V-S-MNSP1 model loss', model.V_LOSS['V-S-MNSP1'].value)
+
+    print('V-S-MNSP1 solution flow', nemde.data.get_interconnector_solution_attribute('V-S-MNSP1', 'Flow'))
+    print('V-S-MNSP1 model flow', model.V_GC_INTERCONNECTOR['V-S-MNSP1'].value)
+
+    fig, ax = plt.subplots()
+    ax.plot(x, y)
+    plt.show()
+
+    interconnector_loss_solution = {i: nemde.data.get_interconnector_solution_attribute(i, 'Losses')
+                                    for i in model.S_INTERCONNECTORS}
+
+    interconnector_flow_solution = {i: nemde.data.get_interconnector_solution_attribute(i, 'Flow')
+                                    for i in model.S_INTERCONNECTORS}

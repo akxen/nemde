@@ -133,7 +133,8 @@ def get_scaled_fcas_trapezium_agc_enablement_limits_rhs(trapezium, agc_enablemen
 
         # Update max available if required
         if (intersection is not None) and (intersection[1] < trap['MaxAvail']):
-            trap['MaxAvail'] = intersection[1]
+            # If RHS line moves to left of LHS line, then intersection will be negative - set max available to 0
+            trap['MaxAvail'] = max(0, intersection[1])
 
         # New low breakpoint
         trap['LowBreakpoint'] = get_new_breakpoint(lhs_line['slope'], lhs_line['x_intercept'], trap['MaxAvail'])

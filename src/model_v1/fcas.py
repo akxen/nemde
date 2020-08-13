@@ -434,7 +434,7 @@ class FCASHandler:
 if __name__ == '__main__':
     # Root directory containing NEMDE and MMSDM files
     data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
-                                  os.path.pardir, 'nemweb', 'Reports', 'Data_Archive')
+                                  os.path.pardir, os.path.pardir, 'nemweb', 'Reports', 'Data_Archive')
 
     # Object used to parse NEMDE file
     nemde_data = NEMDEDataHandler(data_directory)
@@ -450,4 +450,5 @@ if __name__ == '__main__':
     # Check regulated FCAS plots (evaluate scaling procedure)
     # fcas.check_regulating_fcas_plots()
 
-    fcas.check_regulating_fcas('POAT220', 'R5RE')
+    # fcas.check_regulating_fcas('POAT220', 'R5RE')
+    fcas.check_regulating_fcas('TORRA4', 'R5RE')

@@ -339,28 +339,39 @@ def get_trader_fcas_trapezium_scaled(data) -> dict:
     scada_ramp_rate_down = get_trader_initial_condition_attribute(data, 'SCADARampDnRate', float)
     uigf = get_trader_period_attribute(data, '@UIGF', float)
 
-    # Scaled trapezium - AGC enablement min - LHS
-    scaled_1 = {
-        k: fcas.get_scaled_fcas_trapezium_agc_enablement_limits_lhs(v, lmw.get(k[0])) if k[1] in ['L5RE', 'R5RE'] else v
-        for k, v in offers.items()
-    }
+    # # Scaled trapezium - AGC enablement min - LHS
+    # scaled_1 = {
+    #     k: fcas.get_scaled_fcas_trapezium_agc_enablement_limits_lhs(v, lmw.get(k[0])) if k[1] in ['L5RE', 'R5RE'] else v
+    #     for k, v in offers.items()
+    # }
 
     # TODO: remove this
-    # scaled_1 = {}
-    # for k, v in offers.items():
-    #     if (k[0] == 'POAT220') and (k[1] == 'R5RE'):
-    #         a = 10
-    #
-    #     if k[1] in ['L5RE', 'R5RE']:
-    #         scaled_1[k] = fcas.get_scaled_fcas_trapezium_agc_enablement_limits_lhs(v, lmw.get(k[0]))
-    #     else:
-    #         scaled_1[k] = v
+    scaled_1 = {}
+    for k, v in offers.items():
+        if (k[0] == 'LD03') and (k[1] == 'R5RE'):
+            a = 10
+
+        if k[1] in ['L5RE', 'R5RE']:
+            scaled_1[k] = fcas.get_scaled_fcas_trapezium_agc_enablement_limits_lhs(v, lmw.get(k[0]))
+        else:
+            scaled_1[k] = v
 
     # Scaled trapezium - AGC enablement min - RHS
-    scaled_2 = {
-        k: fcas.get_scaled_fcas_trapezium_agc_enablement_limits_rhs(v, hmw.get(k[0])) if k[1] in ['L5RE', 'R5RE'] else v
-        for k, v in scaled_1.items()
-    }
+    # scaled_2 = {
+    #     k: fcas.get_scaled_fcas_trapezium_agc_enablement_limits_rhs(v, hmw.get(k[0])) if k[1] in ['L5RE', 'R5RE'] else v
+    #     for k, v in scaled_1.items()
+    # }
+
+    scaled_2 = {}
+    for k, v in scaled_1.items():
+        if (k[0] == 'TORRA1') and (k[1] == 'R5RE'):
+            a = 10
+
+        if k[1] in ['L5RE', 'R5RE']:
+            scaled_2[k] = fcas.get_scaled_fcas_trapezium_agc_enablement_limits_rhs(v, hmw.get(k[0]))
+        else:
+            scaled_2[k] = v
+
 
     # Scaled trapezium - AGC ramp-rates - R5RE offers
     scaled_3 = {
@@ -403,18 +414,31 @@ def get_trader_fcas_availability(data) -> dict:
     max_energy_available = {trader_id: v for (trader_id, trade_type), v in max_available.items()
                             if trade_type in ['ENOF', 'LDOF']}
 
-    # Available FCAS
-    fcas_available = {
-        (trader_id, trade_type):
-            fcas.get_fcas_availability(
-                trapezium,
-                trade_type,
-                max_quantity.get((trader_id, trade_type)),
-                initial_mw.get(trader_id),
-                agc_status.get(trader_id),
-                max_energy_available.get(trader_id)
-            )
-        for (trader_id, trade_type), trapezium in trapeziums.items()}
+    # # Available FCAS
+    # fcas_available = {
+    #     (trader_id, trade_type):
+    #         fcas.get_fcas_availability(
+    #             trapezium,
+    #             trade_type,
+    #             max_quantity.get((trader_id, trade_type)),
+    #             initial_mw.get(trader_id),
+    #             agc_status.get(trader_id),
+    #             max_energy_available.get(trader_id)
+    #         )
+    #     for (trader_id, trade_type), trapezium in trapeziums.items()}
+
+    fcas_available = {}
+    for (trader_id, trade_type), trapezium in trapeziums.items():
+        if (trader_id == 'LD03') and (trade_type == 'R5RE'):
+            a = 10
+        fcas_available[(trader_id, trade_type)] = fcas.get_fcas_availability(
+                    trapezium,
+                    trade_type,
+                    max_quantity.get((trader_id, trade_type)),
+                    initial_mw.get(trader_id),
+                    agc_status.get(trader_id),
+                    max_energy_available.get(trader_id)
+                )
 
     return fcas_available
 
@@ -1140,7 +1164,7 @@ def parse_case_data_json(data) -> dict:
         'P_TRADER_HMW': get_trader_initial_condition_attribute(data_dict, 'HMW', float),
         'P_TRADER_LMW': get_trader_initial_condition_attribute(data_dict, 'LMW', float),
         'P_TRADER_AGC_STATUS': get_trader_initial_condition_attribute(data_dict, 'AGCStatus', str),
-        'P_TRADER_SEMI_DISPATCH_STATUS': get_trader_collection_attribute(data_dict, '@SemiDispatch', float),
+        'P_TRADER_SEMI_DISPATCH_STATUS': get_trader_collection_attribute(data_dict, '@SemiDispatch', str),
         'P_TRADER_REGION': get_trader_period_attribute(data_dict, '@RegionID', str),
         'P_TRADER_PERIOD_RAMP_UP_RATE': get_trader_period_trade_attribute(data_dict, '@RampUpRate', float),
         'P_TRADER_PERIOD_RAMP_DOWN_RATE': get_trader_period_trade_attribute(data_dict, '@RampDnRate', float),

@@ -19,7 +19,7 @@ def trader_capacity_rule(m, i, j):
     """Constrain max available output"""
 
     # UIGF constrains max output for semi-dispatchable plant
-    if i in m.S_TRADERS_SEMI_DISPATCH:
+    if (i in m.S_TRADERS_SEMI_DISPATCH) and (j == 'ENOF'):
         return m.V_TRADER_TOTAL_OFFER[i, j] <= m.P_TRADER_UIGF[i] + m.V_CV_TRADER_CAPACITY[i, j]
     else:
         return m.V_TRADER_TOTAL_OFFER[i, j] <= m.P_TRADER_MAX_AVAILABLE[i, j] + m.V_CV_TRADER_CAPACITY[i, j]
