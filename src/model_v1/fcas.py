@@ -6,8 +6,12 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 
-from data import NEMDEDataHandler
-from data import MMSDMDataHandler
+try:
+    from data import NEMDEDataHandler
+    from data import MMSDMDataHandler
+except ImportError:
+    from .data import NEMDEDataHandler
+    from .data import MMSDMDataHandler
 
 
 class FCASHandler:

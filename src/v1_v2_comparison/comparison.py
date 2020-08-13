@@ -2,16 +2,14 @@
 
 import os
 import sys
-import json
+
 sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir))
 
-import model
+import model_v1.model
 
-sys.path.pop()
-
-import model2
-from utils.data import parse_case_data_json
-from utils.loaders import load_dispatch_interval_json
+import model_v2.model
+import model_v2.utils.loaders
+import model_v2.utils.data
 
 
 def run_slow_model():
@@ -23,28 +21,27 @@ def run_slow_model():
                                   os.path.pardir, os.path.pardir, 'nemweb', 'Reports', 'Data_Archive')
 
     # Object used to construct and run NEMDE approximate model
-    nemde = model.NEMDEModel(data_directory, output_directory)
+    nemde = model_v1.model.NEMDEModel(data_directory, output_directory)
 
     # Load MMSDM data for given interval
     nemde.mmsdm_data.load_interval(2019, 10)
 
     # Object used to interrogate NEMDE solution
-    analysis = model.NEMDESolution(data_directory)
+    analysis = model_v1.model.NEMDESolution(data_directory)
     analysis.data.load_interval(2019, 10, 10, 1)
     analysis.fcas.data.load_interval(2019, 10, 10, 1)
 
     # Construct model for given trading interval
-    model_s = nemde.construct_model(2019, 10, 10, 1)
+    mod = nemde.construct_model(2019, 10, 10, 1)
 
     # Solve model
-    model_s, status_s = nemde.solve_model(model_s)
+    mod, status = nemde.solve_model(mod)
 
-    return model_s, status_s
+    return mod, status
 
 
-if __name__ == '__main__':
-    # Slow and fast models
-    # m_s, s_s = run_slow_model()
+def run_fast_model():
+    """Run fast model"""
 
     # Directory containing case data
     data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
@@ -52,24 +49,25 @@ if __name__ == '__main__':
                                   'zipped')
 
     # NEMDE model object
-    nemde = model2.NEMDEModel()
+    nemde = model_v2.model.NEMDEModel()
 
     # Case data in json format
-    case_data_json = load_dispatch_interval_json(data_directory, 2019, 10, 10, 1)
+    case_data_json = model_v2.utils.loaders.load_dispatch_interval_json(data_directory, 2019, 10, 10, 1)
 
-    # Get NEMDE model data as a Python dictionary
-    cdata = json.loads(case_data_json)
-
-    # # Drop keys
-    # for k in ['ConstraintScadaDataCollection', 'GenericEquationCollection']:
-    #     cdata['NEMSPDCaseFile']['NemSpdInputs'].pop(k)
-    # with open('example.json', 'w') as f:
-    #     json.dump(cdata, f)
-
-    case_data = parse_case_data_json(case_data_json)
+    # Parse case data
+    case_data = model_v2.utils.data.parse_case_data_json(case_data_json)
 
     # Construct model
-    nemde_model = nemde.construct_model(case_data)
+    mod = nemde.construct_model(case_data)
 
     # Solve model
-    nemde_model, status = nemde.solve_model(nemde_model)
+    mod, status = nemde.solve_model(mod)
+
+    return mod, status
+
+
+if __name__ == '__main__':
+    # Slow and fast models
+    # m_s, s_s = run_slow_model()
+    m_f, s_f = run_fast_model()
+    # pass

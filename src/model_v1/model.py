@@ -9,9 +9,14 @@ from pyomo.util.infeasible import log_infeasible_constraints
 
 import matplotlib.pyplot as plt
 
-from data import NEMDEDataHandler
-from data import MMSDMDataHandler
-from fcas import FCASHandler
+try:
+    from data import NEMDEDataHandler
+    from data import MMSDMDataHandler
+    from fcas import FCASHandler
+except ImportError:
+    from .data import NEMDEDataHandler
+    from .data import MMSDMDataHandler
+    from .fcas import FCASHandler
 
 
 class NEMDEModel:
@@ -1849,7 +1854,7 @@ class NEMDEModel:
         print('Defined objective:', time.time() - t0)
 
         # Fix interconnector solution
-        m = self.fix_interconnector_solution(m)
+        # m = self.fix_interconnector_solution(m)
         # m = self.fix_fcas_solution(m)
         # m = self.fix_energy_solution(m)
 

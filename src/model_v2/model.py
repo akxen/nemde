@@ -6,24 +6,44 @@ import time
 
 import pyomo.environ as pyo
 
-from utils.data import parse_case_data_json
-from utils.loaders import load_dispatch_interval_json
+try:
+    from utils.data import parse_case_data_json
+    from utils.loaders import load_dispatch_interval_json
 
-from components.expressions.cost_functions import define_cost_function_expressions
-from components.expressions.constraint_violation import define_constraint_violation_penalty_expressions
-from components.expressions.aggregate_power import define_aggregate_power_expressions
-from components.expressions.generic_constraints import define_generic_constraint_expressions
+    from components.expressions.cost_functions import define_cost_function_expressions
+    from components.expressions.constraint_violation import define_constraint_violation_penalty_expressions
+    from components.expressions.aggregate_power import define_aggregate_power_expressions
+    from components.expressions.generic_constraints import define_generic_constraint_expressions
 
-from components.constraints.offers import define_offer_constraints
-from components.constraints.units import define_unit_constraints
-from components.constraints.regions import define_region_constraints
-from components.constraints.interconnectors import define_interconnector_constraints
-from components.constraints.generic_constraints import define_generic_constraints
-from components.constraints.fcas import define_fcas_constraints
-from components.constraints.loss import define_loss_model_constraints
+    from components.constraints.offers import define_offer_constraints
+    from components.constraints.units import define_unit_constraints
+    from components.constraints.regions import define_region_constraints
+    from components.constraints.interconnectors import define_interconnector_constraints
+    from components.constraints.generic_constraints import define_generic_constraints
+    from components.constraints.fcas import define_fcas_constraints
+    from components.constraints.loss import define_loss_model_constraints
 
-import utils.solution
-import utils.analysis
+    import utils.solution
+    import utils.analysis
+except ModuleNotFoundError:
+    from .utils.data import parse_case_data_json
+    from .utils.loaders import load_dispatch_interval_json
+
+    from .components.expressions.cost_functions import define_cost_function_expressions
+    from .components.expressions.constraint_violation import define_constraint_violation_penalty_expressions
+    from .components.expressions.aggregate_power import define_aggregate_power_expressions
+    from .components.expressions.generic_constraints import define_generic_constraint_expressions
+
+    from .components.constraints.offers import define_offer_constraints
+    from .components.constraints.units import define_unit_constraints
+    from .components.constraints.regions import define_region_constraints
+    from .components.constraints.interconnectors import define_interconnector_constraints
+    from .components.constraints.generic_constraints import define_generic_constraints
+    from .components.constraints.fcas import define_fcas_constraints
+    from .components.constraints.loss import define_loss_model_constraints
+
+    # import .utils.solution
+    # import .utils.analysis
 
 
 class NEMDEModel:
@@ -472,7 +492,7 @@ if __name__ == '__main__':
     nemde = NEMDEModel()
 
     # Case data in json format
-    case_data_json = load_dispatch_interval_json(data_directory, 2019, 10, 10, 1)
+    case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, 2019, 10, 10, 1)
 
     # Get NEMDE model data as a Python dictionary
     cdata = json.loads(case_data_json)
@@ -483,7 +503,7 @@ if __name__ == '__main__':
     # with open('example.json', 'w') as f:
     #     json.dump(cdata, f)
 
-    case_data = parse_case_data_json(case_data_json)
+    case_data = utils.data.parse_case_data_json(case_data_json)
 
     # Construct model
     nemde_model = nemde.construct_model(case_data)
