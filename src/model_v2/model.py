@@ -420,12 +420,22 @@ class NEMDEModel:
         return m
 
     @staticmethod
-    def fix_interconnector_solution(m, data):
+    def fix_interconnector_flow_solution(m, data):
         """Fix interconnector solution to observed values"""
 
         for i in m.S_GC_INTERCONNECTOR_VARS:
             observed_flow = float(data['solution']['interconnectors'][i]['@Flow'])
             m.V_GC_INTERCONNECTOR[i].fix(observed_flow)
+
+        return m
+
+    @staticmethod
+    def fix_interconnector_loss_solution(m, data):
+        """Fix interconnector solution to observed values"""
+
+        for i in m.S_GC_INTERCONNECTOR_VARS:
+            observed_flow = float(data['solution']['interconnectors'][i]['@Losses'])
+            m.V_LOSS[i].fix(observed_flow)
 
         return m
 
@@ -458,7 +468,7 @@ class NEMDEModel:
         return m
 
     @staticmethod
-    def fix_selected_energy_solution(m, data):
+    def fix_selected_trader_solution(m, data):
         """Fix FCAS solution"""
 
         # Map between NEMDE output keys and keys used in solution dictionary
@@ -488,8 +498,9 @@ class NEMDEModel:
         print('Constructed model in:', time.time() - t0)
 
         # Fixing interconnector and FCAS solutions
-        m = self.fix_selected_energy_solution(m, data)
-        # m = self.fix_interconnector_solution(m, data)
+        # m = self.fix_selected_trader_solution(m, data)
+        # m = self.fix_interconnector_flow_solution(m, data)
+        # m = self.fix_interconnector_loss_solution(m, data)
         # m = self.fix_energy_solution(m, data)
         # m = self.fix_fcas_solution(m, data)
 
@@ -559,4 +570,13 @@ if __name__ == '__main__':
     utils.analysis.plot_trader_solution_difference(cdata, solution)
 
     # FCAS solution
-    utils.analysis.plot_fcas_solution(cdata, case_data, solution)
+    # utils.analysis.plot_fcas_solution(cdata, case_data, solution)
+
+    # import pandas as pd
+    # import matplotlib.pyplot as plt
+    #
+    # df = pd.DataFrame(
+    #     {k: {'loss': v} for k, v in nemde_model.P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y.items()}).T.sort_index()
+    # for i in df.index.levels[0]:
+    #     df.xs(i, level=0).plot(title=i)
+    # plt.show()
