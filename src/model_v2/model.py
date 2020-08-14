@@ -233,6 +233,9 @@ class NEMDEModel:
         # Region demand forecast increment (DF)
         m.P_REGION_DF = pyo.Param(m.S_REGIONS, initialize=data['P_REGION_DF'])
 
+        # Region fixed demand (obtained from case solution)
+        m.P_REGION_FIXED_DEMAND = pyo.Param(m.S_REGIONS, initialize=data['P_REGION_FIXED_DEMAND'])
+
         # Generic constraint RHS
         m.P_GC_RHS = pyo.Param(m.S_GENERIC_CONSTRAINTS, initialize=data['P_GC_RHS'])
 
@@ -499,7 +502,7 @@ class NEMDEModel:
 
         # Fixing interconnector and FCAS solutions
         # m = self.fix_selected_trader_solution(m, data)
-        # m = self.fix_interconnector_flow_solution(m, data)
+        m = self.fix_interconnector_flow_solution(m, data)
         # m = self.fix_interconnector_loss_solution(m, data)
         # m = self.fix_energy_solution(m, data)
         # m = self.fix_fcas_solution(m, data)
@@ -570,7 +573,7 @@ if __name__ == '__main__':
     utils.analysis.plot_trader_solution_difference(cdata, solution)
 
     # FCAS solution
-    # utils.analysis.plot_fcas_solution(cdata, case_data, solution)
+    utils.analysis.plot_fcas_solution(cdata, case_data, solution)
 
     # import pandas as pd
     # import matplotlib.pyplot as plt

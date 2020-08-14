@@ -1082,6 +1082,27 @@ def get_region_solution(data) -> dict:
     return solutions
 
 
+def get_region_solution_attribute(data, attribute, func) -> dict:
+    """Get given solution attribute for all regions"""
+
+    # All regions
+    regions = data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('RegionSolution')
+
+    return {i['@RegionID']: func(i[attribute]) for i in regions if i['@Intervention'] == '0'}
+
+    # # Keys that should be converted to type string. All other keys to be converted to type float.
+    # str_keys = ['@RegionID', '@PeriodID', '@Intervention']
+
+    # # Container for extracted region solutions
+    # solutions = {}
+    # for i in regions:
+    #     # Parse values - only consider no intervention case
+    #     if i['@Intervention'] == '0':
+    #         solutions[i['@RegionID']] = {k: str(v) if k in str_keys else float(v) for k, v in i.items()}
+    #
+    # return solutions
+
+
 def get_constraint_solution(data) -> dict:
     """Get constraint solution"""
 
@@ -1193,6 +1214,7 @@ def parse_case_data_json(data) -> dict:
         'P_REGION_INITIAL_DEMAND': get_region_initial_condition_attribute(data_dict, 'InitialDemand', float),
         'P_REGION_ADE': get_region_initial_condition_attribute(data_dict, 'ADE', float),
         'P_REGION_DF': get_region_period_collection_attribute(data_dict, '@DF', float),
+        'P_REGION_FIXED_DEMAND': get_region_solution_attribute(data_dict, '@FixedDemand', float),
         'P_GC_RHS': get_generic_constraint_rhs(data_dict),
         'P_GC_TYPE': get_generic_constraint_collection_attribute(data_dict, '@Type', str),
         'P_CVF_GC': get_generic_constraint_collection_attribute(data_dict, '@ViolationPrice', float),
