@@ -443,6 +443,34 @@ class NEMDEModel:
 
         return m
 
+    @staticmethod
+    def fix_energy_solution(m, data):
+        """Fix FCAS solution"""
+
+        # Map between NEMDE output keys and keys used in solution dictionary
+        key_map = {'ENOF': '@EnergyTarget', 'LDOF': '@EnergyTarget',
+                   'R6SE': '@R6Target', 'R60S': '@R60Target', 'R5MI': '@R5Target', 'R5RE': '@R5RegTarget',
+                   'L6SE': '@L6Target', 'L60S': '@L60Target', 'L5MI': '@L5Target', 'L5RE': '@L5RegTarget'}
+
+        for i, j in m.S_TRADER_ENERGY_OFFERS:
+            m.V_TRADER_TOTAL_OFFER[(i, j)].fix(data['solution']['traders'][i][key_map[j]])
+
+        return m
+
+    @staticmethod
+    def fix_selected_energy_solution(m, data):
+        """Fix FCAS solution"""
+
+        # Map between NEMDE output keys and keys used in solution dictionary
+        key_map = {'ENOF': '@EnergyTarget', 'LDOF': '@EnergyTarget',
+                   'R6SE': '@R6Target', 'R60S': '@R60Target', 'R5MI': '@R5Target', 'R5RE': '@R5RegTarget',
+                   'L6SE': '@L6Target', 'L60S': '@L60Target', 'L5MI': '@L5Target', 'L5RE': '@L5RegTarget'}
+
+        for i, j in [('UPPTUMUT', 'ENOF'), ('MURRAY', 'ENOF')]:
+            m.V_TRADER_TOTAL_OFFER[(i, j)].fix(data['solution']['traders'][i][key_map[j]])
+
+        return m
+
     def construct_model(self, data):
         """Create model object"""
 
@@ -460,7 +488,9 @@ class NEMDEModel:
         print('Constructed model in:', time.time() - t0)
 
         # Fixing interconnector and FCAS solutions
+        m = self.fix_selected_energy_solution(m, data)
         # m = self.fix_interconnector_solution(m, data)
+        # m = self.fix_energy_solution(m, data)
         # m = self.fix_fcas_solution(m, data)
 
         return m
@@ -518,7 +548,7 @@ if __name__ == '__main__':
     #     json.dump(solution, f)
 
     # Difference
-    trader_solution = utils.analysis.check_trader_solution(cdata, solution)
+    trader_solution, df_trader_solution = utils.analysis.check_trader_solution(cdata, solution)
 
     # Interconnector solutions
     interconnector_flow_solution = utils.analysis.check_interconnector_solution(cdata, solution, 'Flow')

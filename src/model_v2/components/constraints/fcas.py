@@ -33,6 +33,46 @@ def fcas_available_rule(m, i, j):
         return pyo.Constraint.Skip
 
 
+# def as_profile_1_rule(m, i, j):
+#     """Constraint LHS component of FCAS trapeziums (line between enablement min and low breakpoint)"""
+#
+#     # Only consider FCAS offers - ignore energy offers
+#     if j in ['ENOF', 'LDOF']:
+#         return pyo.Constraint.Skip
+#
+#     # Check FCAS is available
+#     if not m.P_TRADER_FCAS_AVAILABILITY[(i, j)]:
+#         return pyo.Constraint.Skip
+#
+#     # Get slope between enablement min and low breakpoint
+#     x1, y1 = m.P_TRADER_FCAS_ENABLEMENT_MIN[(i, j)], 0
+#     x2, y2 = m.P_TRADER_FCAS_LOW_BREAKPOINT[(i, j)], m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)]
+#     slope = get_slope(x1, x2, y1, y2)
+#
+#     # print(f'({i}, {j})-{x1}-{y1}-{x2}-{y2}-{slope}')
+#
+#     # Case with vertical line
+#     if slope is None:
+#         return (m.V_TRADER_TOTAL_OFFER[i, j] <= m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)]
+#                 + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j])
+#
+#     # Compute y-intercept
+#     y_intercept = get_intercept(slope, x1, y1)
+#     # print(f'({i}, {j})-{y_intercept}')
+#
+#     # Handle generator case
+#     if m.P_TRADER_TYPE[i] in ['GENERATOR']:
+#         return (m.V_TRADER_TOTAL_OFFER[i, j] <= (slope * m.V_TRADER_TOTAL_OFFER[i, 'ENOF']) + y_intercept
+#                 + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j])
+#
+#     # Handle loads
+#     elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
+#         return (m.V_TRADER_TOTAL_OFFER[i, j] <= (slope * m.V_TRADER_TOTAL_OFFER[i, 'LDOF']) + y_intercept
+#                 + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j])
+#     else:
+#         raise Exception(f'Unexpected trader type: {m.P_TRADER_TYPE[i]}')
+
+
 def as_profile_1_rule(m, i, j):
     """Constraint LHS component of FCAS trapeziums (line between enablement min and low breakpoint)"""
 
@@ -41,36 +81,48 @@ def as_profile_1_rule(m, i, j):
         return pyo.Constraint.Skip
 
     # Check FCAS is available
+    # if not self.get_fcas_availability(i, j):
     if not m.P_TRADER_FCAS_AVAILABILITY[(i, j)]:
         return pyo.Constraint.Skip
 
+    # # Get FCAS trapezium
+    # if j in ['R5RE', 'L5RE']:
+    #     trapezium = self.fcas.get_scaled_fcas_trapezium(i, j)
+    # else:
+    #     trapezium = self.fcas.get_fcas_trapezium_offer(i, j)
+
+    trapezium = {
+        'enablement_min': m.P_TRADER_FCAS_ENABLEMENT_MIN[(i, j)],
+        'low_breakpoint': m.P_TRADER_FCAS_LOW_BREAKPOINT[(i, j)],
+        'high_breakpoint': m.P_TRADER_FCAS_HIGH_BREAKPOINT[(i, j)],
+        'enablement_max': m.P_TRADER_FCAS_ENABLEMENT_MAX[(i, j)],
+        'max_available': m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)],
+    }
+
     # Get slope between enablement min and low breakpoint
-    x1, y1 = m.P_TRADER_FCAS_ENABLEMENT_MIN[(i, j)], 0
-    x2, y2 = m.P_TRADER_FCAS_LOW_BREAKPOINT[(i, j)], m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)]
+    x1, y1 = trapezium['enablement_min'], 0
+    x2, y2 = trapezium['low_breakpoint'], trapezium['max_available']
     slope = get_slope(x1, x2, y1, y2)
 
     # print(f'({i}, {j})-{x1}-{y1}-{x2}-{y2}-{slope}')
 
-    # Case with vertical line
-    if slope is None:
-        return (m.V_TRADER_TOTAL_OFFER[i, j] <= m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)]
-                + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j])
+    if slope is not None:
+        y_intercept = get_intercept(slope, x1, y1)
+        # print(f'({i}, {j})-{y_intercept}')
+        try:
+            return (m.V_TRADER_TOTAL_OFFER[i, j] <= (slope * m.V_TRADER_TOTAL_OFFER[i, 'ENOF']) + y_intercept
+                    + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j]
+                    )
 
-    # Compute y-intercept
-    y_intercept = get_intercept(slope, x1, y1)
-    # print(f'({i}, {j})-{y_intercept}')
+        except KeyError:
+            return (m.V_TRADER_TOTAL_OFFER[i, j] <= (slope * m.V_TRADER_TOTAL_OFFER[i, 'LDOF']) + y_intercept
+                    + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j]
+                    )
 
-    # Handle generator case
-    if m.P_TRADER_TYPE[i] in ['GENERATOR']:
-        return (m.V_TRADER_TOTAL_OFFER[i, j] <= (slope * m.V_TRADER_TOTAL_OFFER[i, 'ENOF']) + y_intercept
-                + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j])
-
-    # Handle loads
-    elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
-        return (m.V_TRADER_TOTAL_OFFER[i, j] <= (slope * m.V_TRADER_TOTAL_OFFER[i, 'LDOF']) + y_intercept
-                + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j])
     else:
-        raise Exception(f'Unexpected trader type: {m.P_TRADER_TYPE[i]}')
+        # TODO: need to consider if vertical line
+        return (m.V_TRADER_TOTAL_OFFER[i, j] <= trapezium['max_available']
+                + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j])
 
 
 def as_profile_2_rule(m, i, j):
@@ -336,36 +388,36 @@ def define_fcas_constraints(m):
     m.C_AS_PROFILE_1 = pyo.Constraint(m.S_TRADER_OFFERS, rule=as_profile_1_rule)
     print('Finished constructing C_AS_PROFILE_1:', time.time() - t0)
 
-    # # AS profile constraint - between enablement min and low breakpoint
-    # m.C_AS_PROFILE_2 = pyo.Constraint(m.S_TRADER_OFFERS, rule=as_profile_2_rule)
-    # print('Finished constructing C_AS_PROFILE_2:', time.time() - t0)
-    #
-    # # AS profile constraint - between enablement min and low breakpoint
-    # m.C_AS_PROFILE_3 = pyo.Constraint(m.S_TRADER_OFFERS, rule=as_profile_3_rule)
-    # print('Finished constructing C_AS_PROFILE_3:', time.time() - t0)
+    # AS profile constraint - between enablement min and low breakpoint
+    m.C_AS_PROFILE_2 = pyo.Constraint(m.S_TRADER_OFFERS, rule=as_profile_2_rule)
+    print('Finished constructing C_AS_PROFILE_2:', time.time() - t0)
 
-    # # Joint ramp up constraint
-    # m.C_JOINT_RAMP_UP = pyo.Constraint(m.S_TRADER_OFFERS, rule=joint_ramp_up_rule)
-    # print('Finished constructing C_JOINT_RAMP_UP:', time.time() - t0)
-    #
-    # # Joint ramp up constraint
-    # m.C_JOINT_RAMP_DOWN = pyo.Constraint(m.S_TRADER_OFFERS, rule=joint_ramp_down_rule)
-    # print('Finished constructing C_JOINT_RAMP_DOWN:', time.time() - t0)
-    #
-    # # Joint capacity constraint up
-    # m.C_JOINT_CAPACITY_UP = pyo.Constraint(m.S_TRADER_OFFERS, rule=joint_capacity_up_rule)
-    # print('Finished constructing C_JOINT_CAPACITY_UP:', time.time() - t0)
-    #
-    # # Joint capacity constraint down
-    # m.C_JOINT_CAPACITY_DOWN = pyo.Constraint(m.S_TRADER_OFFERS, rule=joint_capacity_down_rule)
-    # print('Finished constructing C_JOINT_CAPACITY_DOWN:', time.time() - t0)
-    #
-    # # Joint energy and regulating FCAS constraint
-    # m.C_JOINT_REGULATING_UP = pyo.Constraint(m.S_TRADER_OFFERS, rule=energy_regulating_up_rule)
-    # print('Finished constructing C_JOINT_REGULATING_UP:', time.time() - t0)
-    #
-    # # Joint energy and regulating FCAS constraint
-    # m.C_JOINT_REGULATING_DOWN = pyo.Constraint(m.S_TRADER_OFFERS, rule=energy_regulating_down_rule)
-    # print('Finished constructing C_JOINT_REGULATING_DOWN:', time.time() - t0)
+    # AS profile constraint - between enablement min and low breakpoint
+    m.C_AS_PROFILE_3 = pyo.Constraint(m.S_TRADER_OFFERS, rule=as_profile_3_rule)
+    print('Finished constructing C_AS_PROFILE_3:', time.time() - t0)
+
+    # Joint ramp up constraint
+    m.C_JOINT_RAMP_UP = pyo.Constraint(m.S_TRADER_OFFERS, rule=joint_ramp_up_rule)
+    print('Finished constructing C_JOINT_RAMP_UP:', time.time() - t0)
+
+    # Joint ramp up constraint
+    m.C_JOINT_RAMP_DOWN = pyo.Constraint(m.S_TRADER_OFFERS, rule=joint_ramp_down_rule)
+    print('Finished constructing C_JOINT_RAMP_DOWN:', time.time() - t0)
+
+    # Joint capacity constraint up
+    m.C_JOINT_CAPACITY_UP = pyo.Constraint(m.S_TRADER_OFFERS, rule=joint_capacity_up_rule)
+    print('Finished constructing C_JOINT_CAPACITY_UP:', time.time() - t0)
+
+    # Joint capacity constraint down
+    m.C_JOINT_CAPACITY_DOWN = pyo.Constraint(m.S_TRADER_OFFERS, rule=joint_capacity_down_rule)
+    print('Finished constructing C_JOINT_CAPACITY_DOWN:', time.time() - t0)
+
+    # Joint energy and regulating FCAS constraint
+    m.C_JOINT_REGULATING_UP = pyo.Constraint(m.S_TRADER_OFFERS, rule=energy_regulating_up_rule)
+    print('Finished constructing C_JOINT_REGULATING_UP:', time.time() - t0)
+
+    # Joint energy and regulating FCAS constraint
+    m.C_JOINT_REGULATING_DOWN = pyo.Constraint(m.S_TRADER_OFFERS, rule=energy_regulating_down_rule)
+    print('Finished constructing C_JOINT_REGULATING_DOWN:', time.time() - t0)
 
     return m

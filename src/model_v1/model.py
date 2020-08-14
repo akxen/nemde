@@ -1401,7 +1401,7 @@ class NEMDEModel:
             return m.V_TRADER_TOTAL_OFFER[i, j] <= trapezium['max_available'] + m.V_CV_TRADER_FCAS_AS_PROFILE_2[i, j]
 
         # AS profile constraint - between enablement min and low breakpoint
-        # m.C_AS_PROFILE_2 = Constraint(m.S_TRADER_OFFERS, rule=as_profile_2_rule)
+        m.C_AS_PROFILE_2 = Constraint(m.S_TRADER_OFFERS, rule=as_profile_2_rule)
         print('Finished constructing C_AS_PROFILE_2:', time.time() - t0)
 
         def as_profile_3_rule(m, i, j):
@@ -1443,7 +1443,7 @@ class NEMDEModel:
                         + m.V_CV_TRADER_FCAS_AS_PROFILE_3[i, j])
 
         # AS profile constraint - between enablement min and low breakpoint
-        # m.C_AS_PROFILE_3 = Constraint(m.S_TRADER_OFFERS, rule=as_profile_3_rule)
+        m.C_AS_PROFILE_3 = Constraint(m.S_TRADER_OFFERS, rule=as_profile_3_rule)
         print('Finished constructing C_AS_PROFILE_3:', time.time() - t0)
 
         def joint_ramp_up_rule(m, i, j):
@@ -1478,7 +1478,7 @@ class NEMDEModel:
                         + m.V_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, j])
 
         # Joint ramp up constraint
-        # m.C_JOINT_RAMP_UP = Constraint(m.S_TRADER_OFFERS, rule=joint_ramp_up_rule)
+        m.C_JOINT_RAMP_UP = Constraint(m.S_TRADER_OFFERS, rule=joint_ramp_up_rule)
         print('Finished constructing C_JOINT_RAMP_UP:', time.time() - t0)
 
         def joint_ramp_down_rule(m, i, j):
@@ -1513,7 +1513,7 @@ class NEMDEModel:
                         + m.V_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, j] >= initial_mw - scada_ramp)
 
         # Joint ramp up constraint
-        # m.C_JOINT_RAMP_DOWN = Constraint(m.S_TRADER_OFFERS, rule=joint_ramp_down_rule)
+        m.C_JOINT_RAMP_DOWN = Constraint(m.S_TRADER_OFFERS, rule=joint_ramp_down_rule)
         print('Finished constructing C_JOINT_RAMP_DOWN:', time.time() - t0)
 
         def joint_capacity_up_rule(m, i, j):
@@ -1559,7 +1559,7 @@ class NEMDEModel:
                 return Constraint.Skip
 
         # Joint capacity constraint up
-        # m.C_JOINT_CAPACITY_UP = Constraint(m.S_TRADER_OFFERS, rule=joint_capacity_up_rule)
+        m.C_JOINT_CAPACITY_UP = Constraint(m.S_TRADER_OFFERS, rule=joint_capacity_up_rule)
         print('Finished constructing C_JOINT_CAPACITY_UP:', time.time() - t0)
 
         def joint_capacity_down_rule(m, i, j):
@@ -1610,7 +1610,7 @@ class NEMDEModel:
                 return Constraint.Skip
 
         # Joint capacity constraint down
-        # m.C_JOINT_CAPACITY_DOWN = Constraint(m.S_TRADER_OFFERS, rule=joint_capacity_down_rule)
+        m.C_JOINT_CAPACITY_DOWN = Constraint(m.S_TRADER_OFFERS, rule=joint_capacity_down_rule)
         print('Finished constructing C_JOINT_CAPACITY_DOWN:', time.time() - t0)
 
         def energy_regulating_up_rule(m, i, j):
@@ -1646,7 +1646,7 @@ class NEMDEModel:
                 return Constraint.Skip
 
         # Joint energy and regulating FCAS constraint
-        # m.C_JOINT_REGULATING_UP = Constraint(m.S_TRADER_OFFERS, rule=energy_regulating_up_rule)
+        m.C_JOINT_REGULATING_UP = Constraint(m.S_TRADER_OFFERS, rule=energy_regulating_up_rule)
         print('Finished constructing C_JOINT_REGULATING_UP:', time.time() - t0)
 
         def energy_regulating_down_rule(m, i, j):
@@ -1682,7 +1682,7 @@ class NEMDEModel:
                 return Constraint.Skip
 
         # Joint energy and regulating FCAS constraint
-        # m.C_JOINT_REGULATING_DOWN = Constraint(m.S_TRADER_OFFERS, rule=energy_regulating_down_rule)
+        m.C_JOINT_REGULATING_DOWN = Constraint(m.S_TRADER_OFFERS, rule=energy_regulating_down_rule)
         print('Finished constructing C_JOINT_REGULATING_DOWN:', time.time() - t0)
 
         return m
@@ -1858,8 +1858,8 @@ class NEMDEModel:
 
         # Fix interconnector solution
         # m = self.fix_interconnector_solution(m)
-        # m = self.fix_fcas_solution(m)
         # m = self.fix_energy_solution(m)
+        # m = self.fix_fcas_solution(m)
 
         return m
 

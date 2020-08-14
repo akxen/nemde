@@ -47,10 +47,11 @@ def check_trader_solution(data, solution):
     # Convert to DataFrame and sort by error corresponding to each unit
     df_out = {(k_1, k_2): v_2 for k_1, v_1 in out.items() for k_2, v_2 in v_1.items()}
     print('Trader targets')
-    print(pd.DataFrame(df_out).T.sort_values(by='abs_difference', ascending=False).head(10))
+    df = pd.DataFrame(df_out).T.sort_values(by='abs_difference', ascending=False)
+    print(df.head(10))
     print('\n')
 
-    return out
+    return out, df
 
 
 def plot_trader_solution_difference(data, solution):
@@ -270,7 +271,7 @@ def plot_fcas_solution(data, preprocessed_data, solution):
     """Plot FCAS solution"""
 
     # Trader solutions
-    trader_solutions = check_trader_solution(data, solution)
+    trader_solutions, _ = check_trader_solution(data, solution)
 
     offers = {}
     for (trader_id, trade_type) in preprocessed_data['S_TRADER_FCAS_OFFERS']:

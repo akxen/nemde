@@ -69,10 +69,11 @@ def run_fast_model():
     return mod, status, nemde
 
 
-def compare_objectives(m_1, m_2):
+def compare_objectives(m_1, m_2, n_1):
     """Check objective values for both models"""
 
-    return {'m_1_objective': pyo.value(m_1.OBJECTIVE), 'm_2_objective': pyo.value(m_2.OBJECTIVE)}
+    return {'m_1_objective': pyo.value(m_1.OBJECTIVE), 'm_2_objective': pyo.value(m_2.OBJECTIVE),
+            'solution': n_1.data.get_period_solution_attribute('TotalObjective')}
 
 
 def check_sets(m_1, m_1_attribute, m_2, m_2_attribute):
@@ -118,7 +119,7 @@ def compare_sets(m_1, m_2):
     # m.S_INTERCONNECTOR_LOSS_MODEL_INTERVALS = pyo.Set(initialize=data['S_INTERCONNECTOR_LOSS_MODEL_INTERVALS'])
 
 
-def get_parameters(m_1, m_1_attribute, m_2, m_2_attribute):
+def get_model_attributes(m_1, m_1_attribute, m_2, m_2_attribute):
     """Compare model attributes"""
 
     # Check if model indices are the same
@@ -126,16 +127,28 @@ def get_parameters(m_1, m_1_attribute, m_2, m_2_attribute):
     assert check_index, f'Parameter indices do not match: {m_1_attribute} {m_2_attribute}'
 
     # Combine values into single dictionary
-    out = {
-        k:
-            {
-                'm_1': v.value,
-                'm_2': m_2.__getattribute__(m_2_attribute)[k].value,
-                'difference': v.value - m_2.__getattribute__(m_2_attribute)[k].value,
-                'abs_difference': abs(v.value - m_2.__getattribute__(m_2_attribute)[k].value),
-            }
-        for k, v in m_1.__getattribute__(m_1_attribute).items()
-    }
+    try:
+        out = {
+            k:
+                {
+                    'm_1': v.value,
+                    'm_2': m_2.__getattribute__(m_2_attribute)[k].value,
+                    'difference': v.value - m_2.__getattribute__(m_2_attribute)[k].value,
+                    'abs_difference': abs(v.value - m_2.__getattribute__(m_2_attribute)[k].value),
+                }
+            for k, v in m_1.__getattribute__(m_1_attribute).items()
+        }
+    except AttributeError:
+        out = {
+            k:
+                {
+                    'm_1': v,
+                    'm_2': m_2.__getattribute__(m_2_attribute)[k],
+                    'difference': v - m_2.__getattribute__(m_2_attribute)[k],
+                    'abs_difference': abs(v - m_2.__getattribute__(m_2_attribute)[k]),
+                }
+            for k, v in m_1.__getattribute__(m_1_attribute).items()
+        }
 
     # Convert to DataFrame
     df = pd.DataFrame(out).T.sort_values(by='abs_difference', ascending=False)
@@ -190,57 +203,117 @@ def compare_constraints(m_1, m_1_attribute, m_2, m_2_attribute):
     return df
 
 
+def compare_fcas_trapeziums(m_1, m_2, n_1):
+    """Compare FCAS trapeziums"""
+
+    # FCAS trapeziums from first model (working model)
+    fcas_1 = {
+        k: n_1.fcas.get_scaled_fcas_trapezium(k[0], k[1])
+        if k[1] in ['R5RE', 'L5RE'] else n_s.fcas.get_fcas_trapezium_offer(k[0], k[1])
+        for k, _ in m_2.P_TRADER_FCAS_ENABLEMENT_MIN.items()
+    }
+
+    # FCAS trapeziums from second model
+    fcas_2 = {
+        k: {
+            'enablement_min': m_2.P_TRADER_FCAS_ENABLEMENT_MIN[k],
+            'low_breakpoint': m_2.P_TRADER_FCAS_LOW_BREAKPOINT[k],
+            'high_breakpoint': m_2.P_TRADER_FCAS_HIGH_BREAKPOINT[k],
+            'enablement_max': m_2.P_TRADER_FCAS_ENABLEMENT_MAX[k],
+        }
+        for k, v in m_2.P_TRADER_FCAS_ENABLEMENT_MIN.items()
+    }
+
+    # Difference between models
+    difference = {
+        k: {
+            'enablement_min': abs(fcas_1[k]['enablement_min'] - fcas_2[k]['enablement_min']),
+            'low_breakpoint': abs(fcas_1[k]['low_breakpoint'] - fcas_2[k]['low_breakpoint']),
+            'high_breakpoint': abs(fcas_1[k]['high_breakpoint'] - fcas_2[k]['high_breakpoint']),
+            'enablement_max': abs(fcas_1[k]['enablement_max'] - fcas_2[k]['enablement_max']),
+        }
+        for k, _ in fcas_2.items()
+    }
+
+    # Convert to DataFrame and identify offers for which trapeziums differ the most
+    df = pd.DataFrame(difference).T.sum(axis=1).sort_values(ascending=False)
+
+    return df
+
+
+def compare_trader_solution(m_1, m_2, n_1):
+    """Compare trader solutions"""
+
+    key_map = {'ENOF': '@EnergyTarget', 'LDOF': '@EnergyTarget',
+               'R6SE': '@R6Target', 'R60S': '@R60Target', 'R5MI': '@R5Target', 'R5RE': '@R5RegTarget',
+               'L6SE': '@L6Target', 'L60S': '@L60Target', 'L5MI': '@L5Target', 'L5RE': '@L5RegTarget'}
+
+    # Solution
+    solution = {k: {'solution': n_1.data.get_trader_solution_attribute(k[0], key_map[k[1]].replace('@', ''))}
+                for k in m_2.S_TRADER_OFFERS}
+
+    # Construct DataFrame
+    df_solution = pd.DataFrame(solution).T
+    model_output = get_model_attributes(m_1, 'V_TRADER_TOTAL_OFFER', m_2, 'V_TRADER_TOTAL_OFFER')
+
+    # Combine model and observed values
+    offers_solution = model_output.join(df_solution, how='left').sort_values(by='abs_difference', ascending=False)
+
+    return offers_solution
+
+
+def compare_interconnector_flow_solution(m_1, m_2, n_1):
+    """Compare interconnector flow solutions"""
+
+    # Combine into single dictionary
+    out = {
+        k: {
+            'm_1': m_1.V_GC_INTERCONNECTOR[k].value,
+            'm_2': m_2.V_GC_INTERCONNECTOR[k].value,
+            'difference': m_1.V_GC_INTERCONNECTOR[k].value - m_2.V_GC_INTERCONNECTOR[k].value,
+            'abs_difference': abs(m_1.V_GC_INTERCONNECTOR[k].value - m_2.V_GC_INTERCONNECTOR[k].value),
+            'solution': n_1.data.get_interconnector_solution_attribute(k, 'Flow')
+        }
+        for k, v in m_1.V_GC_INTERCONNECTOR.items()
+    }
+
+    return pd.DataFrame(out).T
+
+
+def compare_interconnector_loss_solution(m_1, m_2, n_1):
+    """Compare interconnector loss solutions"""
+
+    # Combine into single dictionary
+    out = {
+        k: {
+            'm_1': m_1.V_LOSS[k].value,
+            'm_2': m_2.V_LOSS[k].value,
+            'difference': m_1.V_LOSS[k].value - m_2.V_LOSS[k].value,
+            'abs_difference': abs(m_1.V_LOSS[k].value - m_2.V_LOSS[k].value),
+            'solution': n_1.data.get_interconnector_solution_attribute(k, 'Losses')
+        }
+        for k, v in m_1.V_LOSS.items()
+    }
+
+    return pd.DataFrame(out).T
+
+
 if __name__ == '__main__':
     # Slow and fast models
     m_s, s_s, n_s = run_slow_model()
     m_f, s_f, n_f = run_fast_model()
 
     # Check objective values
-    objectives = compare_objectives(m_s, m_f)
+    objectives = compare_objectives(m_s, m_f, n_s)
     print(objectives)
 
     # Check sets and parameters
     # compare_sets(m_s, m_f)
     # compare_parameters(m_s, m_f)
+    # c1 = compare_constraints(m_s, 'C_AS_PROFILE_1', m_f, 'C_AS_PROFILE_1')
+    # c2 = compare_constraints(m_s, 'C_GENERIC_CONSTRAINT', m_f, 'C_GENERIC_CONSTRAINT')
 
-    offers = get_parameters(m_s, 'V_TRADER_TOTAL_OFFER', m_f, 'V_TRADER_TOTAL_OFFER')
-
-    set([k for k, v in m_s.C_FCAS_AVAILABILITY_RULE.items()]) == set(
-        [k for k, v in m_f.C_FCAS_AVAILABILITY_RULE.items()])
-    len(set([k for k, v in m_s.C_FCAS_AVAILABILITY_RULE.items()]))
-    len(set([k for k, v in m_f.C_FCAS_AVAILABILITY_RULE.items()]))
-
-    set([k for k, v in m_s.C_FCAS_AVAILABILITY_RULE.items()]).difference(
-        set([k for k, v in m_f.C_FCAS_AVAILABILITY_RULE.items()]))
-
-    set(k for k, v in m_s.C_AS_PROFILE_1.items()) == set(k for k, v in m_f.C_AS_PROFILE_1.items())
-
-    c = compare_constraints(m_s, 'C_AS_PROFILE_1', m_f, 'C_AS_PROFILE_1')
-
-    f_fcas = {
-        k: {
-            'enablement_min': m_f.P_TRADER_FCAS_ENABLEMENT_MIN[k],
-            'low_breakpoint': m_f.P_TRADER_FCAS_LOW_BREAKPOINT[k],
-            'high_breakpoint': m_f.P_TRADER_FCAS_HIGH_BREAKPOINT[k],
-            'enablement_max': m_f.P_TRADER_FCAS_ENABLEMENT_MAX[k],
-        }
-        for k, v in m_f.P_TRADER_FCAS_ENABLEMENT_MIN.items()
-    }
-
-    s_fcas = {
-        k: n_s.fcas.get_scaled_fcas_trapezium(k[0], k[1])
-        if k[1] in ['R5RE', 'L5RE'] else n_s.fcas.get_fcas_trapezium_offer(k[0], k[1])
-        for k, _ in m_f.P_TRADER_FCAS_ENABLEMENT_MIN.items()
-    }
-
-    d_fcas = {
-        k: {
-            'enablement_min': abs(f_fcas[k]['enablement_min'] - s_fcas[k]['enablement_min']),
-            'low_breakpoint': abs(f_fcas[k]['low_breakpoint'] - s_fcas[k]['low_breakpoint']),
-            'high_breakpoint': abs(f_fcas[k]['high_breakpoint'] - s_fcas[k]['high_breakpoint']),
-            'enablement_max': abs(f_fcas[k]['enablement_max'] - s_fcas[k]['enablement_max']),
-        }
-        for k, _ in f_fcas.items()
-    }
-
-    df_d_fcas = pd.DataFrame(d_fcas).T.sum(axis=1).sort_values(ascending=False)
+    # Trader and interconnector solutions
+    df_t = compare_trader_solution(m_s, m_f, n_s)
+    df_i = compare_interconnector_flow_solution(m_s, m_f, n_s)
+    df_l = compare_interconnector_loss_solution(m_s, m_f, n_s)
