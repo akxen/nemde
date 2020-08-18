@@ -604,22 +604,52 @@ def plot_joint_capacity_constraint_rhs(ax, raise_reg_fcas_target, raise_reg_fcas
     return ax
 
 
-def plot_energy_regulating_fcas_constraint_lhs():
+def plot_energy_regulating_fcas_constraint_lhs(ax, trapezium, **kwargs):
     """
     Plot joint energy and regulating FCAS constraint RHS
 
     Energy Dispatch Target − Lower Slope Coeff x Regulating FCAS Target >= EnablementMin9
     """
-    pass
+
+    # Lower slope coefficient
+    lower_coefficient = (trapezium['LowBreakpoint'] - trapezium['EnablementMin']) / trapezium['MaxAvail']
+
+    y1 = -1
+    x1 = trapezium['EnablementMin'] + (lower_coefficient * y1)
+
+    y2 = (trapezium['MaxAvail'] * 1.1) + 1
+    x2 = trapezium['EnablementMin'] + (lower_coefficient * y2)
+
+    x = [x1, x2]
+    y = [y1, y2]
+
+    ax.plot(x, y, **kwargs)
+
+    return ax
 
 
-def plot_energy_regulating_fcas_constraint_rhs():
+def plot_energy_regulating_fcas_constraint_rhs(ax, trapezium, **kwargs):
     """
     Plot joint energy and regulating FCAS constraint LHS
 
     Energy Dispatch Target + Upper Slope Coeff x Regulating FCAS Target <= EnablementMax8
     """
-    pass
+
+    # Upper slope coefficient
+    upper_coefficient = (trapezium['EnablementMax'] - trapezium['HighBreakpoint']) / trapezium['MaxAvail']
+
+    y1 = -1
+    x1 = trapezium['EnablementMax'] - (upper_coefficient * y1)
+
+    y2 = (trapezium['MaxAvail'] * 1.1) + 1
+    x2 = trapezium['EnablementMax'] - (upper_coefficient * y2)
+
+    x = [x1, x2]
+    y = [y1, y2]
+
+    ax.plot(x, y, **kwargs)
+
+    return ax
 
 
 def plot_fcas_constraints(data, trader_id, trade_type):
@@ -630,15 +660,17 @@ def plot_fcas_constraints(data, trader_id, trade_type):
     # Get FCAS trapezium
     unscaled = get_fcas_trapezium(data, trader_id, trade_type)
 
-    # Scaled FCAS trapezium - R5RE and L5RE only offers for which trapezium is scaled
+    # Scaled FCAS trapezium - R5RE and L5RE scaled and capacity FCAS for semi-scheduled units
     scaled = get_fcas_trapezium_scaled(data, trader_id, trade_type)
-    ax = plot_trapezium(unscaled, ax, color='red')
-    ax = plot_trapezium(scaled, ax, color='blue')
+    ax = plot_trapezium(unscaled, ax, color='red', alpha=0.8)
+    ax = plot_trapezium(scaled, ax, color='blue', alpha=0.8)
 
     initial_mw = get_trader_initial_condition(data, trader_id, 'InitialMW', float)
     scada_ramp_up = get_trader_initial_condition(data, trader_id, 'SCADARampUpRate', float) / 12
     scada_ramp_down = get_trader_initial_condition(data, trader_id, 'SCADARampDnRate', float) / 12
     max_avail = unscaled['MaxAvail']
+    raise_reg_fcas_status = get_fcas_availability(cdata, trader_id, 'R5RE')
+    lower_reg_fcas_status = get_fcas_availability(cdata, trader_id, 'L5RE')
 
     # Mapping between trade type keys
     key_map = {'ENOF': '@EnergyTarget', 'LDOF': '@EnergyTarget',
@@ -650,11 +682,27 @@ def plot_fcas_constraints(data, trader_id, trade_type):
     fcas_solution = get_trader_solution_attribute(cdata, trader_id, key_map[trade_type])
 
     # Plot solution
-    ax.scatter(x=[energy_solution], y=[fcas_solution], s=15, color='green')
+    ax.scatter(x=[energy_solution], y=[fcas_solution], s=20, color='green', alpha=0.8)
 
-    ax = plot_joint_ramping_constraint_rhs(ax, initial_mw, scada_ramp_up, max_avail, color='blue')
-    ax = plot_joint_ramping_constraint_lhs(ax, initial_mw, scada_ramp_down, max_avail, color='blue')
-    # ax = plot_joint_capacity_constraint_rhs(ax, enablement_max, high_breakpoint, max_avail, raise_reg_status)
+    # Regulating FCAS
+    if trade_type in ['L5RE', 'R5RE']:
+        # Joint ramping constraints
+        ax = plot_joint_ramping_constraint_rhs(ax, initial_mw, scada_ramp_up, max_avail, color='blue', alpha=0.8)
+        ax = plot_joint_ramping_constraint_lhs(ax, initial_mw, scada_ramp_down, max_avail, color='blue', alpha=0.8)
+
+        # Energy and regulating FCAS constraint
+        ax = plot_energy_regulating_fcas_constraint_lhs(ax, scaled, color='green', alpha=0.8)
+        ax = plot_energy_regulating_fcas_constraint_rhs(ax, scaled, color='green', alpha=0.8)
+        ax.set_ylabel(f'{trade_type} (MW)')
+        ax.set_xlabel('Energy Target (MW)')
+        ax.set_title(f'{trade_type}')
+    # Capacity FCAS
+    else:
+        raise_reg_fcas_target = get_trader_solution_attribute(cdata, trader_id, '@R5RegTarget')
+        ax = plot_joint_capacity_constraint_rhs(ax, raise_reg_fcas_target, raise_reg_fcas_status, sc, color='orange')
+
+        lower_reg_fcas_target = get_trader_solution_attribute(cdata, trader_id, '@L5RegTarget')
+        ax = plot_joint_capacity_constraint_lhs(ax, lower_reg_fcas_target, lower_reg_fcas_status, sc, color='orange')
 
     return fig, ax
 
@@ -676,19 +724,13 @@ if __name__ == '__main__':
     # plot_fcas_constraints(cdata, 'GSTONE3', 'L5RE')
     # plt.show()
 
-    trader_id, trade_type = 'GSTONE3', 'R6SE'
+    trader_id, trade_type = 'GSTONE3', 'L5RE'
     # us = get_fcas_trapezium(cdata, trader_id, trade_type)
     sc = get_fcas_trapezium_scaled(cdata, trader_id, trade_type)
 
-    fig, ax = plt.subplots()
-    plot_trapezium(sc, ax)
+    # fig, ax = plt.subplots()
+    # plot_trapezium(sc, ax)
 
-    raise_reg_fcas_status = get_fcas_availability(cdata, trader_id, 'R5RE')
-    raise_reg_fcas_target = get_trader_solution_attribute(cdata, trader_id, '@R5RegTarget')
-    ax = plot_joint_capacity_constraint_rhs(ax, raise_reg_fcas_target, raise_reg_fcas_status, sc, color='green')
-
-    lower_reg_fcas_status = get_fcas_availability(cdata, trader_id, 'L5RE')
-    lower_reg_fcas_target = get_trader_solution_attribute(cdata, trader_id, '@L5RegTarget')
-    ax = plot_joint_capacity_constraint_lhs(ax, lower_reg_fcas_target, lower_reg_fcas_status, sc, color='green')
+    plot_fcas_constraints(cdata, trader_id, trade_type)
 
     plt.show()
