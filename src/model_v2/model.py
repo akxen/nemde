@@ -20,8 +20,10 @@ try:
     from components.constraints.regions import define_region_constraints
     from components.constraints.interconnectors import define_interconnector_constraints
     from components.constraints.generic_constraints import define_generic_constraints
-    from components.constraints.fcas import define_fcas_constraints
     from components.constraints.loss import define_loss_model_constraints
+
+    # from components.constraints.fcas import define_fcas_constraints
+    from components.constraints.fcas_v2 import define_fcas_constraints
 
     import utils.solution
     import utils.analysis
@@ -39,8 +41,10 @@ except ModuleNotFoundError:
     from .components.constraints.regions import define_region_constraints
     from .components.constraints.interconnectors import define_interconnector_constraints
     from .components.constraints.generic_constraints import define_generic_constraints
-    from .components.constraints.fcas import define_fcas_constraints
     from .components.constraints.loss import define_loss_model_constraints
+
+    # from .components.constraints.fcas import define_fcas_constraints
+    from .components.constraints.fcas_v2 import define_fcas_constraints
 
     # import .utils.solution
     # import .utils.analysis
@@ -71,6 +75,43 @@ class NEMDEModel:
 
         # Trader energy offers
         m.S_TRADER_ENERGY_OFFERS = pyo.Set(initialize=data['S_TRADER_ENERGY_OFFERS'])
+
+        # Trader unavailable FCAS offers
+        m.S_TRADER_FCAS_UNAVAILABLE_OFFERS = pyo.Set(initialize=data['S_TRADER_FCAS_UNAVAILABLE_OFFERS'])
+
+        # Trader available FCAS offers
+        m.S_TRADER_FCAS_AVAILABLE_OFFERS = pyo.Set(initialize=data['S_TRADER_FCAS_AVAILABLE_OFFERS'])
+
+        # # Trader offer subsets used when formulating FCAS constraints
+        m.S_TRADER_FCAS_R5RE_OFFERS = pyo.Set(initialize=data['S_TRADER_FCAS_R5RE_OFFERS'])
+        m.S_TRADER_FCAS_R6SE_OFFERS = pyo.Set(initialize=data['S_TRADER_FCAS_R6SE_OFFERS'])
+        m.S_TRADER_FCAS_R60S_OFFERS = pyo.Set(initialize=data['S_TRADER_FCAS_R60S_OFFERS'])
+        m.S_TRADER_FCAS_R5MI_OFFERS = pyo.Set(initialize=data['S_TRADER_FCAS_R5MI_OFFERS'])
+        m.S_TRADER_FCAS_L5RE_OFFERS = pyo.Set(initialize=data['S_TRADER_FCAS_L5RE_OFFERS'])
+        m.S_TRADER_FCAS_L6SE_OFFERS = pyo.Set(initialize=data['S_TRADER_FCAS_L6SE_OFFERS'])
+        m.S_TRADER_FCAS_L60S_OFFERS = pyo.Set(initialize=data['S_TRADER_FCAS_L60S_OFFERS'])
+        m.S_TRADER_FCAS_L5MI_OFFERS = pyo.Set(initialize=data['S_TRADER_FCAS_L5MI_OFFERS'])
+
+        # m.S_TRADER_FCAS_AVAIL_R5RE_ENERGY = pyo.Set(initialize=data['S_TRADER_FCAS_AVAIL_R5RE_ENERGY'])
+        # m.S_TRADER_FCAS_AVAIL_R5RE_R6SE = pyo.Set(initialize=data['S_TRADER_FCAS_AVAIL_R5RE_R6SE'])
+        # m.S_TRADER_FCAS_AVAIL_R5RE_R60S = pyo.Set(initialize=data['S_TRADER_FCAS_AVAIL_R5RE_R60S'])
+        # m.S_TRADER_FCAS_AVAIL_R5RE_R5MI = pyo.Set(initialize=data['S_TRADER_FCAS_AVAIL_R5RE_R5MI'])
+        # m.S_TRADER_FCAS_AVAIL_L5RE_ENERGY = pyo.Set(initialize=data['S_TRADER_FCAS_AVAIL_L5RE_ENERGY'])
+        # m.S_TRADER_FCAS_AVAIL_L5RE_L6SE = pyo.Set(initialize=data['S_TRADER_FCAS_AVAIL_L5RE_L6SE'])
+        # m.S_TRADER_FCAS_AVAIL_L5RE_L60S = pyo.Set(initialize=data['S_TRADER_FCAS_AVAIL_L5RE_L60S'])
+        # m.S_TRADER_FCAS_AVAIL_L5RE_L5MI = pyo.Set(initialize=data['S_TRADER_FCAS_AVAIL_L5RE_L5MI'])
+        # m.S_TRADER_FCAS_AVAIL_R6SE_ENERGY = pyo.Set(initialize=data['S_TRADER_FCAS_AVAIL_R6SE_ENERGY'])
+        # m.S_TRADER_FCAS_AVAIL_R6SE_R5RE = pyo.Set(initialize=data['S_TRADER_FCAS_AVAIL_R6SE_R5RE'])
+        # m.S_TRADER_FCAS_AVAIL_R60S_ENERGY = pyo.Set(initialize=data['S_TRADER_FCAS_AVAIL_R60S_ENERGY'])
+        # m.S_TRADER_FCAS_AVAIL_R60S_R5RE = pyo.Set(initialize=data['S_TRADER_FCAS_AVAIL_R60S_R5RE'])
+        # m.S_TRADER_FCAS_AVAIL_R5MI_ENERGY = pyo.Set(initialize=data['S_TRADER_FCAS_AVAIL_R5MI_ENERGY'])
+        # m.S_TRADER_FCAS_AVAIL_R5MI_R5RE = pyo.Set(initialize=data['S_TRADER_FCAS_AVAIL_R5MI_R5RE'])
+        # m.S_TRADER_FCAS_AVAIL_L6SE_ENERGY = pyo.Set(initialize=data['S_TRADER_FCAS_AVAIL_L6SE_ENERGY'])
+        # m.S_TRADER_FCAS_AVAIL_L6SE_L5RE = pyo.Set(initialize=data['S_TRADER_FCAS_AVAIL_L6SE_L5RE'])
+        # m.S_TRADER_FCAS_AVAIL_L60S_ENERGY = pyo.Set(initialize=data['S_TRADER_FCAS_AVAIL_L60S_ENERGY'])
+        # m.S_TRADER_FCAS_AVAIL_L60S_L5RE = pyo.Set(initialize=data['S_TRADER_FCAS_AVAIL_L60S_L5RE'])
+        # m.S_TRADER_FCAS_AVAIL_L5MI_ENERGY = pyo.Set(initialize=data['S_TRADER_FCAS_AVAIL_L5MI_ENERGY'])
+        # m.S_TRADER_FCAS_AVAIL_L5MI_L5RE = pyo.Set(initialize=data['S_TRADER_FCAS_AVAIL_L5MI_L5RE'])
 
         # Generic constraints
         m.S_GENERIC_CONSTRAINTS = pyo.Set(initialize=data['S_GENERIC_CONSTRAINTS'])
@@ -502,7 +543,7 @@ class NEMDEModel:
 
         # Fixing interconnector and FCAS solutions
         # m = self.fix_selected_trader_solution(m, data)
-        m = self.fix_interconnector_flow_solution(m, data)
+        # m = self.fix_interconnector_flow_solution(m, data)
         # m = self.fix_interconnector_loss_solution(m, data)
         # m = self.fix_energy_solution(m, data)
         # m = self.fix_fcas_solution(m, data)
@@ -573,7 +614,7 @@ if __name__ == '__main__':
     utils.analysis.plot_trader_solution_difference(cdata, solution)
 
     # FCAS solution
-    utils.analysis.plot_fcas_solution(cdata, case_data, solution)
+    # utils.analysis.plot_fcas_solution(cdata, case_data, solution)
 
     # import pandas as pd
     # import matplotlib.pyplot as plt
@@ -583,3 +624,7 @@ if __name__ == '__main__':
     # for i in df.index.levels[0]:
     #     df.xs(i, level=0).plot(title=i)
     # plt.show()
+
+    # Error metric - mean square error for each offer type
+    print(df_trader_solution['abs_difference'].apply(lambda x: x ** 2).reset_index()
+          .groupby('level_1')['abs_difference'].mean().rename_axis('mse').round(4))

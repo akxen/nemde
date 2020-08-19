@@ -71,6 +71,66 @@ def get_trader_energy_offer_index(data) -> list:
             for j in convert_to_list(i.get('TradeCollection').get('Trade')) if j['@TradeType'] in ['ENOF', 'LDOF']]
 
 
+def get_trader_fcas_available_offers_index(data) -> list:
+    """Get available FCAS offers"""
+
+    # All FCAS offers
+    offers = get_trader_fcas_offer_index(data)
+
+    # FCAS available
+    available = get_trader_fcas_availability(data)
+
+    # All available FCAS offers
+    return [i for i in offers if available[i]]
+
+
+def get_trader_fcas_unavailable_offers_index(data) -> list:
+    """Get unavailable FCAS offers"""
+
+    # All FCAS offers
+    offers = get_trader_fcas_offer_index(data)
+
+    # FCAS available
+    available = get_trader_fcas_availability(data)
+
+    # All unavailable FCAS offers
+    return [i for i in offers if not available[i]]
+
+
+def get_trader_fcas_filtered_offers_index(data, trade_type) -> list:
+    """All offers of a given type"""
+
+    # All available offers (energy and FCAS offers)
+    offers = get_trader_offer_index(data)
+
+    return [(i, j) for (i, j) in offers if j == trade_type]
+
+
+def get_trader_fcas_available_filtered_index(data, trade_type, must_contain) -> list:
+    """Get all offers of a given type where the unit also has offers within must_contain"""
+
+    # All available offers (energy and FCAS offers)
+    all_offers = get_trader_offer_index(data)
+
+    # Available FCAS offers
+    fcas_offers = get_trader_fcas_available_offers_index(data)
+
+    # Container for output index
+    out = []
+
+    for i, j in fcas_offers:
+        # Check matching trade type
+        if j == trade_type:
+            # Check if given trader also has offer within must_contain
+            for k in must_contain:
+                # Append if offer exists
+                if (i, k) in all_offers:
+                    out.append((i, trade_type))
+
+    # TODO: Not sure if need to check for duplicates here. Trader shouldn't have ENOF and LDOF simultaneously
+    return out
+
+
 def get_generic_constraint_index(data) -> list:
     """Get generic constraint index"""
 
@@ -429,8 +489,8 @@ def get_trader_fcas_availability(data) -> dict:
 
     fcas_available = {}
     for (trader_id, trade_type), trapezium in trapeziums.items():
-        if (trader_id == 'LD03') and (trade_type == 'R5RE'):
-            a = 10
+        # if (trader_id == 'LD03') and (trade_type == 'R5RE'):
+        #     a = 10
         fcas_available[(trader_id, trade_type)] = fcas.get_fcas_availability(
                     trapezium,
                     trade_type,
@@ -1161,13 +1221,46 @@ def parse_case_data_json(data) -> dict:
     # Convert to dictionary
     data_dict = json.loads(data)
 
+    # Energy offers
+    energy_offers = ['ENOF', 'LDOF']
+
     case_data = {
         'S_REGIONS': get_region_index(data_dict),
         'S_TRADERS': get_trader_index(data_dict),
         'S_TRADERS_SEMI_DISPATCH': get_trader_semi_dispatch_index(data_dict),
         'S_TRADER_OFFERS': get_trader_offer_index(data_dict),
-        'S_TRADER_FCAS_OFFERS': get_trader_fcas_offer_index(data_dict),
         'S_TRADER_ENERGY_OFFERS': get_trader_energy_offer_index(data_dict),
+        'S_TRADER_FCAS_OFFERS': get_trader_fcas_offer_index(data_dict),
+        'S_TRADER_FCAS_UNAVAILABLE_OFFERS': get_trader_fcas_unavailable_offers_index(data_dict),
+        'S_TRADER_FCAS_AVAILABLE_OFFERS': get_trader_fcas_available_offers_index(data_dict),
+        'S_TRADER_FCAS_R5RE_OFFERS': get_trader_fcas_filtered_offers_index(data_dict, 'R5RE'),
+        'S_TRADER_FCAS_R6SE_OFFERS': get_trader_fcas_filtered_offers_index(data_dict, 'R6SE'),
+        'S_TRADER_FCAS_R60S_OFFERS': get_trader_fcas_filtered_offers_index(data_dict, 'R60S'),
+        'S_TRADER_FCAS_R5MI_OFFERS': get_trader_fcas_filtered_offers_index(data_dict, 'R5MI'),
+        'S_TRADER_FCAS_L5RE_OFFERS': get_trader_fcas_filtered_offers_index(data_dict, 'L5RE'),
+        'S_TRADER_FCAS_L6SE_OFFERS': get_trader_fcas_filtered_offers_index(data_dict, 'L6SE'),
+        'S_TRADER_FCAS_L60S_OFFERS': get_trader_fcas_filtered_offers_index(data_dict, 'L60S'),
+        'S_TRADER_FCAS_L5MI_OFFERS': get_trader_fcas_filtered_offers_index(data_dict, 'L5MI'),
+        # 'S_TRADER_FCAS_AVAIL_R5RE_ENERGY': get_trader_fcas_available_filtered_index(data_dict, 'R5RE', energy_offers),
+        # 'S_TRADER_FCAS_AVAIL_R5RE_R6SE': get_trader_fcas_available_filtered_index(data_dict, 'R5RE', ['R6SE']),
+        # 'S_TRADER_FCAS_AVAIL_R5RE_R60S': get_trader_fcas_available_filtered_index(data_dict, 'R5RE', ['R60S']),
+        # 'S_TRADER_FCAS_AVAIL_R5RE_R5MI': get_trader_fcas_available_filtered_index(data_dict, 'R5RE', ['R5MI']),
+        # 'S_TRADER_FCAS_AVAIL_L5RE_ENERGY': get_trader_fcas_available_filtered_index(data_dict, 'L5RE', energy_offers),
+        # 'S_TRADER_FCAS_AVAIL_L5RE_L6SE': get_trader_fcas_available_filtered_index(data_dict, 'L5RE', ['L6SE']),
+        # 'S_TRADER_FCAS_AVAIL_L5RE_L60S': get_trader_fcas_available_filtered_index(data_dict, 'L5RE', ['L60S']),
+        # 'S_TRADER_FCAS_AVAIL_L5RE_L5MI': get_trader_fcas_available_filtered_index(data_dict, 'L5RE', ['L5MI']),
+        # 'S_TRADER_FCAS_AVAIL_R6SE_ENERGY': get_trader_fcas_available_filtered_index(data_dict, 'R6SE', energy_offers),
+        # 'S_TRADER_FCAS_AVAIL_R6SE_R5RE': get_trader_fcas_available_filtered_index(data_dict, 'R6SE', ['R5RE']),
+        # 'S_TRADER_FCAS_AVAIL_R60S_ENERGY': get_trader_fcas_available_filtered_index(data_dict, 'R60S', energy_offers),
+        # 'S_TRADER_FCAS_AVAIL_R60S_R5RE': get_trader_fcas_available_filtered_index(data_dict, 'R60S', ['R5RE']),
+        # 'S_TRADER_FCAS_AVAIL_R5MI_ENERGY': get_trader_fcas_available_filtered_index(data_dict, 'R5MI', energy_offers),
+        # 'S_TRADER_FCAS_AVAIL_R5MI_R5RE': get_trader_fcas_available_filtered_index(data_dict, 'R5MI', ['R5RE']),
+        # 'S_TRADER_FCAS_AVAIL_L6SE_ENERGY': get_trader_fcas_available_filtered_index(data_dict, 'L6SE', energy_offers),
+        # 'S_TRADER_FCAS_AVAIL_L6SE_L5RE': get_trader_fcas_available_filtered_index(data_dict, 'L6SE', ['L5RE']),
+        # 'S_TRADER_FCAS_AVAIL_L60S_ENERGY': get_trader_fcas_available_filtered_index(data_dict, 'L60S', energy_offers),
+        # 'S_TRADER_FCAS_AVAIL_L60S_L5RE': get_trader_fcas_available_filtered_index(data_dict, 'L60S', ['L5RE']),
+        # 'S_TRADER_FCAS_AVAIL_L5MI_ENERGY': get_trader_fcas_available_filtered_index(data_dict, 'L5MI', energy_offers),
+        # 'S_TRADER_FCAS_AVAIL_L5MI_L5RE': get_trader_fcas_available_filtered_index(data_dict, 'L5MI', ['L5RE']),
         'S_GENERIC_CONSTRAINTS': get_generic_constraint_index(data_dict),
         'S_GC_TRADER_VARS': get_generic_constraint_trader_variable_index(data_dict),
         'S_GC_INTERCONNECTOR_VARS': get_generic_constraint_interconnector_variable_index(data_dict),
