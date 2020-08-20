@@ -373,16 +373,18 @@ class NEMDEModel:
         m.V_CV_TRADER_FCAS_AS_PROFILE_3 = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
 
         # FCAS joint ramping constraint violation pyo.Variables
-        m.V_CV_TRADER_FCAS_JOINT_RAMPING_UP = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
-        m.V_CV_TRADER_FCAS_JOINT_RAMPING_DOWN = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
+        m.V_CV_TRADER_FCAS_JOINT_RAMPING_RAISE_GENERATOR = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
+        m.V_CV_TRADER_FCAS_JOINT_RAMPING_LOWER_GENERATOR = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
+        m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RAISE_GENERATOR = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
+        m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LOWER_GENERATOR = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
 
         # FCAS joint capacity constraint violation pyo.Variables
         m.V_CV_TRADER_FCAS_JOINT_CAPACITY_UP = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
         m.V_CV_TRADER_FCAS_JOINT_CAPACITY_DOWN = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
 
         # FCAS joint regulating capacity constraint violation pyo.Variables
-        m.V_CV_JOINT_REGULATING_CAPACITY_UP = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
-        m.V_CV_JOINT_REGULATING_CAPACITY_DOWN = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
+        m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_GENERATOR = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
+        m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_GENERATOR = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
 
         # Interconnector forward and reverse flow constraint violation
         m.V_CV_INTERCONNECTOR_FORWARD = pyo.Var(m.S_INTERCONNECTORS, within=pyo.NonNegativeReals)
@@ -610,13 +612,13 @@ class NEMDEModel:
         m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'L5MI')
 
         # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R5RE')
-        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R6SE')
+        # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R6SE')
         m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R60S')
-        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R5MI')
-        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L5RE')
-        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L6SE')
-        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L60S')
-        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L5MI')
+        # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R5MI')
+        # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L5RE')
+        # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L6SE')
+        # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L60S')
+        # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L5MI')
 
         m = self.fix_filtered_energy_solution(m, data, 'GENERATOR')
         m = self.fix_filtered_energy_solution(m, data, 'LOAD')

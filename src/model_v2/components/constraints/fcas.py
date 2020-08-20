@@ -20,6 +20,17 @@ def get_intercept(slope, x0, y0):
     return y0 - (slope * x0)
 
 
+def get_energy_offer_type(m, i):
+    """Get energy offer type which depends on whether a trader is a generator or a load"""
+
+    if m.P_TRADER_TYPE[i] == 'GENERATOR':
+        return 'ENOF'
+    elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
+        return 'LDOF'
+    else:
+        raise Exception('Unhandled case')
+
+
 def fcas_available_rule(m, i, j):
     """Set FCAS to zero if conditions not met"""
 
@@ -49,22 +60,20 @@ def as_profile_1_rule(m, i, j):
     x2, y2 = m.P_TRADER_FCAS_LOW_BREAKPOINT[(i, j)], m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)]
     slope = get_slope(x1, x2, y1, y2)
 
-    if slope is not None:
+    # Energy offer type (ENOF or LDOF)
+    energy_offer = get_energy_offer_type(m, i)
+
+    # Vertical line
+    if slope is None:
+        return (m.V_TRADER_TOTAL_OFFER[i, j] <= m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)]
+                + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j])
+
+    # Sloped line
+    else:
+        # Compute y-intercept
         y_intercept = get_intercept(slope, x1, y1)
 
-        try:
-            return (m.V_TRADER_TOTAL_OFFER[i, j] <= (slope * m.V_TRADER_TOTAL_OFFER[i, 'ENOF']) + y_intercept
-                    + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j]
-                    )
-
-        except KeyError:
-            return (m.V_TRADER_TOTAL_OFFER[i, j] <= (slope * m.V_TRADER_TOTAL_OFFER[i, 'LDOF']) + y_intercept
-                    + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j]
-                    )
-
-    else:
-        # TODO: need to consider if vertical line
-        return (m.V_TRADER_TOTAL_OFFER[i, j] <= m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)]
+        return (m.V_TRADER_TOTAL_OFFER[i, j] <= (slope * m.V_TRADER_TOTAL_OFFER[i, energy_offer]) + y_intercept
                 + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j])
 
 
@@ -84,7 +93,7 @@ def as_profile_2_rule(m, i, j):
 
 
 def as_profile_3_rule(m, i, j):
-    """Constraint LHS component of FCAS trapeziums (line between enablement min and low breakpoint)"""
+    """Constraint LHS component of FCAS trapeziums (line between enablement high breakpoint and enablement max)"""
 
     # Only consider FCAS offers - ignore energy offers
     if j in ['ENOF', 'LDOF']:
@@ -99,69 +108,92 @@ def as_profile_3_rule(m, i, j):
     x2, y2 = m.P_TRADER_FCAS_ENABLEMENT_MAX[(i, j)], 0
     slope = get_slope(x1, x2, y1, y2)
 
+    # Energy offer type (ENOF or LDOF)
+    energy_offer = get_energy_offer_type(m, i)
+
     # Vertical line between high breakpoint and enablement max
     if slope is None:
         return (m.V_TRADER_TOTAL_OFFER[i, j] <= m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)]
                 + m.V_CV_TRADER_FCAS_AS_PROFILE_3[i, j])
 
-    # Compute y-intercept
-    y_intercept = get_intercept(slope, x1, y1)
-
-    # Constraint for generators - depends on energy offer
-    if m.P_TRADER_TYPE[i] in ['GENERATOR']:
-        return (m.V_TRADER_TOTAL_OFFER[i, j] <= (slope * m.V_TRADER_TOTAL_OFFER[i, 'ENOF']) + y_intercept
-                + m.V_CV_TRADER_FCAS_AS_PROFILE_3[i, j])
-
-    # Constraint for loads - depends on load offer
-    elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
-        return (m.V_TRADER_TOTAL_OFFER[i, j] <= (slope * m.V_TRADER_TOTAL_OFFER[i, 'LDOF']) + y_intercept
-                + m.V_CV_TRADER_FCAS_AS_PROFILE_3[i, j])
-
+    # Sloped line
     else:
-        raise Exception(f'Unexpected generator type: {m.P_TRADER_TYPE[i]}')
+        # Compute y-intercept
+        y_intercept = get_intercept(slope, x1, y1)
+
+        # Constraint depends on energy offer
+        return (m.V_TRADER_TOTAL_OFFER[i, j] <= (slope * m.V_TRADER_TOTAL_OFFER[i, energy_offer]) + y_intercept
+                + m.V_CV_TRADER_FCAS_AS_PROFILE_3[i, j])
 
 
-def joint_ramp_up_rule(m, i, j):
-    """Joint ramping constraint for regulating FCAS"""
+def joint_ramp_raise_generator_rule(m, i, j):
+    """
+    Joint ramping raise constraint for regulating FCAS - generators
 
-    # Only consider raise regulation FCAS offers
-    if not (j == 'R5RE'):
+    From docs: "applied if a unit has an energy offer, is enabled for regulating services, and the AGC ramp up or
+    down rate is greater than zero".
+
+    Energy Dispatch Target + Raise Regulating FCAS Target <= Initial MW + SCADA Ramp Up Capability
+    """
+
+    # Only consider generators
+    if m.P_TRADER_TYPE[i] != 'GENERATOR':
         return pyo.Constraint.Skip
 
-    # Check FCAS is available
-    if not m.P_TRADER_FCAS_AVAILABILITY[(i, j)]:
+    # Only consider raise regulation FCAS offers
+    if j != 'R5RE':
+        return pyo.Constraint.Skip
+
+    # Energy offer type
+    energy_offer = get_energy_offer_type(m, i)
+
+    # Check if unit has an energy offer
+    if (i, energy_offer) not in m.S_TRADER_OFFERS:
+        return pyo.Constraint.Skip
+
+    # Check regulating FCAS is available
+    if not m.P_TRADER_FCAS_AVAILABILITY[i, j]:
         return pyo.Constraint.Skip
 
     # SCADA ramp-up - divide by 12 to get max ramp over 5 minutes (assuming SCADARampUpRate is MW/h)
     scada_ramp = m.P_TRADER_SCADA_RAMP_UP_RATE[i] / 12
 
-    # TODO: Check what to do if no SCADARampUpRate
-    # if (not scada_ramp) or (scada_ramp <= 0):
+    # TODO: handle case where SCADA_RAMP_UP_RATE is missing
     if scada_ramp <= 0:
         return pyo.Constraint.Skip
 
     # Construct constraint depending on trader type
-    if m.P_TRADER_TYPE[i] in ['GENERATOR']:
-        return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + m.V_TRADER_TOTAL_OFFER[i, 'R5RE']
-                <= m.P_TRADER_INITIAL_MW[i] + scada_ramp + m.V_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, j])
-
-    elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
-        return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] + m.V_TRADER_TOTAL_OFFER[i, 'L5RE']
-                <= m.P_TRADER_INITIAL_MW[i] + scada_ramp + m.V_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, j])
-
-    else:
-        raise Exception(f'Unexpected trader type: {m.P_TRADER_TYPE[i]}')
+    return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + m.V_TRADER_TOTAL_OFFER[i, 'R5RE']
+            <= m.P_TRADER_INITIAL_MW[i] + scada_ramp + m.V_CV_TRADER_FCAS_JOINT_RAMPING_RAISE_GENERATOR[i, j])
 
 
-def joint_ramp_down_rule(m, i, j):
-    """Joint ramping constraint for regulating FCAS"""
+def joint_ramp_lower_generator_rule(m, i, j):
+    """
+    Joint ramping lower constraint for regulating FCAS - generators
 
-    # Only consider lower regulation FCAS offers
-    if not (j == 'L5RE'):
+    From docs: "applied if a unit has an energy offer, is enabled for regulating services, and the AGC ramp up or
+    down rate is greater than zero".
+
+    Energy Dispatch Target − Lower Regulating FCAS Target >= Initial MW − SCADA Ramp Down Capability
+    """
+
+    # Only consider generators
+    if m.P_TRADER_TYPE[i] != 'GENERATOR':
         return pyo.Constraint.Skip
 
-    # Check FCAS is available
-    if not m.P_TRADER_FCAS_AVAILABILITY[(i, j)]:
+    # Only consider lower regulation FCAS offers
+    if j != 'L5RE':
+        return pyo.Constraint.Skip
+
+    # Energy offer type
+    energy_offer = get_energy_offer_type(m, i)
+
+    # Check if unit has an energy offer
+    if (i, energy_offer) not in m.S_TRADER_OFFERS:
+        return pyo.Constraint.Skip
+
+    # Check regulating FCAS is available
+    if not m.P_TRADER_FCAS_AVAILABILITY[i, j]:
         return pyo.Constraint.Skip
 
     # SCADA ramp-up - divide by 12 to get max ramp over 5 minutes (assuming SCADARampDnRate is MW/h)
@@ -171,150 +203,216 @@ def joint_ramp_down_rule(m, i, j):
     if scada_ramp <= 0:
         return pyo.Constraint.Skip
 
-    # Construct constraint based on trader type - differs for generators and loads
-    if m.P_TRADER_TYPE[i] in ['GENERATOR']:
-        return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] - m.V_TRADER_TOTAL_OFFER[i, 'L5RE']
-                + m.V_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, j] >= m.P_TRADER_INITIAL_MW[i] - scada_ramp)
-
-    elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
-        return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] - m.V_TRADER_TOTAL_OFFER[i, 'R5RE']
-                + m.V_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, j] >= m.P_TRADER_INITIAL_MW[i] - scada_ramp)
-
-    else:
-        raise Exception(f'Unexpected trader type: {m.P_TRADER_TYPE[i]}')
+    return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] - m.V_TRADER_TOTAL_OFFER[i, 'L5RE']
+            + m.V_CV_TRADER_FCAS_JOINT_RAMPING_LOWER_GENERATOR[i, j] >= m.P_TRADER_INITIAL_MW[i] - scada_ramp)
 
 
-def joint_capacity_up_rule(m, i, j):
-    """Joint capacity constraint for raise regulation services and contingency FCAS"""
+def get_joint_capacity_raise_generator_constraint(trade_type):
+    """Get rule for joint capacity constraint for given trade type"""
 
-    # Only consider contingency FCAS offers
-    if j not in ['R6SE', 'R60S', 'R5MI', 'L6SE', 'L60S', 'L5MI']:
-        return pyo.Constraint.Skip
+    def joint_capacity_raise_generator_rule(m, i, j):
+        """
+        Joint capacity constraint for raise regulation services and contingency FCAS
 
-    # Check FCAS is available
-    if not m.P_TRADER_FCAS_AVAILABILITY[(i, j)]:
-        return pyo.Constraint.Skip
+        From docs: "Joint capacity constraints are created for all units with an energy offer and which are enabled for a
+        contingency service. One set of constraints is created for each contingency service (fast raise, slow raise,
+        delayed raise, fast lower, slow lower, or delayed lower) for which the unit is enabled."
 
-    # Check if raise regulation FCAS available for unit
-    try:
-        raise_available = int(m.P_TRADER_FCAS_AVAILABILITY[(i, 'R5RE')])
-    except KeyError:
-        return pyo.Constraint.Skip
+        Energy Dispatch Target + Upper Slope Coeff x Contingency FCAS Target
+        + [Raise Regulation FCAS enablement status] x Raise Regulating FCAS Target <= EnablementMax
+        """
 
-    # Slope coefficient
-    coefficient = ((m.P_TRADER_FCAS_ENABLEMENT_MAX[(i, j)] - m.P_TRADER_FCAS_HIGH_BREAKPOINT[(i, j)])
-                   / m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)])
+        # Only consider generators
+        if m.P_TRADER_TYPE[i] != 'GENERATOR':
+            return pyo.Constraint.Skip
 
-    if m.P_TRADER_TYPE[i] in ['GENERATOR']:
-        return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
+        # Only consider energy offer
+        if j != 'ENOF':
+            return pyo.Constraint.Skip
+
+        # Check if contingency FCAS offer exists for the unit
+        if (i, trade_type) not in m.S_TRADER_OFFERS:
+            return pyo.Constraint.Skip
+
+        # Check if contingency FCAS is available
+        if not m.P_TRADER_FCAS_AVAILABILITY[i, trade_type]:
+            return pyo.Constraint.Skip
+
+        # Check if raise regulation FCAS available for unit
+        try:
+            raise_available = int(m.P_TRADER_FCAS_AVAILABILITY[i, 'R5RE'])
+        except KeyError:
+            return pyo.Constraint.Skip
+
+        # Slope coefficient
+        coefficient = ((m.P_TRADER_FCAS_ENABLEMENT_MAX[i, trade_type] - m.P_TRADER_FCAS_HIGH_BREAKPOINT[i, trade_type])
+                       / m.P_TRADER_FCAS_MAX_AVAILABLE[i, trade_type])
+
+        return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + (coefficient * m.V_TRADER_TOTAL_OFFER[i, trade_type])
                 + (raise_available * m.V_TRADER_TOTAL_OFFER[i, 'R5RE'])
-                <= m.P_TRADER_FCAS_ENABLEMENT_MAX[(i, j)] + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_UP[i, j])
+                <= m.P_TRADER_FCAS_ENABLEMENT_MAX[i, trade_type]
+                + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RAISE_GENERATOR[i, trade_type])
 
-    elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
-        return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] + (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
-                + (raise_available * m.V_TRADER_TOTAL_OFFER[i, 'L5RE'])
-                <= m.P_TRADER_FCAS_ENABLEMENT_MAX[(i, j)] + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_UP[i, j])
-
-    else:
-        raise Exception(f'Unexpected trader type: {m.P_TRADER_TYPE[i]}')
+    return joint_capacity_raise_generator_rule
 
 
-def joint_capacity_down_rule(m, i, j):
-    """Joint capacity constraint for lower regulation services and contingency FCAS"""
+def get_joint_capacity_lower_generator_constraint(trade_type):
+    """Get rule for joint capacity constraint for given trade type"""
 
-    # Only consider contingency FCAS offers
-    if j not in ['R6SE', 'R60S', 'R5MI', 'L6SE', 'L60S', 'L5MI']:
-        return pyo.Constraint.Skip
+    def joint_capacity_lower_generator_rule(m, i, j):
+        """
+        Joint capacity constraint for lower regulation services and contingency FCAS
 
-    # Check FCAS is available
-    if not m.P_TRADER_FCAS_AVAILABILITY[(i, j)]:
-        return pyo.Constraint.Skip
+        From docs: "Joint capacity constraints are created for all units with an energy offer and which are enabled for a
+        contingency service. One set of constraints is created for each contingency service (fast raise, slow raise,
+        delayed raise, fast lower, slow lower, or delayed lower) for which the unit is enabled."
 
-    # Check if raise regulation FCAS available for unit
-    try:
-        lower_available = int(m.P_TRADER_FCAS_AVAILABILITY[(i, 'L5RE')])
-    except KeyError:
-        return pyo.Constraint.Skip
+        Energy Dispatch Target − Lower Slope Coeff x Contingency FCAS Target
+        − [Lower Regulation FCAS enablement status] x Lower Regulating FCAS Target >= EnablementMin
+        """
 
-    # Slope coefficient
-    coefficient = ((m.P_TRADER_FCAS_LOW_BREAKPOINT[(i, j)] - m.P_TRADER_FCAS_ENABLEMENT_MIN[(i, j)])
-                   / m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)])
+        # Only consider generators
+        if m.P_TRADER_TYPE[i] != 'GENERATOR':
+            return pyo.Constraint.Skip
 
-    # Construct constraint depending on generator type - differs for generators and loads
-    if m.P_TRADER_TYPE[i] in ['GENERATOR']:
-        return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] - (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
+        # Only consider energy offer
+        if j != 'ENOF':
+            return pyo.Constraint.Skip
+
+        # Check if contingency FCAS offer exists for the unit
+        if (i, trade_type) not in m.S_TRADER_OFFERS:
+            return pyo.Constraint.Skip
+
+        # Check if contingency FCAS is available
+        if not m.P_TRADER_FCAS_AVAILABILITY[i, trade_type]:
+            return pyo.Constraint.Skip
+
+        # Check if lower regulation FCAS available for unit
+        try:
+            lower_available = int(m.P_TRADER_FCAS_AVAILABILITY[i, 'L5RE'])
+        except KeyError:
+            return pyo.Constraint.Skip
+
+        # Slope coefficient
+        coefficient = ((m.P_TRADER_FCAS_LOW_BREAKPOINT[i, trade_type] - m.P_TRADER_FCAS_ENABLEMENT_MIN[i, trade_type])
+                       / m.P_TRADER_FCAS_MAX_AVAILABLE[i, trade_type])
+
+        return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] - (coefficient * m.V_TRADER_TOTAL_OFFER[i, trade_type])
                 - (lower_available * m.V_TRADER_TOTAL_OFFER[i, 'L5RE'])
-                + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_DOWN[i, j] >= m.P_TRADER_FCAS_ENABLEMENT_MIN[(i, j)])
+                + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LOWER_GENERATOR[i, trade_type]
+                >= m.P_TRADER_FCAS_ENABLEMENT_MIN[i, trade_type])
 
-    elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
-        return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] - (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
-                - (lower_available * m.V_TRADER_TOTAL_OFFER[i, 'R5RE'])
-                + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_DOWN[i, j] >= m.P_TRADER_FCAS_ENABLEMENT_MIN[(i, j)])
-    else:
-        raise Exception(f'Unexpected trader type: {m.P_TRADER_TYPE[i]}')
+    return joint_capacity_lower_generator_rule
 
 
-def energy_regulating_up_rule(m, i, j):
+def energy_regulating_raise_generator_rule(m, i, j):
     """
     Joint energy and regulating FCAS constraints
 
-    Energy Dispatch Target + Upper Slope Coeff x Regulating FCAS Target <= EnablementMax8
+    From docs: "Energy and regulating FCAS capacity constraints are created for all units with an energy offer and
+    which are enabled for regulating services."
+
+    Energy Dispatch Target + Upper Slope Coeff x Regulating FCAS Target <= EnablementMax
     """
 
-    # Only consider contingency FCAS offers
-    if j not in ['R5RE', 'L5RE']:
+    # Only consider generators
+    if m.P_TRADER_TYPE[i] != 'GENERATOR':
         return pyo.Constraint.Skip
 
-    # Check FCAS is available
-    if not m.P_TRADER_FCAS_AVAILABILITY[(i, j)]:
+    # Only consider energy offer
+    if j != 'ENOF':
+        return pyo.Constraint.Skip
+
+    # Check if regulating FCAS offer
+    if (i, 'R5RE') not in m.S_TRADER_OFFERS:
+        return pyo.Constraint.Skip
+
+    # Check regulating FCAS is available
+    if not m.P_TRADER_FCAS_AVAILABILITY[i, 'R5RE']:
         return pyo.Constraint.Skip
 
     # Slope coefficient
-    coefficient = ((m.P_TRADER_FCAS_ENABLEMENT_MAX[(i, j)] - m.P_TRADER_FCAS_HIGH_BREAKPOINT[(i, j)])
-                   / m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)])
+    coefficient = ((m.P_TRADER_FCAS_ENABLEMENT_MAX[(i, 'R5RE')] - m.P_TRADER_FCAS_HIGH_BREAKPOINT[(i, 'R5RE')])
+                   / m.P_TRADER_FCAS_MAX_AVAILABLE[(i, 'R5RE')])
 
-    # Construct constraint depending on generator type - differs for generators and loads
-    if m.P_TRADER_TYPE[i] in ['GENERATOR']:
-        return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
-                <= m.P_TRADER_FCAS_ENABLEMENT_MAX[(i, j)])
-
-    elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
-        return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] + (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
-                <= m.P_TRADER_FCAS_ENABLEMENT_MAX[(i, j)])
-    else:
-        raise Exception(f'Unexpected trader type: {m.P_TRADER_TYPE[i]}')
+    return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + (coefficient * m.V_TRADER_TOTAL_OFFER[i, 'R5RE'])
+            <= m.P_TRADER_FCAS_ENABLEMENT_MAX[i, 'R5RE']
+            + m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_GENERATOR[i, 'ENOF'])
 
 
-def energy_regulating_down_rule(m, i, j):
+# def energy_regulating_down_rule(m, i, j):
+#     """
+#     Joint energy and regulating FCAS constraints
+#
+#     Energy Dispatch Target - Lower Slope Coeff x Regulating FCAS Target >= EnablementMin
+#     """
+#
+#     # Only consider contingency FCAS offers
+#     if j not in ['R5RE', 'L5RE']:
+#         return pyo.Constraint.Skip
+#
+#     # Check FCAS is available
+#     if not m.P_TRADER_FCAS_AVAILABILITY[(i, j)]:
+#         return pyo.Constraint.Skip
+#
+#     # Slope coefficient
+#     coefficient = ((m.P_TRADER_FCAS_LOW_BREAKPOINT[(i, j)] - m.P_TRADER_FCAS_ENABLEMENT_MIN[(i, j)])
+#                    / m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)])
+#
+#     # Construct constraint depending on generator type - differs for generators and loads
+#     if m.P_TRADER_TYPE[i] in ['GENERATOR']:
+#         return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] - (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
+#                 >= m.P_TRADER_FCAS_ENABLEMENT_MIN[(i, j)])
+#
+#     elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
+#         return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] - (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
+#                 >= m.P_TRADER_FCAS_ENABLEMENT_MIN[(i, j)])
+#
+#     else:
+#         raise Exception(f'Unexpected trader type: {m.P_TRADER_TYPE[i]}')
+
+
+def energy_regulating_lower_generator_rule(m, i, j):
     """
     Joint energy and regulating FCAS constraints
 
-    Energy Dispatch Target - Lower Slope Coeff x Regulating FCAS Target >= EnablementMin
+    From docs: "Energy and regulating FCAS capacity constraints are created for all units with an energy offer and
+    which are enabled for regulating services."
+
+    Energy Dispatch Target - Lower Slope Coeff x Regulating FCAS Target >= EnablementMin9
     """
 
-    # Only consider contingency FCAS offers
-    if j not in ['R5RE', 'L5RE']:
+    # Only consider generators
+    if m.P_TRADER_TYPE[i] != 'GENERATOR':
         return pyo.Constraint.Skip
 
-    # Check FCAS is available
-    if not m.P_TRADER_FCAS_AVAILABILITY[(i, j)]:
+    # Only consider energy offer
+    if j != 'ENOF':
         return pyo.Constraint.Skip
+
+    # Check if regulating FCAS offer
+    if (i, 'L5RE') not in m.S_TRADER_OFFERS:
+        return pyo.Constraint.Skip
+
+    # Check regulating FCAS is available
+    if not m.P_TRADER_FCAS_AVAILABILITY[i, 'L5RE']:
+        return pyo.Constraint.Skip
+
+    # # Only consider contingency FCAS offers
+    # if j not in ['R5RE', 'L5RE']:
+    #     return pyo.Constraint.Skip
+    #
+    # # Check FCAS is available
+    # if not m.P_TRADER_FCAS_AVAILABILITY[(i, j)]:
+    #     return pyo.Constraint.Skip
 
     # Slope coefficient
-    coefficient = ((m.P_TRADER_FCAS_LOW_BREAKPOINT[(i, j)] - m.P_TRADER_FCAS_ENABLEMENT_MIN[(i, j)])
-                   / m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)])
+    coefficient = ((m.P_TRADER_FCAS_LOW_BREAKPOINT[i, 'L5RE'] - m.P_TRADER_FCAS_ENABLEMENT_MIN[i, 'L5RE'])
+                   / m.P_TRADER_FCAS_MAX_AVAILABLE[i, 'L5RE'])
 
-    # Construct constraint depending on generator type - differs for generators and loads
-    if m.P_TRADER_TYPE[i] in ['GENERATOR']:
-        return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] - (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
-                >= m.P_TRADER_FCAS_ENABLEMENT_MIN[(i, j)])
-
-    elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
-        return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] - (coefficient * m.V_TRADER_TOTAL_OFFER[i, j])
-                >= m.P_TRADER_FCAS_ENABLEMENT_MIN[(i, j)])
-
-    else:
-        raise Exception(f'Unexpected trader type: {m.P_TRADER_TYPE[i]}')
+    return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] - (coefficient * m.V_TRADER_TOTAL_OFFER[i, 'L5RE'])
+            + m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_GENERATOR[i, 'ENOF']
+            >= m.P_TRADER_FCAS_ENABLEMENT_MIN[i, 'L5RE'])
 
 
 def define_fcas_constraints(m):
@@ -340,27 +438,51 @@ def define_fcas_constraints(m):
     print('Finished constructing C_AS_PROFILE_3:', time.time() - t0)
 
     # Joint ramp up constraint
-    m.C_JOINT_RAMP_UP = pyo.Constraint(m.S_TRADER_OFFERS, rule=joint_ramp_up_rule)
-    print('Finished constructing C_JOINT_RAMP_UP:', time.time() - t0)
+    m.C_JOINT_RAMP_RAISE_GENERATOR = pyo.Constraint(m.S_TRADER_OFFERS, rule=joint_ramp_raise_generator_rule)
+    print('Finished constructing C_JOINT_RAMP_RAISE_GENERATOR:', time.time() - t0)
 
     # Joint ramp up constraint
-    m.C_JOINT_RAMP_DOWN = pyo.Constraint(m.S_TRADER_OFFERS, rule=joint_ramp_down_rule)
-    print('Finished constructing C_JOINT_RAMP_DOWN:', time.time() - t0)
+    m.C_JOINT_RAMP_LOWER_GENERATOR = pyo.Constraint(m.S_TRADER_OFFERS, rule=joint_ramp_lower_generator_rule)
+    print('Finished constructing C_JOINT_RAMP_LOWER_GENERATOR:', time.time() - t0)
 
-    # Joint capacity constraint up
-    m.C_JOINT_CAPACITY_UP = pyo.Constraint(m.S_TRADER_OFFERS, rule=joint_capacity_up_rule)
-    print('Finished constructing C_JOINT_CAPACITY_UP:', time.time() - t0)
+    # Joint capacity raise - R6SE
+    m.C_JOINT_CAPACITY_RAISE_R6SE_GENERATOR = pyo.Constraint(
+        m.S_TRADER_OFFERS, rule=get_joint_capacity_raise_generator_constraint('R6SE'))
+    print('Finished constructing C_JOINT_CAPACITY_RAISE_R6SE_GENERATOR:', time.time() - t0)
 
-    # Joint capacity constraint down
-    m.C_JOINT_CAPACITY_DOWN = pyo.Constraint(m.S_TRADER_OFFERS, rule=joint_capacity_down_rule)
-    print('Finished constructing C_JOINT_CAPACITY_DOWN:', time.time() - t0)
+    # Joint capacity raise - R60S
+    m.C_JOINT_CAPACITY_RAISE_R60S_GENERATOR = pyo.Constraint(
+        m.S_TRADER_OFFERS, rule=get_joint_capacity_raise_generator_constraint('R60S'))
+    print('Finished constructing C_JOINT_CAPACITY_RAISE_R60S_GENERATOR:', time.time() - t0)
 
-    # Joint energy and regulating FCAS constraint
-    m.C_JOINT_REGULATING_UP = pyo.Constraint(m.S_TRADER_OFFERS, rule=energy_regulating_up_rule)
-    print('Finished constructing C_JOINT_REGULATING_UP:', time.time() - t0)
+    # Joint capacity raise - R5MI
+    m.C_JOINT_CAPACITY_RAISE_R5MI_GENERATOR = pyo.Constraint(
+        m.S_TRADER_OFFERS, rule=get_joint_capacity_raise_generator_constraint('R5MI'))
+    print('Finished constructing C_JOINT_CAPACITY_RAISE_R5MI_GENERATOR:', time.time() - t0)
 
-    # Joint energy and regulating FCAS constraint
-    m.C_JOINT_REGULATING_DOWN = pyo.Constraint(m.S_TRADER_OFFERS, rule=energy_regulating_down_rule)
-    print('Finished constructing C_JOINT_REGULATING_DOWN:', time.time() - t0)
+    # Joint capacity lower - L6SE
+    m.C_JOINT_CAPACITY_LOWER_L6SE_GENERATOR = pyo.Constraint(
+        m.S_TRADER_OFFERS, rule=get_joint_capacity_lower_generator_constraint('L6SE'))
+    print('Finished constructing C_JOINT_CAPACITY_LOWER_L6SE_GENERATOR:', time.time() - t0)
+
+    # Joint capacity lower - L60S
+    m.C_JOINT_CAPACITY_LOWER_L60S_GENERATOR = pyo.Constraint(
+        m.S_TRADER_OFFERS, rule=get_joint_capacity_lower_generator_constraint('L60S'))
+    print('Finished constructing C_JOINT_CAPACITY_LOWER_L60S_GENERATOR:', time.time() - t0)
+
+    # Joint capacity lower - L5MI
+    m.C_JOINT_CAPACITY_LOWER_L5MI_GENERATOR = pyo.Constraint(
+        m.S_TRADER_OFFERS, rule=get_joint_capacity_lower_generator_constraint('L5MI'))
+    print('Finished constructing C_JOINT_CAPACITY_LOWER_L5MI_GENERATOR:', time.time() - t0)
+
+    # Joint energy and regulating FCAS constraint - generators
+    m.C_JOINT_REGULATING_RAISE_GENERATOR = pyo.Constraint(
+        m.S_TRADER_OFFERS, rule=energy_regulating_raise_generator_rule)
+    print('Finished constructing C_JOINT_REGULATING_RAISE_GENERATOR:', time.time() - t0)
+
+    # Joint energy and regulating FCAS constraint - generators
+    m.C_JOINT_REGULATING_LOWER_GENERATOR = pyo.Constraint(
+        m.S_TRADER_OFFERS, rule=energy_regulating_lower_generator_rule)
+    print('Finished constructing C_JOINT_REGULATING_LOWER_GENERATOR:', time.time() - t0)
 
     return m
