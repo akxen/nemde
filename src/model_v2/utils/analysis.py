@@ -46,10 +46,7 @@ def check_trader_solution(data, solution):
 
     # Convert to DataFrame and sort by error corresponding to each unit
     df_out = {(k_1, k_2): v_2 for k_1, v_1 in out.items() for k_2, v_2 in v_1.items()}
-    print('Trader targets')
     df = pd.DataFrame(df_out).T.sort_values(by='abs_difference', ascending=False)
-    print(df.head(10))
-    print('\n')
 
     return out, df
 
@@ -128,11 +125,10 @@ def check_interconnector_solution(data, solution, attribute):
             'abs_difference': abs(v[attribute] - observed[k][attribute]),
         }
 
-    print(attribute)
-    print(pd.DataFrame(out).T.sort_values(by='abs_difference', ascending=False))
-    print('\n')
+    # Convert to DataFrame
+    df = pd.DataFrame(out).T.sort_values(by='abs_difference', ascending=False).round(4)
 
-    return out
+    return out, df
 
 
 def plot_interconnector_solution(data, solution):
@@ -145,7 +141,7 @@ def plot_interconnector_solution(data, solution):
         """Add axis to data"""
 
         # Get plot data
-        plot_data = check_interconnector_solution(data, solution, attribute)
+        plot_data, _ = check_interconnector_solution(data, solution, attribute)
 
         # Container for x and y data points
         x, y = [], []

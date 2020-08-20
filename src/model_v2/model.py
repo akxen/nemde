@@ -678,17 +678,27 @@ if __name__ == '__main__':
 
     # Difference
     trader_solution, df_trader_solution = utils.analysis.check_trader_solution(cdata, solution)
+    print('Trader targets')
+    print(df_trader_solution.head(10))
+    print('\n')
 
     # Interconnector solutions
-    interconnector_flow_solution = utils.analysis.check_interconnector_solution(cdata, solution, 'Flow')
-    interconnector_losses_solution = utils.analysis.check_interconnector_solution(cdata, solution, 'Losses')
+    flow_solution, df_flow_solution = utils.analysis.check_interconnector_solution(cdata, solution, 'Flow')
+    print('Flow')
+    print(df_flow_solution)
+    print('\n')
+
+    losses_solution, df_losses_solution = utils.analysis.check_interconnector_solution(cdata, solution, 'Losses')
+    print('Losses')
+    print(df_losses_solution)
+    print('\n')
 
     # Plot interconnector solution
     utils.analysis.plot_interconnector_solution(cdata, solution)
     utils.analysis.plot_trader_solution_difference(cdata, solution)
 
     # FCAS solution
-    utils.analysis.plot_fcas_solution(cdata, case_data, solution)
+    # utils.analysis.plot_fcas_solution(cdata, case_data, solution)
 
     # Error metric - mean square error for each offer type
     mse = utils.analysis.check_target_mse(cdata, solution)
