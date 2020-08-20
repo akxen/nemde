@@ -498,6 +498,36 @@ class NEMDEModel:
         return m
 
     @staticmethod
+    def fix_fcas_load_solution(m, data):
+        """Fix FCAS solution"""
+
+        # Map between NEMDE output keys and keys used in solution dictionary
+        key_map = {'ENOF': '@EnergyTarget', 'LDOF': '@EnergyTarget',
+                   'R6SE': '@R6Target', 'R60S': '@R60Target', 'R5MI': '@R5Target', 'R5RE': '@R5RegTarget',
+                   'L6SE': '@L6Target', 'L60S': '@L60Target', 'L5MI': '@L5Target', 'L5RE': '@L5RegTarget'}
+
+        for i, j in m.S_TRADER_FCAS_OFFERS:
+            if m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
+                m.V_TRADER_TOTAL_OFFER[(i, j)].fix(data['solution']['traders'][i][key_map[j]])
+
+        return m
+
+    @staticmethod
+    def fix_filtered_fcas_solution(m, data, trader_type, trade_type):
+        """Fix FCAS solution"""
+
+        # Map between NEMDE output keys and keys used in solution dictionary
+        key_map = {'ENOF': '@EnergyTarget', 'LDOF': '@EnergyTarget',
+                   'R6SE': '@R6Target', 'R60S': '@R60Target', 'R5MI': '@R5Target', 'R5RE': '@R5RegTarget',
+                   'L6SE': '@L6Target', 'L60S': '@L60Target', 'L5MI': '@L5Target', 'L5RE': '@L5RegTarget'}
+
+        for i, j in m.S_TRADER_FCAS_OFFERS:
+            if (j == trade_type) and (m.P_TRADER_TYPE[i] == trader_type):
+                m.V_TRADER_TOTAL_OFFER[(i, j)].fix(data['solution']['traders'][i][key_map[j]])
+
+        return m
+
+    @staticmethod
     def fix_energy_solution(m, data):
         """Fix FCAS solution"""
 
@@ -508,6 +538,21 @@ class NEMDEModel:
 
         for i, j in m.S_TRADER_ENERGY_OFFERS:
             m.V_TRADER_TOTAL_OFFER[(i, j)].fix(data['solution']['traders'][i][key_map[j]])
+
+        return m
+
+    @staticmethod
+    def fix_filtered_energy_solution(m, data, trader_type):
+        """Fix FCAS solution"""
+
+        # Map between NEMDE output keys and keys used in solution dictionary
+        key_map = {'ENOF': '@EnergyTarget', 'LDOF': '@EnergyTarget',
+                   'R6SE': '@R6Target', 'R60S': '@R60Target', 'R5MI': '@R5Target', 'R5RE': '@R5RegTarget',
+                   'L6SE': '@L6Target', 'L60S': '@L60Target', 'L5MI': '@L5Target', 'L5RE': '@L5RegTarget'}
+
+        for i, j in m.S_TRADER_ENERGY_OFFERS:
+            if m.P_TRADER_TYPE[i] == trader_type:
+                m.V_TRADER_TOTAL_OFFER[(i, j)].fix(data['solution']['traders'][i][key_map[j]])
 
         return m
 
@@ -547,6 +592,37 @@ class NEMDEModel:
         # m = self.fix_interconnector_loss_solution(m, data)
         # m = self.fix_energy_solution(m, data)
         # m = self.fix_fcas_solution(m, data)
+
+        m = self.fix_filtered_fcas_solution(m, data, 'LOAD', 'R5RE')
+        m = self.fix_filtered_fcas_solution(m, data, 'LOAD', 'R6SE')
+        m = self.fix_filtered_fcas_solution(m, data, 'LOAD', 'R60S')
+        m = self.fix_filtered_fcas_solution(m, data, 'LOAD', 'R5MI')
+        m = self.fix_filtered_fcas_solution(m, data, 'LOAD', 'L5RE')
+        m = self.fix_filtered_fcas_solution(m, data, 'LOAD', 'L6SE')
+        m = self.fix_filtered_fcas_solution(m, data, 'LOAD', 'L60S')
+        m = self.fix_filtered_fcas_solution(m, data, 'LOAD', 'L5MI')
+
+        m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'R5RE')
+        m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'R6SE')
+        m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'R60S')
+        m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'R5MI')
+        m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'L5RE')
+        m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'L6SE')
+        m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'L60S')
+        m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'L5MI')
+
+        # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R5RE')
+        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R6SE')
+        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R60S')
+        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R5MI')
+        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L5RE')
+        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L6SE')
+        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L60S')
+        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L5MI')
+
+        m = self.fix_filtered_energy_solution(m, data, 'GENERATOR')
+        m = self.fix_filtered_energy_solution(m, data, 'LOAD')
+        m = self.fix_filtered_energy_solution(m, data, 'NORMALLY_ON_LOAD')
 
         return m
 
@@ -628,3 +704,8 @@ if __name__ == '__main__':
     # Error metric - mean square error for each offer type
     print(df_trader_solution['abs_difference'].apply(lambda x: x ** 2).reset_index()
           .groupby('level_1')['abs_difference'].mean().rename_axis('mse').round(4))
+
+    print('Objective value:', nemde_model.OBJECTIVE.expr())
+
+    import pandas as pd
+    df_r = pd.DataFrame(case_data['solution']['regions']).T
