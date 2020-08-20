@@ -33,46 +33,6 @@ def fcas_available_rule(m, i, j):
         return pyo.Constraint.Skip
 
 
-# def as_profile_1_rule(m, i, j):
-#     """Constraint LHS component of FCAS trapeziums (line between enablement min and low breakpoint)"""
-#
-#     # Only consider FCAS offers - ignore energy offers
-#     if j in ['ENOF', 'LDOF']:
-#         return pyo.Constraint.Skip
-#
-#     # Check FCAS is available
-#     if not m.P_TRADER_FCAS_AVAILABILITY[(i, j)]:
-#         return pyo.Constraint.Skip
-#
-#     # Get slope between enablement min and low breakpoint
-#     x1, y1 = m.P_TRADER_FCAS_ENABLEMENT_MIN[(i, j)], 0
-#     x2, y2 = m.P_TRADER_FCAS_LOW_BREAKPOINT[(i, j)], m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)]
-#     slope = get_slope(x1, x2, y1, y2)
-#
-#     # print(f'({i}, {j})-{x1}-{y1}-{x2}-{y2}-{slope}')
-#
-#     # Case with vertical line
-#     if slope is None:
-#         return (m.V_TRADER_TOTAL_OFFER[i, j] <= m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)]
-#                 + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j])
-#
-#     # Compute y-intercept
-#     y_intercept = get_intercept(slope, x1, y1)
-#     # print(f'({i}, {j})-{y_intercept}')
-#
-#     # Handle generator case
-#     if m.P_TRADER_TYPE[i] in ['GENERATOR']:
-#         return (m.V_TRADER_TOTAL_OFFER[i, j] <= (slope * m.V_TRADER_TOTAL_OFFER[i, 'ENOF']) + y_intercept
-#                 + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j])
-#
-#     # Handle loads
-#     elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
-#         return (m.V_TRADER_TOTAL_OFFER[i, j] <= (slope * m.V_TRADER_TOTAL_OFFER[i, 'LDOF']) + y_intercept
-#                 + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j])
-#     else:
-#         raise Exception(f'Unexpected trader type: {m.P_TRADER_TYPE[i]}')
-
-
 def as_profile_1_rule(m, i, j):
     """Constraint LHS component of FCAS trapeziums (line between enablement min and low breakpoint)"""
 
@@ -81,34 +41,17 @@ def as_profile_1_rule(m, i, j):
         return pyo.Constraint.Skip
 
     # Check FCAS is available
-    # if not self.get_fcas_availability(i, j):
     if not m.P_TRADER_FCAS_AVAILABILITY[(i, j)]:
         return pyo.Constraint.Skip
 
-    # # Get FCAS trapezium
-    # if j in ['R5RE', 'L5RE']:
-    #     trapezium = self.fcas.get_scaled_fcas_trapezium(i, j)
-    # else:
-    #     trapezium = self.fcas.get_fcas_trapezium_offer(i, j)
-
-    trapezium = {
-        'enablement_min': m.P_TRADER_FCAS_ENABLEMENT_MIN[(i, j)],
-        'low_breakpoint': m.P_TRADER_FCAS_LOW_BREAKPOINT[(i, j)],
-        'high_breakpoint': m.P_TRADER_FCAS_HIGH_BREAKPOINT[(i, j)],
-        'enablement_max': m.P_TRADER_FCAS_ENABLEMENT_MAX[(i, j)],
-        'max_available': m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)],
-    }
-
     # Get slope between enablement min and low breakpoint
-    x1, y1 = trapezium['enablement_min'], 0
-    x2, y2 = trapezium['low_breakpoint'], trapezium['max_available']
+    x1, y1 = m.P_TRADER_FCAS_ENABLEMENT_MIN[(i, j)], 0
+    x2, y2 = m.P_TRADER_FCAS_LOW_BREAKPOINT[(i, j)], m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)]
     slope = get_slope(x1, x2, y1, y2)
-
-    # print(f'({i}, {j})-{x1}-{y1}-{x2}-{y2}-{slope}')
 
     if slope is not None:
         y_intercept = get_intercept(slope, x1, y1)
-        # print(f'({i}, {j})-{y_intercept}')
+
         try:
             return (m.V_TRADER_TOTAL_OFFER[i, j] <= (slope * m.V_TRADER_TOTAL_OFFER[i, 'ENOF']) + y_intercept
                     + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j]
@@ -121,7 +64,7 @@ def as_profile_1_rule(m, i, j):
 
     else:
         # TODO: need to consider if vertical line
-        return (m.V_TRADER_TOTAL_OFFER[i, j] <= trapezium['max_available']
+        return (m.V_TRADER_TOTAL_OFFER[i, j] <= m.P_TRADER_FCAS_MAX_AVAILABLE[(i, j)]
                 + m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j])
 
 

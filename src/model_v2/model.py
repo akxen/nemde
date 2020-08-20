@@ -22,8 +22,7 @@ try:
     from components.constraints.generic_constraints import define_generic_constraints
     from components.constraints.loss import define_loss_model_constraints
 
-    # from components.constraints.fcas import define_fcas_constraints
-    from components.constraints.fcas_v2 import define_fcas_constraints
+    from components.constraints.fcas import define_fcas_constraints
 
     import utils.solution
     import utils.analysis
@@ -43,8 +42,7 @@ except ModuleNotFoundError:
     from .components.constraints.generic_constraints import define_generic_constraints
     from .components.constraints.loss import define_loss_model_constraints
 
-    # from .components.constraints.fcas import define_fcas_constraints
-    from .components.constraints.fcas_v2 import define_fcas_constraints
+    from .components.constraints.fcas import define_fcas_constraints
 
     # import .utils.solution
     # import .utils.analysis
@@ -690,22 +688,10 @@ if __name__ == '__main__':
     utils.analysis.plot_trader_solution_difference(cdata, solution)
 
     # FCAS solution
-    # utils.analysis.plot_fcas_solution(cdata, case_data, solution)
-
-    # import pandas as pd
-    # import matplotlib.pyplot as plt
-    #
-    # df = pd.DataFrame(
-    #     {k: {'loss': v} for k, v in nemde_model.P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y.items()}).T.sort_index()
-    # for i in df.index.levels[0]:
-    #     df.xs(i, level=0).plot(title=i)
-    # plt.show()
+    utils.analysis.plot_fcas_solution(cdata, case_data, solution)
 
     # Error metric - mean square error for each offer type
-    print(df_trader_solution['abs_difference'].apply(lambda x: x ** 2).reset_index()
-          .groupby('level_1')['abs_difference'].mean().rename_axis('mse').round(4))
+    mse = utils.analysis.check_target_mse(cdata, solution)
+    print(mse)
 
     print('Objective value:', nemde_model.OBJECTIVE.expr())
-
-    import pandas as pd
-    df_r = pd.DataFrame(case_data['solution']['regions']).T

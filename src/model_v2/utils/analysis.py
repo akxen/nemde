@@ -281,14 +281,11 @@ def plot_fcas_solution(data, preprocessed_data, solution):
     trader_ids = list(offers.keys())
     trader_ids.sort()
     for trader_id in trader_ids:
-    # for trader_id in ['TORRA1']:
         # Initialise axes
         fig, ((ax1, ax2), (ax3, ax4), (ax5, ax6), (ax7, ax8)) = plt.subplots(ncols=2, nrows=4)
         axs = {'R6SE': ax1, 'L6SE': ax2, 'R60S': ax3, 'L60S': ax4, 'R5MI': ax5, 'L5MI': ax6, 'R5RE': ax7, 'L5RE': ax8}
 
         for trade_type in offers[trader_id]:
-        # for trade_type in ['R5RE']:
-
             # Get FCAS and model data
             comparison_data = get_fcas_solution_comparison_data(preprocessed_data, trader_solutions, trader_id, trade_type)
 
@@ -305,7 +302,18 @@ def plot_fcas_solution(data, preprocessed_data, solution):
         fig.set_size_inches(5, 10)
         fig.subplots_adjust(hspace=0.8, wspace=0.4, top=0.92)
 
-        # print(trader_id)
         fig.savefig(f"utils/plots/{trader_id.replace('/', '')}.png")
-        # plt.show()
         plt.close(fig)
+
+
+def check_target_mse(data, solution):
+    """Compute mean square error for each trade type"""
+
+    # Get the trader solution
+    _, df = check_trader_solution(data, solution)
+
+    # Compute the MSE for each offer type
+    mse = (df['abs_difference'].apply(lambda x: x ** 2).reset_index().groupby('level_1')['abs_difference'].mean()
+           .rename_axis('mse').round(4))
+
+    return mse

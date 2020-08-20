@@ -399,39 +399,17 @@ def get_trader_fcas_trapezium_scaled(data) -> dict:
     scada_ramp_rate_down = get_trader_initial_condition_attribute(data, 'SCADARampDnRate', float)
     uigf = get_trader_period_attribute(data, '@UIGF', float)
 
-    # # Scaled trapezium - AGC enablement min - LHS
-    # scaled_1 = {
-    #     k: fcas.get_scaled_fcas_trapezium_agc_enablement_limits_lhs(v, lmw.get(k[0])) if k[1] in ['L5RE', 'R5RE'] else v
-    #     for k, v in offers.items()
-    # }
+    # Scaled trapezium - AGC enablement min - LHS
+    scaled_1 = {
+        k: fcas.get_scaled_fcas_trapezium_agc_enablement_limits_lhs(v, lmw.get(k[0])) if k[1] in ['L5RE', 'R5RE'] else v
+        for k, v in offers.items()
+    }
 
-    # TODO: remove this
-    scaled_1 = {}
-    for k, v in offers.items():
-        if (k[0] == 'LD03') and (k[1] == 'R5RE'):
-            a = 10
-
-        if k[1] in ['L5RE', 'R5RE']:
-            scaled_1[k] = fcas.get_scaled_fcas_trapezium_agc_enablement_limits_lhs(v, lmw.get(k[0]))
-        else:
-            scaled_1[k] = v
-
-    # Scaled trapezium - AGC enablement min - RHS
-    # scaled_2 = {
-    #     k: fcas.get_scaled_fcas_trapezium_agc_enablement_limits_rhs(v, hmw.get(k[0])) if k[1] in ['L5RE', 'R5RE'] else v
-    #     for k, v in scaled_1.items()
-    # }
-
-    scaled_2 = {}
-    for k, v in scaled_1.items():
-        if (k[0] == 'TORRA1') and (k[1] == 'R5RE'):
-            a = 10
-
-        if k[1] in ['L5RE', 'R5RE']:
-            scaled_2[k] = fcas.get_scaled_fcas_trapezium_agc_enablement_limits_rhs(v, hmw.get(k[0]))
-        else:
-            scaled_2[k] = v
-
+    # Scaled trapezium - AGC enablement max - RHS
+    scaled_2 = {
+        k: fcas.get_scaled_fcas_trapezium_agc_enablement_limits_rhs(v, hmw.get(k[0])) if k[1] in ['L5RE', 'R5RE'] else v
+        for k, v in scaled_1.items()
+    }
 
     # Scaled trapezium - AGC ramp-rates - R5RE offers
     scaled_3 = {
@@ -448,8 +426,8 @@ def get_trader_fcas_trapezium_scaled(data) -> dict:
     # Scaled trapezium - UIGF scaling for semi-scheduled units
     scaled_5 = {
         k: fcas.get_scaled_fcas_trapezium_uigf(v, uigf.get(k[0]))
-        if (uigf.get(k[0]) is not None) and (k[1] in ['L5RE', 'R5RE']) else v
-        for k, v in scaled_4.items()
+        if (uigf.get(k[0]) is not None) and (k[1] in ['L5RE', 'R5RE', 'L6SE', 'L60S', 'L5MI', 'R6SE', 'R60S', 'R5MI'])
+        else v for k, v in scaled_4.items()
     }
 
     return scaled_5
@@ -474,23 +452,11 @@ def get_trader_fcas_availability(data) -> dict:
     max_energy_available = {trader_id: v for (trader_id, trade_type), v in max_available.items()
                             if trade_type in ['ENOF', 'LDOF']}
 
-    # # Available FCAS
-    # fcas_available = {
-    #     (trader_id, trade_type):
-    #         fcas.get_fcas_availability(
-    #             trapezium,
-    #             trade_type,
-    #             max_quantity.get((trader_id, trade_type)),
-    #             initial_mw.get(trader_id),
-    #             agc_status.get(trader_id),
-    #             max_energy_available.get(trader_id)
-    #         )
-    #     for (trader_id, trade_type), trapezium in trapeziums.items()}
-
+    # Container for FCAS availability
     fcas_available = {}
     for (trader_id, trade_type), trapezium in trapeziums.items():
-        # if (trader_id == 'LD03') and (trade_type == 'R5RE'):
-        #     a = 10
+
+        # Get FCAS availability
         fcas_available[(trader_id, trade_type)] = fcas.get_fcas_availability(
                     trapezium,
                     trade_type,
@@ -501,8 +467,6 @@ def get_trader_fcas_availability(data) -> dict:
                 )
 
     return fcas_available
-
-    # def get_fcas_availability(trapezium, trade_type, quantity_bands, initial_mw, agc_status, energy_max_avail)
 
 
 def get_interconnector_collection_attribute(data, attribute, func) -> dict:
@@ -729,7 +693,7 @@ def get_interconnector_initial_loss_estimate(data) -> dict:
 def get_interconnector_loss_model_segment_attribute(data, attribute, func) -> dict:
     """Get interconnector loss model segment collection"""
 
-    # NEMSPDCaseFile.NemSpdInputs.InterconnectorCollection.Interconnector[0].LossModelCollection.LossModel.SegmentCollection.Segment[0].@Limit
+    # All interconnectors
     interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('InterconnectorCollection')
                        .get('Interconnector'))
 
