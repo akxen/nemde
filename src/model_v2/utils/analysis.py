@@ -10,12 +10,27 @@ def get_observed_trader_solution(data):
     # All traders
     traders = data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('TraderSolution')
 
-    # Map between NEMDE output keys and keys used in solution dictionary
-    keys = ['@EnergyTarget',
-            '@R6Target', '@R60Target', '@R5Target', '@R5RegTarget',
-            '@L6Target', '@L60Target', '@L5Target', '@L5RegTarget']
+    # # Map between NEMDE output keys and keys used in solution dictionary
+    # keys = ['@EnergyTarget',
+    #         '@R6Target', '@R60Target', '@R5Target', '@R5RegTarget',
+    #         '@L6Target', '@L60Target', '@L5Target', '@L5RegTarget']
+    #
+    # # return {i['@TraderID']: {k: float(v) for k, v in i.items() if k in keys} for i in traders}
 
-    return {i['@TraderID']: {k: float(v) for k, v in i.items() if k in keys} for i in traders}
+    # Keys to be treated as strings
+    str_keys = ['@TraderID', '@PeriodID', '@SemiDispatchCap']
+
+    # Container for output
+    out = {}
+    for i in traders:
+        out.setdefault(i['@TraderID'], {})
+        for j, k in i.items():
+            if j in str_keys:
+                out[i['@TraderID']][j] = str(k)
+            else:
+                out[i['@TraderID']][j] = float(k)
+
+    return out
 
 
 def check_trader_solution(data, solution):
@@ -313,3 +328,30 @@ def check_target_mse(data, solution):
            .rename_axis('mse').round(4))
 
     return mse
+
+
+def check_fcas_availability(data, preprocessed_data):
+    """Check if preprocessed FCAS availability conforms with observed trader solution"""
+
+    # Trader solution
+    trader_solution = get_observed_trader_solution(data)
+
+    # Mapping between trader solution keys and model keys
+    flag_map = {'L5RE': '@L5RegFlags', 'L6SE': '@L6Flags', 'L60S': '@L60Flags', 'L5MI': '@L5Flags',
+                'R5RE': '@R5RegFlags', 'R6SE': '@R6Flags', 'R60S': '@R60Flags', 'R5MI': '@R5Flags'}
+
+    # Container for output
+    out = {}
+    for (i, j), k in preprocessed_data['preprocessed']['FCAS_AVAILABILITY'].items():
+        # Flag=1 or 3 means FCAS is enabled (from docs)
+        if k in [1, 3]:
+            observed_availability = True
+        # FCAS isn't enabled
+        else:
+            observed_availability = False
+
+        # Check if observed solution is the same as the preprocessed solution
+        if observed_availability != k:
+            out[(i, j)] = trader_solution[i][flag_map[j]]
+
+    return out

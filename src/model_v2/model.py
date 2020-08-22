@@ -613,7 +613,7 @@ class NEMDEModel:
 
         # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R5RE')
         # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R6SE')
-        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R60S')
+        # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R60S')
         # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R5MI')
         # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L5RE')
         # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L6SE')
@@ -701,6 +701,9 @@ if __name__ == '__main__':
 
     # FCAS solution
     # utils.analysis.plot_fcas_solution(cdata, case_data, solution)
+
+    # Check FCAS availability - compare model and solution FCAS availability
+    fcas_availability = utils.analysis.check_fcas_availability(cdata, case_data)
 
     # Error metric - mean square error for each offer type
     mse = utils.analysis.check_target_mse(cdata, solution)
