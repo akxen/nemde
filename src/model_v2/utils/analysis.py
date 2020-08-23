@@ -3,6 +3,8 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
+import fcas_calculations
+
 
 def get_observed_trader_solution(data):
     """Get observed energy target solution"""
@@ -320,7 +322,7 @@ def plot_fcas_solution(data, preprocessed_data, solution):
 def check_target_mse(data, solution):
     """Compute mean square error for each trade type"""
 
-    # Get the trader solution
+    # Get trader solution
     _, df = check_trader_solution(data, solution)
 
     # Compute the MSE for each offer type
@@ -355,3 +357,16 @@ def check_fcas_availability(data, preprocessed_data):
             out[(i, j)] = trader_solution[i][flag_map[j]]
 
     return out
+
+
+def check_fcas_max_availability(data, solution):
+    """Get FCAS max availability"""
+
+    # Get trader solution
+    _, df_s = check_trader_solution(data, solution)
+    _, df_m = fcas_calculations.get_fcas_max_availability(data)
+
+    # Combine computed maximum with model results DataFrame
+    df_c = df_s.join(df_m[['min']], how='left')
+
+    return df_c

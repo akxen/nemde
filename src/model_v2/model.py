@@ -528,6 +528,16 @@ class NEMDEModel:
         return m
 
     @staticmethod
+    def free_trader_fcas_solution(m, trader_id, trade_type):
+        """Fix FCAS solution"""
+
+        for i, j in m.S_TRADER_FCAS_OFFERS:
+            if (j == trade_type) and (i == trader_id):
+                m.V_TRADER_TOTAL_OFFER[(i, j)].free()
+
+        return m
+
+    @staticmethod
     def fix_energy_solution(m, data):
         """Fix FCAS solution"""
 
@@ -611,18 +621,29 @@ class NEMDEModel:
         m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'L60S')
         m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'L5MI')
 
-        # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R5RE')
-        # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R6SE')
-        # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R60S')
-        # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R5MI')
-        # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L5RE')
-        # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L6SE')
-        # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L60S')
-        # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L5MI')
+        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R5RE')
+        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R6SE')
+        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R60S')
+        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R5MI')
+        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L5RE')
+        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L6SE')
+        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L60S')
+        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L5MI')
 
         m = self.fix_filtered_energy_solution(m, data, 'GENERATOR')
         m = self.fix_filtered_energy_solution(m, data, 'LOAD')
         m = self.fix_filtered_energy_solution(m, data, 'NORMALLY_ON_LOAD')
+
+        # Free selected solutions
+        # m = self.free_trader_fcas_solution(m, 'GORDON', 'R60S')
+        # m = self.free_trader_fcas_solution(m, 'MEADOWBK', 'R60S')
+        m = self.free_trader_fcas_solution(m, 'ER02', 'R60S')
+        # m = self.free_trader_fcas_solution(m, 'LI_WY_CA', 'R60S')
+        m = self.free_trader_fcas_solution(m, 'TORRB4', 'R60S')
+        m = self.free_trader_fcas_solution(m, 'TORRB3', 'R60S')
+        m = self.free_trader_fcas_solution(m, 'TORRB2', 'R60S')
+        m = self.free_trader_fcas_solution(m, 'TORRB1', 'R60S')
+        m = self.free_trader_fcas_solution(m, 'FISHER', 'R60S')
 
         return m
 
@@ -704,6 +725,9 @@ if __name__ == '__main__':
 
     # Check FCAS availability - compare model and solution FCAS availability
     fcas_availability = utils.analysis.check_fcas_availability(cdata, case_data)
+
+    # Max FCAS available
+    df_fcas_max = utils.analysis.check_fcas_max_availability(cdata, solution)
 
     # Error metric - mean square error for each offer type
     mse = utils.analysis.check_target_mse(cdata, solution)
