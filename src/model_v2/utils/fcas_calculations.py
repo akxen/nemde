@@ -34,6 +34,57 @@ def get_trader_initial_condition_attribute(data, trader_id, attribute, func):
     raise Exception('No attribute found:', trader_id, attribute)
 
 
+def get_trader_price_bands(data, trader_id, trade_type) -> dict:
+    """Trader price bands"""
+
+    # All traders
+    traders = data.get('NEMSPDCaseFile').get('NemSpdInputs').get('TraderCollection').get('Trader')
+
+    for i in traders:
+        # Get selected generator
+        if i['@TraderID'] == trader_id:
+            # All trade types for a given trader
+            trade_types = (i.get('TradePriceStructureCollection').get('TradePriceStructure')
+                           .get('TradeTypePriceStructureCollection').get('TradeTypePriceStructure'))
+
+            # Get specified trade type
+            for j in convert_to_list(trade_types):
+                if j['@TradeType'] == trade_type:
+                    return {f'PriceBand{k}': float(j.get(f'@PriceBand{k}')) for k in range(1, 11)}
+
+    raise Exception('No price bands found:', trader_id, trade_type)
+
+
+def get_trader_quantity_bands(data, trader_id, trade_type):
+    """Get trader quantity bands"""
+
+    # All traders
+    traders = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
+               .get('TraderPeriodCollection').get('TraderPeriod'))
+
+    for i in traders:
+        if i['@TraderID'] == trader_id:
+            for j in convert_to_list(i.get('TradeCollection').get('Trade')):
+                if j['@TradeType'] == trade_type:
+                    return {f'BandAvail{k}': float(j[f'@BandAvail{k}']) for k in range(1, 11)}
+
+    raise Exception('No quantity bands found:', trader_id, trade_type)
+
+
+def get_trader_period_attribute(data, trader_id, attribute, func):
+    """Get trader period attribute"""
+
+    # All traders
+    traders = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
+               .get('TraderPeriodCollection').get('TraderPeriod'))
+
+    for i in traders:
+        if i['@TraderID'] == trader_id:
+            return func(i[attribute])
+
+    raise Exception('No attribute found:', trader_id, attribute)
+
+
 def get_trader_quantity_band_attribute(data, trader_id, trade_type, attribute, func):
     """Get trader quantity band attribute"""
 
@@ -61,6 +112,19 @@ def get_trader_solution_attribute(data, trader_id, attribute, func):
             return func(i[attribute])
 
     raise Exception('No attribute found:', trader_id, attribute)
+
+
+def get_region_solution_attribute(data, region_id, attribute, func):
+    """Get region solution attribute"""
+
+    # All regions
+    regions = data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('RegionSolution')
+
+    for i in regions:
+        if i['@RegionID'] == region_id:
+            return func(i[attribute])
+
+    raise Exception('No attribute found:', region_id, attribute)
 
 
 def get_effective_r5re_max_available(data, trader_id):

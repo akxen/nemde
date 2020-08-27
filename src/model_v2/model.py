@@ -275,6 +275,9 @@ class NEMDEModel:
         # Region fixed demand (obtained from case solution)
         m.P_REGION_FIXED_DEMAND = pyo.Param(m.S_REGIONS, initialize=data['P_REGION_FIXED_DEMAND'])
 
+        # Region net export
+        m.P_REGION_NET_EXPORT = pyo.Param(m.S_REGIONS, initialize=data['P_REGION_NET_EXPORT'])
+
         # Generic constraint RHS
         m.P_GC_RHS = pyo.Param(m.S_GENERIC_CONSTRAINTS, initialize=data['P_GC_RHS'])
 
@@ -377,6 +380,10 @@ class NEMDEModel:
         m.V_CV_TRADER_FCAS_JOINT_RAMPING_LOWER_GENERATOR = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
         m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RAISE_GENERATOR = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
         m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LOWER_GENERATOR = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
+
+        # FCAS joint ramping constraint violation variables - loads
+        m.V_CV_TRADER_FCAS_JOINT_RAMPING_RAISE_LOAD = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
+        m.V_CV_TRADER_FCAS_JOINT_RAMPING_LOWER_LOAD = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
 
         # FCAS joint capacity constraint violation pyo.Variables
         m.V_CV_TRADER_FCAS_JOINT_CAPACITY_UP = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
@@ -603,47 +610,47 @@ class NEMDEModel:
         # m = self.fix_energy_solution(m, data)
         # m = self.fix_fcas_solution(m, data)
 
-        m = self.fix_filtered_fcas_solution(m, data, 'LOAD', 'R5RE')
-        m = self.fix_filtered_fcas_solution(m, data, 'LOAD', 'R6SE')
-        m = self.fix_filtered_fcas_solution(m, data, 'LOAD', 'R60S')
-        m = self.fix_filtered_fcas_solution(m, data, 'LOAD', 'R5MI')
-        m = self.fix_filtered_fcas_solution(m, data, 'LOAD', 'L5RE')
-        m = self.fix_filtered_fcas_solution(m, data, 'LOAD', 'L6SE')
-        m = self.fix_filtered_fcas_solution(m, data, 'LOAD', 'L60S')
-        m = self.fix_filtered_fcas_solution(m, data, 'LOAD', 'L5MI')
+        # m = self.fix_filtered_fcas_solution(m, data, 'LOAD', 'R5RE')
+        # m = self.fix_filtered_fcas_solution(m, data, 'LOAD', 'R6SE')
+        # m = self.fix_filtered_fcas_solution(m, data, 'LOAD', 'R60S')
+        # m = self.fix_filtered_fcas_solution(m, data, 'LOAD', 'R5MI')
+        # m = self.fix_filtered_fcas_solution(m, data, 'LOAD', 'L5RE')
+        # m = self.fix_filtered_fcas_solution(m, data, 'LOAD', 'L6SE')
+        # m = self.fix_filtered_fcas_solution(m, data, 'LOAD', 'L60S')
+        # m = self.fix_filtered_fcas_solution(m, data, 'LOAD', 'L5MI')
+        # #
+        # m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'R5RE')
+        # m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'R6SE')
+        # m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'R60S')
+        # m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'R5MI')
+        # m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'L5RE')
+        # m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'L6SE')
+        # m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'L60S')
+        # m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'L5MI')
 
-        m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'R5RE')
-        m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'R6SE')
-        m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'R60S')
-        m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'R5MI')
-        m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'L5RE')
-        m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'L6SE')
-        m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'L60S')
-        m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'L5MI')
+        # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R5RE')
+        # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R6SE')
+        # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R60S')
+        # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R5MI')
+        # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L5RE')
+        # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L6SE')
+        # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L60S')
+        # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L5MI')
 
-        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R5RE')
-        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R6SE')
-        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R60S')
-        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R5MI')
-        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L5RE')
-        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L6SE')
-        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L60S')
-        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L5MI')
-
-        m = self.fix_filtered_energy_solution(m, data, 'GENERATOR')
-        m = self.fix_filtered_energy_solution(m, data, 'LOAD')
-        m = self.fix_filtered_energy_solution(m, data, 'NORMALLY_ON_LOAD')
+        # m = self.fix_filtered_energy_solution(m, data, 'GENERATOR')
+        # m = self.fix_filtered_energy_solution(m, data, 'LOAD')
+        # m = self.fix_filtered_energy_solution(m, data, 'NORMALLY_ON_LOAD')
 
         # Free selected solutions
         # m = self.free_trader_fcas_solution(m, 'GORDON', 'R60S')
         # m = self.free_trader_fcas_solution(m, 'MEADOWBK', 'R60S')
-        m = self.free_trader_fcas_solution(m, 'ER02', 'R60S')
+        # m = self.free_trader_fcas_solution(m, 'ER02', 'R60S')
         # m = self.free_trader_fcas_solution(m, 'LI_WY_CA', 'R60S')
-        m = self.free_trader_fcas_solution(m, 'TORRB4', 'R60S')
-        m = self.free_trader_fcas_solution(m, 'TORRB3', 'R60S')
-        m = self.free_trader_fcas_solution(m, 'TORRB2', 'R60S')
-        m = self.free_trader_fcas_solution(m, 'TORRB1', 'R60S')
-        m = self.free_trader_fcas_solution(m, 'FISHER', 'R60S')
+        # m = self.free_trader_fcas_solution(m, 'TORRB4', 'R60S')
+        # m = self.free_trader_fcas_solution(m, 'TORRB3', 'R60S')
+        # m = self.free_trader_fcas_solution(m, 'TORRB2', 'R60S')
+        # m = self.free_trader_fcas_solution(m, 'TORRB1', 'R60S')
+        # m = self.free_trader_fcas_solution(m, 'FISHER', 'R60S')
 
         return m
 
@@ -651,7 +658,7 @@ class NEMDEModel:
     def solve_model(m):
         """Solve model"""
         # Setup solver
-        solver_options = {}  # 'MIPGap': 0.0005,
+        solver_options = {'mip tolerances mipgap': 1e-6}  # 'MIPGap': 0.0005,
         opt = pyo.SolverFactory('cplex', solver_io='lp')
 
         # Solve model
@@ -701,33 +708,41 @@ if __name__ == '__main__':
 
     # Difference
     trader_solution, df_trader_solution = utils.analysis.check_trader_solution(cdata, solution)
+    df_trader_solution_r6se = df_trader_solution.loc[(slice(None), 'R6SE'), :]
+    df_trader_solution_r60s = df_trader_solution.loc[(slice(None), 'R60S'), :]
+    df_trader_solution_r5mi = df_trader_solution.loc[(slice(None), 'R5MI'), :]
+    df_trader_solution_r5re = df_trader_solution.loc[(slice(None), 'R5RE'), :]
+    df_trader_solution_l6se = df_trader_solution.loc[(slice(None), 'L6SE'), :]
+    df_trader_solution_l60s = df_trader_solution.loc[(slice(None), 'L60S'), :]
+    df_trader_solution_l5mi = df_trader_solution.loc[(slice(None), 'L5MI'), :]
+    df_trader_solution_l5re = df_trader_solution.loc[(slice(None), 'L5RE'), :]
     print('Trader targets')
     print(df_trader_solution.head(10))
     print('\n')
 
-    # Interconnector solutions
-    flow_solution, df_flow_solution = utils.analysis.check_interconnector_solution(cdata, solution, 'Flow')
-    print('Flow')
-    print(df_flow_solution)
-    print('\n')
+    # # Interconnector solutions
+    # flow_solution, df_flow_solution = utils.analysis.check_interconnector_solution(cdata, solution, 'Flow')
+    # print('Flow')
+    # print(df_flow_solution)
+    # print('\n')
+    #
+    # losses_solution, df_losses_solution = utils.analysis.check_interconnector_solution(cdata, solution, 'Losses')
+    # print('Losses')
+    # print(df_losses_solution)
+    # print('\n')
 
-    losses_solution, df_losses_solution = utils.analysis.check_interconnector_solution(cdata, solution, 'Losses')
-    print('Losses')
-    print(df_losses_solution)
-    print('\n')
-
-    # Plot interconnector solution
-    utils.analysis.plot_interconnector_solution(cdata, solution)
+    # # Plot interconnector solution
+    # utils.analysis.plot_interconnector_solution(cdata, solution)
     utils.analysis.plot_trader_solution_difference(cdata, solution)
 
     # FCAS solution
     # utils.analysis.plot_fcas_solution(cdata, case_data, solution)
 
-    # Check FCAS availability - compare model and solution FCAS availability
-    fcas_availability = utils.analysis.check_fcas_availability(cdata, case_data)
-
-    # Max FCAS available
-    df_fcas_max = utils.analysis.check_fcas_max_availability(cdata, solution)
+    # # Check FCAS availability - compare model and solution FCAS availability
+    # fcas_availability = utils.analysis.check_fcas_availability(cdata, case_data)
+    #
+    # # Max FCAS available
+    # df_fcas_max = utils.analysis.check_fcas_max_availability(cdata, solution)
 
     # Error metric - mean square error for each offer type
     mse = utils.analysis.check_target_mse(cdata, solution)

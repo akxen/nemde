@@ -12,13 +12,6 @@ def get_observed_trader_solution(data):
     # All traders
     traders = data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('TraderSolution')
 
-    # # Map between NEMDE output keys and keys used in solution dictionary
-    # keys = ['@EnergyTarget',
-    #         '@R6Target', '@R60Target', '@R5Target', '@R5RegTarget',
-    #         '@L6Target', '@L60Target', '@L5Target', '@L5RegTarget']
-    #
-    # # return {i['@TraderID']: {k: float(v) for k, v in i.items() if k in keys} for i in traders}
-
     # Keys to be treated as strings
     str_keys = ['@TraderID', '@PeriodID', '@SemiDispatchCap']
 
@@ -35,6 +28,27 @@ def get_observed_trader_solution(data):
     return out
 
 
+def get_trader_marginal_price_band(data, trader_id, trade_type, output):
+    """Get marginal price for a given trader"""
+
+    # Trader price and quantity bands
+    price_bands = fcas_calculations.get_trader_price_bands(data, trader_id, trade_type)
+    quantity_bands = fcas_calculations.get_trader_quantity_bands(data, trader_id, trade_type)
+
+    # Initialise total output
+    total_output = 0
+    for i in range(1, 11):
+        total_output += quantity_bands[f'BandAvail{i}']
+
+        # Check if aggregate output is greater than the specified level
+        if total_output > output:
+            # Return price corresponding to band
+            return price_bands[f'PriceBand{i}']
+
+    # Max price (highest price band)
+    return price_bands[f'PriceBand10']
+
+
 def check_trader_solution(data, solution):
     """Compare trader model solution with observed solution"""
 
@@ -49,16 +63,38 @@ def check_trader_solution(data, solution):
                'R6SE': '@R6Target', 'R60S': '@R60Target', 'R5MI': '@R5Target', 'R5RE': '@R5RegTarget',
                'L6SE': '@L6Target', 'L60S': '@L60Target', 'L5MI': '@L5Target', 'L5RE': '@L5RegTarget'}
 
+    # Mapping between trade types and price keys
+    price_key_map = {'ENOF': '@EnergyPrice', 'LDOF': '@EnergyPrice',
+                     'R6SE': '@R6Price', 'R60S': '@R60Price', 'R5MI': '@R5Price', 'R5RE': '@R5RegPrice',
+                     'L6SE': '@L6Price', 'L60S': '@L60Price', 'L5MI': '@L5Price', 'L5RE': '@L5RegPrice'}
+
     # Difference between observed and model solution
     for trader_id, trader_solution in solution['traders'].items():
         out.setdefault(trader_id, {})
         for trade_type, target in trader_solution.items():
             # Compute difference between target and observed value
+            region_id = fcas_calculations.get_trader_period_attribute(data, trader_id, '@RegionID', str)
+
+            # Get region price for given trade type
+            region_price = fcas_calculations.get_region_solution_attribute(data, region_id, price_key_map[trade_type], float)
+
+            # Observed output
+            observed_output = observed[trader_id][key_map[trade_type]]
+
+            # Model and observed marginal price bands
+            model_marginal_price = get_trader_marginal_price_band(data, trader_id, trade_type, target)
+            observed_marginal_price = get_trader_marginal_price_band(data, trader_id, trade_type, observed_output)
+
+            # Observed marginal price band
             out[trader_id][trade_type] = {
                 'model': target,
-                'observed': observed[trader_id][key_map[trade_type]],
-                'difference': target - observed[trader_id][key_map[trade_type]],
-                'abs_difference': abs(target - observed[trader_id][key_map[trade_type]]),
+                'observed': observed_output,
+                'difference': target - observed_output,
+                'abs_difference': abs(target - observed_output),
+                'region_id': region_id,
+                'region_price': region_price,
+                'model_marginal_price': model_marginal_price,
+                'observed_marginal_price': observed_marginal_price,
             }
 
     # Convert to DataFrame and sort by error corresponding to each unit
@@ -300,7 +336,8 @@ def plot_fcas_solution(data, preprocessed_data, solution):
 
         for trade_type in offers[trader_id]:
             # Get FCAS and model data
-            comparison_data = get_fcas_solution_comparison_data(preprocessed_data, trader_solutions, trader_id, trade_type)
+            comparison_data = get_fcas_solution_comparison_data(preprocessed_data, trader_solutions, trader_id,
+                                                                trade_type)
 
             # Plot FCAS solution
             plot_fcas_solution_comparison(comparison_data, axs[trade_type])

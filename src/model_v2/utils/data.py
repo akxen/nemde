@@ -1272,6 +1272,7 @@ def parse_case_data_json(data) -> dict:
         'P_REGION_ADE': get_region_initial_condition_attribute(data_dict, 'ADE', float),
         'P_REGION_DF': get_region_period_collection_attribute(data_dict, '@DF', float),
         'P_REGION_FIXED_DEMAND': get_region_solution_attribute(data_dict, '@FixedDemand', float),
+        'P_REGION_NET_EXPORT': get_region_solution_attribute(data_dict, '@NetExport', float),
         'P_GC_RHS': get_generic_constraint_rhs(data_dict),
         'P_GC_TYPE': get_generic_constraint_collection_attribute(data_dict, '@Type', str),
         'P_CVF_GC': get_generic_constraint_collection_attribute(data_dict, '@ViolationPrice', float),
