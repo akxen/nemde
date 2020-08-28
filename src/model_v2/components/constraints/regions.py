@@ -8,8 +8,8 @@ def power_balance_rule(m, r):
 
     return (m.E_REGION_GENERATION[r]
             ==
-            m.E_REGION_DEMAND[r]  # TODO: Assuming fixed demand for now - discrepancy with region demand expression
-            # + m.P_REGION_FIXED_DEMAND[r]
+            m.E_REGION_DEMAND[r]
+            # + m.P_REGION_FIXED_DEMAND[r]  # TODO: Assuming fixed demand for now
             + m.E_REGION_LOAD[r]
             + m.E_REGION_NET_EXPORT_FLOW[r]
             # + m.P_REGION_NET_EXPORT[r]  # TODO: Assuming fixed export for now - need to change back later

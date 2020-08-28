@@ -380,18 +380,21 @@ class NEMDEModel:
         m.V_CV_TRADER_FCAS_JOINT_RAMPING_LOWER_GENERATOR = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
         m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RAISE_GENERATOR = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
         m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LOWER_GENERATOR = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
+        m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_GENERATOR = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
+        m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_GENERATOR = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
 
         # FCAS joint ramping constraint violation variables - loads
         m.V_CV_TRADER_FCAS_JOINT_RAMPING_RAISE_LOAD = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
         m.V_CV_TRADER_FCAS_JOINT_RAMPING_LOWER_LOAD = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
+        m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RAISE_LOAD = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
+        m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LOWER_LOAD = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
+
+        m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_LOAD = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
+        m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_LOAD = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
 
         # FCAS joint capacity constraint violation pyo.Variables
         m.V_CV_TRADER_FCAS_JOINT_CAPACITY_UP = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
         m.V_CV_TRADER_FCAS_JOINT_CAPACITY_DOWN = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
-
-        # FCAS joint regulating capacity constraint violation pyo.Variables
-        m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_GENERATOR = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
-        m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_GENERATOR = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
 
         # Interconnector forward and reverse flow constraint violation
         m.V_CV_INTERCONNECTOR_FORWARD = pyo.Var(m.S_INTERCONNECTORS, within=pyo.NonNegativeReals)
@@ -587,6 +590,28 @@ class NEMDEModel:
 
         return m
 
+    @staticmethod
+    def fix_binary_variables(m):
+        """Fix all binary variables"""
+        # m.V_LOSS_Y = pyo.Var(m.S_INTERCONNECTOR_LOSS_MODEL_INTERVALS, within=pyo.Binary)
+        for i in m.S_INTERCONNECTOR_LOSS_MODEL_INTERVALS:
+            m.V_LOSS_Y[i].fix(m.V_LOSS_Y[i].value)
+
+        return m
+
+    @staticmethod
+    def fix_fcas_region_solution(m):
+        """Use constraints to get FCAS region marginal variables"""
+
+        m.C_FCAS_FIX_TAS = pyo.Constraint(expr=m.V_GC_REGION['VIC1', 'R6SE'] == m.V_GC_REGION['VIC1', 'R6SE'].value)
+
+        # # LHS terms
+        # for i in m.C_GENERIC_CONSTRAINT['F_I+NIL_MG_R6'].body.args[0].args[0].args:
+        #     if i.index() != ('NSW1', 'R6SE'):
+        #         i.fix()
+
+        return m
+
     def construct_model(self, data):
         """Create model object"""
 
@@ -601,6 +626,9 @@ class NEMDEModel:
         m = self.define_expressions(m, data)
         m = self.define_constraints(m)
         m = self.define_objective(m)
+
+        # Add component allowing dual variables to be imported
+        m.dual = pyo.Suffix(direction=pyo.Suffix.IMPORT)
         print('Constructed model in:', time.time() - t0)
 
         # Fixing interconnector and FCAS solutions
@@ -654,8 +682,7 @@ class NEMDEModel:
 
         return m
 
-    @staticmethod
-    def solve_model(m):
+    def solve_model(self, m):
         """Solve model"""
         # Setup solver
         solver_options = {'mip tolerances mipgap': 1e-6}  # 'MIPGap': 0.0005,
@@ -664,11 +691,19 @@ class NEMDEModel:
         # Solve model
         t0 = time.time()
 
-        print('Starting solve:', time.time() - t0)
-        solve_status = opt.solve(m, tee=True, options=solver_options, keepfiles=False)
-        print('Finished solve:', time.time() - t0)
+        print('Starting MILP solve:', time.time() - t0)
+        solve_status_milp = opt.solve(m, tee=True, options=solver_options, keepfiles=False)
+        print('Finished MILP solve:', time.time() - t0)
 
-        return m, solve_status
+        # Re-solve model with fixed binary variable to obtain prices
+        m = self.fix_binary_variables(m)
+        m = self.fix_fcas_region_solution(m)
+
+        print('Starting LP solve:', time.time() - t0)
+        solve_status_lp = opt.solve(m, tee=True, options=solver_options, keepfiles=False)
+        print('Finished LP solve:', time.time() - t0)
+
+        return m, solve_status_milp, solve_status_lp
 
 
 if __name__ == '__main__':
@@ -698,7 +733,7 @@ if __name__ == '__main__':
     nemde_model = nemde.construct_model(case_data)
 
     # Solve model
-    nemde_model, status = nemde.solve_model(nemde_model)
+    nemde_model, status_milp, status_lp = nemde.solve_model(nemde_model)
 
     # Extract solution
     solution = utils.solution.get_model_solution(nemde_model)
@@ -749,3 +784,6 @@ if __name__ == '__main__':
     print(mse)
 
     print('Objective value:', nemde_model.OBJECTIVE.expr())
+
+    dv = {i: nemde_model.dual[nemde_model.C_GENERIC_CONSTRAINT[i]] for i in nemde_model.S_GENERIC_CONSTRAINTS}
+    df_gt0 = {k: v for k, v in dv.items() if abs(v) > 0}
