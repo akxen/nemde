@@ -376,21 +376,20 @@ class NEMDEModel:
         m.V_CV_TRADER_FCAS_AS_PROFILE_3 = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
 
         # FCAS joint ramping constraint violation pyo.Variables
-        m.V_CV_TRADER_FCAS_JOINT_RAMPING_RAISE_GENERATOR = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
-        m.V_CV_TRADER_FCAS_JOINT_RAMPING_LOWER_GENERATOR = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
+        m.V_CV_TRADER_FCAS_JOINT_RAMPING_RAISE_GENERATOR = pyo.Var(m.S_TRADERS, within=pyo.NonNegativeReals)
+        m.V_CV_TRADER_FCAS_JOINT_RAMPING_LOWER_GENERATOR = pyo.Var(m.S_TRADERS, within=pyo.NonNegativeReals)
         m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RAISE_GENERATOR = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
         m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LOWER_GENERATOR = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
-        m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_GENERATOR = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
-        m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_GENERATOR = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
+        m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_GENERATOR = pyo.Var(m.S_TRADERS, within=pyo.NonNegativeReals)
+        m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_GENERATOR = pyo.Var(m.S_TRADERS, within=pyo.NonNegativeReals)
 
         # FCAS joint ramping constraint violation variables - loads
-        m.V_CV_TRADER_FCAS_JOINT_RAMPING_RAISE_LOAD = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
-        m.V_CV_TRADER_FCAS_JOINT_RAMPING_LOWER_LOAD = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
+        m.V_CV_TRADER_FCAS_JOINT_RAMPING_RAISE_LOAD = pyo.Var(m.S_TRADERS, within=pyo.NonNegativeReals)
+        m.V_CV_TRADER_FCAS_JOINT_RAMPING_LOWER_LOAD = pyo.Var(m.S_TRADERS, within=pyo.NonNegativeReals)
         m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RAISE_LOAD = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
         m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LOWER_LOAD = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
-
-        m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_LOAD = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
-        m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_LOAD = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
+        m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_LOAD = pyo.Var(m.S_TRADERS, within=pyo.NonNegativeReals)
+        m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_LOAD = pyo.Var(m.S_TRADERS, within=pyo.NonNegativeReals)
 
         # FCAS joint capacity constraint violation pyo.Variables
         m.V_CV_TRADER_FCAS_JOINT_CAPACITY_UP = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
@@ -664,7 +663,7 @@ class NEMDEModel:
         # m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'L60S')
         # m = self.fix_filtered_fcas_solution(m, data, 'NORMALLY_ON_LOAD', 'L5MI')
 
-        # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R5RE')
+        m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R5RE')
         # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R6SE')
         # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R60S')
         # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'R5MI')
@@ -673,7 +672,7 @@ class NEMDEModel:
         # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L60S')
         # m = self.fix_filtered_fcas_solution(m, data, 'GENERATOR', 'L5MI')
 
-        # m = self.fix_filtered_energy_solution(m, data, 'GENERATOR')
+        m = self.fix_filtered_energy_solution(m, data, 'GENERATOR')
         # m = self.fix_filtered_energy_solution(m, data, 'LOAD')
         # m = self.fix_filtered_energy_solution(m, data, 'NORMALLY_ON_LOAD')
 
@@ -693,7 +692,8 @@ class NEMDEModel:
     def solve_model(self, m):
         """Solve model"""
         # Setup solver
-        solver_options = {'mip tolerances mipgap': 1e-6}  # 'MIPGap': 0.0005,
+        # solver_options = {'mip tolerances mipgap': 1e-6}  # 'MIPGap': 0.0005,
+        solver_options = {'mip tolerances mipgap': 1e-9}  # 'MIPGap': 0.0005,
         opt = pyo.SolverFactory('cplex', solver_io='lp')
 
         # Solve model
@@ -704,13 +704,13 @@ class NEMDEModel:
         print('Finished MILP solve:', time.time() - t0)
         print('Objective value - 1:', m.OBJECTIVE.expr())
 
-        # # Re-solve model with fixed binary variable to obtain prices
-        # m = self.fix_binary_variables(m)
+        # Re-solve model with fixed binary variable to obtain prices
+        m = self.fix_binary_variables(m)
         # m = self.fix_fcas_region_solution(m)
-        #
-        # print('Starting LP solve:', time.time() - t0)
-        # solve_status_lp = opt.solve(m, tee=True, options=solver_options, keepfiles=False)
-        # print('Finished LP solve:', time.time() - t0)
+
+        print('Starting LP solve:', time.time() - t0)
+        solve_status_2 = opt.solve(m, tee=True, options=solver_options, keepfiles=False)
+        print('Finished LP solve:', time.time() - t0)
 
         # # Get FCAS price
         # region_id, trade_type = 'TAS1', 'L5MI'
@@ -721,86 +721,69 @@ class NEMDEModel:
         # print('Finished MILP solve:', time.time() - t0)
         # print('Objective value - 2:', m.OBJECTIVE.expr())
 
-        return m, solve_status_1, None
+        return m, solve_status_1, solve_status_2
 
     @staticmethod
     def print_fcas_constraints(m, trader_id):
         """Print all FCAS constraints applying to a given trader"""
 
-        # # Types of FCAS offers
-        # fcas_types = ['L6SE', 'L60S', 'L5MI', 'L5RE', 'R6SE', 'R60S', 'R5MI', 'R5RE']
-        #
-        # # Types of FCAS constraints
-        # fcas_constraints = ['JOINT_RAMP_UP', 'JOINT_RAMP_DOWN', 'JOINT_CAPACITY_UP', 'JOINT_CAPACITY_DOWN',
-        #                     'JOINT_REGULATING_UP', 'JOINT_REGULATING_DOWN']
-        #
-        # for c in fcas_constraints:
-        #     print('\n--------------------')
-        #     print(c)
-        #     print('--------------------')
-        #     for t in fcas_types:
-        #         try:
-        #             print(m.__getattribute__(c)[trader_id, t].expr)
-        #         except:
-        #             pass
-
         print('\nJoint ramping constraints')
         print('---------------------------')
         try:
-            print(m.C_JOINT_RAMP_RAISE_GENERATOR[trader_id, 'ENOF'].expr, '\n')
+            print(m.C_JOINT_RAMP_RAISE_GENERATOR[trader_id].expr, '\n')
         except KeyError:
-            print('No joint ramping raise constraint')
+            print('No joint ramping raise constraint\n')
 
         try:
-            print(m.C_JOINT_RAMP_LOWER_GENERATOR[trader_id, 'ENOF'].expr)
+            print(m.C_JOINT_RAMP_LOWER_GENERATOR[trader_id].expr)
         except KeyError:
-            print('No joint ramping lower constraint')
+            print('No joint ramping lower constraint\n')
         print('---------------------------')
 
         print('\nJoint capacity constraints')
         print('---------------------------')
         try:
-            print(m.C_JOINT_CAPACITY_RAISE_R6SE_GENERATOR[trader_id, 'ENOF'].expr, '\n')
+            print(m.C_JOINT_CAPACITY_RAISE_R6SE_GENERATOR[trader_id].expr, '\n')
         except KeyError:
-            print('No joint capacity raise R6SE constraint')
+            print('No joint capacity raise R6SE constraint\n')
 
         try:
-            print(m.C_JOINT_CAPACITY_RAISE_R60S_GENERATOR[trader_id, 'ENOF'].expr, '\n')
+            print(m.C_JOINT_CAPACITY_RAISE_R60S_GENERATOR[trader_id].expr, '\n')
         except KeyError:
-            print('No joint capacity raise R60S constraint')
+            print('No joint capacity raise R60S constraint\n')
 
         try:
-            print(m.C_JOINT_CAPACITY_RAISE_R5MI_GENERATOR[trader_id, 'ENOF'].expr, '\n')
+            print(m.C_JOINT_CAPACITY_RAISE_R5MI_GENERATOR[trader_id].expr, '\n')
         except KeyError:
-            print('No joint capacity raise R5MI constraint')
+            print('No joint capacity raise R5MI constraint\n')
 
         try:
-            print(m.C_JOINT_CAPACITY_LOWER_L6SE_GENERATOR[trader_id, 'ENOF'].expr, '\n')
+            print(m.C_JOINT_CAPACITY_LOWER_L6SE_GENERATOR[trader_id].expr, '\n')
         except KeyError:
-            print('No joint capacity lower L6SE constraint')
+            print('No joint capacity lower L6SE constraint\n')
 
         try:
-            print(m.C_JOINT_CAPACITY_LOWER_L60S_GENERATOR[trader_id, 'ENOF'].expr, '\n')
+            print(m.C_JOINT_CAPACITY_LOWER_L60S_GENERATOR[trader_id].expr, '\n')
         except KeyError:
-            print('No joint capacity lower L60S constraint')
+            print('No joint capacity lower L60S constraint\n')
 
         try:
-            print(m.C_JOINT_CAPACITY_LOWER_L5MI_GENERATOR[trader_id, 'ENOF'].expr)
+            print(m.C_JOINT_CAPACITY_LOWER_L5MI_GENERATOR[trader_id].expr)
         except KeyError:
-            print('No joint capacity lower L5MI constraint')
+            print('No joint capacity lower L5MI constraint\n')
         print('---------------------------')
 
         print('\nJoint regulating constraints')
         print('-----------------------------')
         try:
-            print(m.C_JOINT_REGULATING_RAISE_GENERATOR[trader_id, 'ENOF'].expr, '\n')
+            print(m.C_JOINT_REGULATING_RAISE_GENERATOR[trader_id].expr, '\n')
         except KeyError:
-            print('No joint regulating raise constraint')
+            print('No joint regulating raise constraint\n')
 
         try:
-            print(m.C_JOINT_REGULATING_LOWER_GENERATOR[trader_id, 'ENOF'].expr)
+            print(m.C_JOINT_REGULATING_LOWER_GENERATOR[trader_id].expr)
         except KeyError:
-            print('No joint regulating lower constraint')
+            print('No joint regulating lower constraint\n')
         print('-----------------------------')
 
 
@@ -874,8 +857,8 @@ if __name__ == '__main__':
     # # Check FCAS availability - compare model and solution FCAS availability
     # fcas_availability = utils.analysis.check_fcas_availability(cdata, case_data)
     #
-    # # Max FCAS available
-    # df_fcas_max = utils.analysis.check_fcas_max_availability(cdata, solution)
+    # Max FCAS available
+    df_fcas_max = utils.analysis.check_fcas_max_availability(cdata, solution)
 
     # Error metric - mean square error for each offer type
     mse = utils.analysis.check_target_mse(cdata, solution)
@@ -885,3 +868,6 @@ if __name__ == '__main__':
 
     # dv = {i: nemde_model.dual[nemde_model.C_GENERIC_CONSTRAINT[i]] for i in nemde_model.S_GENERIC_CONSTRAINTS}
     # df_gt0 = {k: v for k, v in dv.items() if abs(v) > 0}
+
+    nemde.print_fcas_constraints(nemde_model, 'ER02')
+    nemde.print_fcas_constraints(nemde_model, 'TORRB4')
