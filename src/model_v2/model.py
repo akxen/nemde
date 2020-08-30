@@ -612,6 +612,14 @@ class NEMDEModel:
 
         return m
 
+    @staticmethod
+    def decrement_fcas(m, region_id, trade_type):
+        """Decrement FCAS for a given region and trade type"""
+
+        m.V_GC_REGION[region_id, trade_type].fix(m.V_GC_REGION[region_id, trade_type].value - 1)
+
+        return m
+
     def construct_model(self, data):
         """Create model object"""
 
@@ -692,18 +700,108 @@ class NEMDEModel:
         t0 = time.time()
 
         print('Starting MILP solve:', time.time() - t0)
-        solve_status_milp = opt.solve(m, tee=True, options=solver_options, keepfiles=False)
+        solve_status_1 = opt.solve(m, tee=True, options=solver_options, keepfiles=False)
         print('Finished MILP solve:', time.time() - t0)
+        print('Objective value - 1:', m.OBJECTIVE.expr())
 
-        # Re-solve model with fixed binary variable to obtain prices
-        m = self.fix_binary_variables(m)
-        m = self.fix_fcas_region_solution(m)
+        # # Re-solve model with fixed binary variable to obtain prices
+        # m = self.fix_binary_variables(m)
+        # m = self.fix_fcas_region_solution(m)
+        #
+        # print('Starting LP solve:', time.time() - t0)
+        # solve_status_lp = opt.solve(m, tee=True, options=solver_options, keepfiles=False)
+        # print('Finished LP solve:', time.time() - t0)
 
-        print('Starting LP solve:', time.time() - t0)
-        solve_status_lp = opt.solve(m, tee=True, options=solver_options, keepfiles=False)
-        print('Finished LP solve:', time.time() - t0)
+        # # Get FCAS price
+        # region_id, trade_type = 'TAS1', 'L5MI'
+        # m = self.decrement_fcas(m, region_id, trade_type)
+        #
+        # print('Starting MILP solve:', time.time() - t0)
+        # solve_status_2 = opt.solve(m, tee=True, options=solver_options, keepfiles=False)
+        # print('Finished MILP solve:', time.time() - t0)
+        # print('Objective value - 2:', m.OBJECTIVE.expr())
 
-        return m, solve_status_milp, solve_status_lp
+        return m, solve_status_1, None
+
+    @staticmethod
+    def print_fcas_constraints(m, trader_id):
+        """Print all FCAS constraints applying to a given trader"""
+
+        # # Types of FCAS offers
+        # fcas_types = ['L6SE', 'L60S', 'L5MI', 'L5RE', 'R6SE', 'R60S', 'R5MI', 'R5RE']
+        #
+        # # Types of FCAS constraints
+        # fcas_constraints = ['JOINT_RAMP_UP', 'JOINT_RAMP_DOWN', 'JOINT_CAPACITY_UP', 'JOINT_CAPACITY_DOWN',
+        #                     'JOINT_REGULATING_UP', 'JOINT_REGULATING_DOWN']
+        #
+        # for c in fcas_constraints:
+        #     print('\n--------------------')
+        #     print(c)
+        #     print('--------------------')
+        #     for t in fcas_types:
+        #         try:
+        #             print(m.__getattribute__(c)[trader_id, t].expr)
+        #         except:
+        #             pass
+
+        print('\nJoint ramping constraints')
+        print('---------------------------')
+        try:
+            print(m.C_JOINT_RAMP_RAISE_GENERATOR[trader_id, 'ENOF'].expr, '\n')
+        except KeyError:
+            print('No joint ramping raise constraint')
+
+        try:
+            print(m.C_JOINT_RAMP_LOWER_GENERATOR[trader_id, 'ENOF'].expr)
+        except KeyError:
+            print('No joint ramping lower constraint')
+        print('---------------------------')
+
+        print('\nJoint capacity constraints')
+        print('---------------------------')
+        try:
+            print(m.C_JOINT_CAPACITY_RAISE_R6SE_GENERATOR[trader_id, 'ENOF'].expr, '\n')
+        except KeyError:
+            print('No joint capacity raise R6SE constraint')
+
+        try:
+            print(m.C_JOINT_CAPACITY_RAISE_R60S_GENERATOR[trader_id, 'ENOF'].expr, '\n')
+        except KeyError:
+            print('No joint capacity raise R60S constraint')
+
+        try:
+            print(m.C_JOINT_CAPACITY_RAISE_R5MI_GENERATOR[trader_id, 'ENOF'].expr, '\n')
+        except KeyError:
+            print('No joint capacity raise R5MI constraint')
+
+        try:
+            print(m.C_JOINT_CAPACITY_LOWER_L6SE_GENERATOR[trader_id, 'ENOF'].expr, '\n')
+        except KeyError:
+            print('No joint capacity lower L6SE constraint')
+
+        try:
+            print(m.C_JOINT_CAPACITY_LOWER_L60S_GENERATOR[trader_id, 'ENOF'].expr, '\n')
+        except KeyError:
+            print('No joint capacity lower L60S constraint')
+
+        try:
+            print(m.C_JOINT_CAPACITY_LOWER_L5MI_GENERATOR[trader_id, 'ENOF'].expr)
+        except KeyError:
+            print('No joint capacity lower L5MI constraint')
+        print('---------------------------')
+
+        print('\nJoint regulating constraints')
+        print('-----------------------------')
+        try:
+            print(m.C_JOINT_REGULATING_RAISE_GENERATOR[trader_id, 'ENOF'].expr, '\n')
+        except KeyError:
+            print('No joint regulating raise constraint')
+
+        try:
+            print(m.C_JOINT_REGULATING_LOWER_GENERATOR[trader_id, 'ENOF'].expr)
+        except KeyError:
+            print('No joint regulating lower constraint')
+        print('-----------------------------')
 
 
 if __name__ == '__main__':
@@ -755,19 +853,19 @@ if __name__ == '__main__':
     print(df_trader_solution.head(10))
     print('\n')
 
-    # # Interconnector solutions
-    # flow_solution, df_flow_solution = utils.analysis.check_interconnector_solution(cdata, solution, 'Flow')
-    # print('Flow')
-    # print(df_flow_solution)
-    # print('\n')
-    #
-    # losses_solution, df_losses_solution = utils.analysis.check_interconnector_solution(cdata, solution, 'Losses')
-    # print('Losses')
-    # print(df_losses_solution)
-    # print('\n')
+    # Interconnector solutions
+    flow_solution, df_flow_solution = utils.analysis.check_interconnector_solution(cdata, solution, 'Flow')
+    print('Flow')
+    print(df_flow_solution)
+    print('\n')
+
+    losses_solution, df_losses_solution = utils.analysis.check_interconnector_solution(cdata, solution, 'Losses')
+    print('Losses')
+    print(df_losses_solution)
+    print('\n')
 
     # # Plot interconnector solution
-    # utils.analysis.plot_interconnector_solution(cdata, solution)
+    utils.analysis.plot_interconnector_solution(cdata, solution)
     utils.analysis.plot_trader_solution_difference(cdata, solution)
 
     # FCAS solution
@@ -785,5 +883,5 @@ if __name__ == '__main__':
 
     print('Objective value:', nemde_model.OBJECTIVE.expr())
 
-    dv = {i: nemde_model.dual[nemde_model.C_GENERIC_CONSTRAINT[i]] for i in nemde_model.S_GENERIC_CONSTRAINTS}
-    df_gt0 = {k: v for k, v in dv.items() if abs(v) > 0}
+    # dv = {i: nemde_model.dual[nemde_model.C_GENERIC_CONSTRAINT[i]] for i in nemde_model.S_GENERIC_CONSTRAINTS}
+    # df_gt0 = {k: v for k, v in dv.items() if abs(v) > 0}

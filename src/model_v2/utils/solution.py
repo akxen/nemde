@@ -55,7 +55,7 @@ def get_model_solution(m) -> dict:
         'period': get_period_solution(m),
         'traders': get_trader_solution(m),
         'interconnectors': get_interconnector_solution(m),
-        'regions': get_region_solution(m),
+        # 'regions': get_region_solution(m),
         # 'case': get_case_solution(m),
     }
 

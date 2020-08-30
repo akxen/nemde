@@ -732,6 +732,15 @@ def define_fcas_constraints(m):
         m.S_TRADER_OFFERS, rule=get_joint_capacity_lower_load_constraint('L6SE'))
     print('Finished constructing C_JOINT_CAPACITY_LOWER_L6SE_LOAD:', time.time() - t0)
 
+    # Joint capacity raise - L60S - loads
+    m.C_JOINT_CAPACITY_LOWER_L60S_LOAD = pyo.Constraint(
+        m.S_TRADER_OFFERS, rule=get_joint_capacity_lower_load_constraint('L60S'))
+    print('Finished constructing C_JOINT_CAPACITY_LOWER_L60S_LOAD:', time.time() - t0)
+
+    # Joint capacity raise - L5MI - loads
+    m.C_JOINT_CAPACITY_LOWER_L5MI_LOAD = pyo.Constraint(
+        m.S_TRADER_OFFERS, rule=get_joint_capacity_lower_load_constraint('L5MI'))
+    print('Finished constructing C_JOINT_CAPACITY_LOWER_L5MI_LOAD:', time.time() - t0)
 
     # Joint energy and regulating FCAS constraint - loads
     m.C_JOINT_REGULATING_RAISE_LOAD = pyo.Constraint(
