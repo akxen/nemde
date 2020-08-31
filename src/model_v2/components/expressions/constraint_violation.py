@@ -72,28 +72,52 @@ def trader_joint_ramping_lower_generator_penalty_rule(m, i):
     return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_RAMPING_LOWER_GENERATOR[i]
 
 
-def trader_joint_capacity_raise_generator_penalty_rule(m, i, j):
+def trader_joint_capacity_raise_generator_penalty_lhs_rule(m, i, j):
     """Penalty for FCAS joint capacity constraint raise violation"""
 
-    return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RAISE_GENERATOR[i, j]
+    return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RAISE_GENERATOR_LHS[i, j]
 
 
-def trader_joint_capacity_lower_generator_penalty_rule(m, i, j):
+def trader_joint_capacity_raise_generator_penalty_rhs_rule(m, i, j):
+    """Penalty for FCAS joint capacity constraint raise violation"""
+
+    return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RAISE_GENERATOR_RHS[i, j]
+
+
+def trader_joint_capacity_lower_generator_penalty_lhs_rule(m, i, j):
     """Penalty for FCAS joint capacity constraint lower violation"""
 
-    return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LOWER_GENERATOR[i, j]
+    return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LOWER_GENERATOR_LHS[i, j]
 
 
-def trader_fcas_energy_regulating_raise_generator_penalty_rule(m, i):
+def trader_joint_capacity_lower_generator_penalty_rhs_rule(m, i, j):
+    """Penalty for FCAS joint capacity constraint lower violation"""
+
+    return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LOWER_GENERATOR_RHS[i, j]
+
+
+def trader_fcas_energy_regulating_raise_generator_rhs_penalty_rule(m, i):
     """Penalty for FCAS joint capacity constraint up violation"""
 
-    return m.P_CVF_AS_ENABLEMENT_MAX_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_GENERATOR[i]
+    return m.P_CVF_AS_ENABLEMENT_MAX_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_GENERATOR_RHS[i]
 
 
-def trader_fcas_energy_regulating_lower_generator_penalty_rule(m, i):
+def trader_fcas_energy_regulating_raise_generator_lhs_penalty_rule(m, i):
+    """Penalty for FCAS joint capacity constraint up violation"""
+
+    return m.P_CVF_AS_ENABLEMENT_MAX_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_GENERATOR_LHS[i]
+
+
+def trader_fcas_energy_regulating_lower_generator_lhs_penalty_rule(m, i):
     """Penalty for FCAS joint capacity constraint down violation"""
 
-    return m.P_CVF_AS_ENABLEMENT_MIN_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_GENERATOR[i]
+    return m.P_CVF_AS_ENABLEMENT_MIN_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_GENERATOR_LHS[i]
+
+
+def trader_fcas_energy_regulating_lower_generator_rhs_penalty_rule(m, i):
+    """Penalty for FCAS joint capacity constraint down violation"""
+
+    return m.P_CVF_AS_ENABLEMENT_MIN_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_GENERATOR_RHS[i]
 
 
 def trader_joint_ramping_raise_load_penalty_rule(m, i):
@@ -109,28 +133,52 @@ def trader_joint_ramping_lower_load_penalty_rule(m, i):
     return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_RAMPING_LOWER_LOAD[i]
 
 
-def trader_joint_capacity_raise_load_penalty_rule(m, i, j):
+def trader_joint_capacity_raise_load_lhs_penalty_rule(m, i, j):
     """Penalty for FCAS joint capacity constraint raise violation"""
 
-    return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RAISE_LOAD[i, j]
+    return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RAISE_LOAD_LHS[i, j]
 
 
-def trader_joint_capacity_lower_load_penalty_rule(m, i, j):
+def trader_joint_capacity_raise_load_rhs_penalty_rule(m, i, j):
+    """Penalty for FCAS joint capacity constraint raise violation"""
+
+    return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RAISE_LOAD_RHS[i, j]
+
+
+def trader_joint_capacity_lower_load_lhs_penalty_rule(m, i, j):
     """Penalty for FCAS joint capacity constraint lower violation"""
 
-    return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LOWER_LOAD[i, j]
+    return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LOWER_LOAD_LHS[i, j]
 
 
-def trader_fcas_energy_regulating_raise_load_penalty_rule(m, i):
+def trader_joint_capacity_lower_load_rhs_penalty_rule(m, i, j):
+    """Penalty for FCAS joint capacity constraint lower violation"""
+
+    return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LOWER_LOAD_RHS[i, j]
+
+
+def trader_fcas_energy_regulating_raise_load_lhs_penalty_rule(m, i):
     """Penalty for FCAS joint capacity constraint up violation"""
 
-    return m.P_CVF_AS_ENABLEMENT_MAX_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_LOAD[i]
+    return m.P_CVF_AS_ENABLEMENT_MAX_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_LOAD_LHS[i]
 
 
-def trader_fcas_energy_regulating_lower_load_penalty_rule(m, i):
+def trader_fcas_energy_regulating_raise_load_rhs_penalty_rule(m, i):
     """Penalty for FCAS joint capacity constraint up violation"""
 
-    return m.P_CVF_AS_ENABLEMENT_MAX_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_LOAD[i]
+    return m.P_CVF_AS_ENABLEMENT_MAX_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_LOAD_RHS[i]
+
+
+def trader_fcas_energy_regulating_lower_load_rhs_penalty_rule(m, i):
+    """Penalty for FCAS joint capacity constraint up violation"""
+
+    return m.P_CVF_AS_ENABLEMENT_MAX_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_LOAD_RHS[i]
+
+
+def trader_fcas_energy_regulating_lower_load_lhs_penalty_rule(m, i):
+    """Penalty for FCAS joint capacity constraint up violation"""
+
+    return m.P_CVF_AS_ENABLEMENT_MAX_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_LOAD_LHS[i]
 
 
 def mnsp_offer_penalty_rule(m, i, j, k):
@@ -196,20 +244,37 @@ def define_constraint_violation_penalty_expressions(m):
         m.S_TRADERS, rule=trader_joint_ramping_lower_generator_penalty_rule)
 
     # FCAS joint capacity constraint raise violation penalty
-    m.E_CV_TRADER_JOINT_CAPACITY_RAISE_GENERATOR_PENALTY = pyo.Expression(
-        m.S_TRADER_OFFERS, rule=trader_joint_capacity_raise_generator_penalty_rule)
-
-    # FCAS joint capacity constraint lower violation penalty
-    m.E_CV_TRADER_JOINT_CAPACITY_LOWER_GENERATOR_PENALTY = pyo.Expression(
-        m.S_TRADER_OFFERS, rule=trader_joint_capacity_lower_generator_penalty_rule)
+    m.E_CV_TRADER_JOINT_CAPACITY_RAISE_GENERATOR_RHS_PENALTY = pyo.Expression(
+        m.S_TRADER_OFFERS, rule=trader_joint_capacity_raise_generator_penalty_rhs_rule)
 
     # FCAS joint capacity constraint raise violation penalty
-    m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_GENERATOR_PENALTY = pyo.Expression(
-        m.S_TRADERS, rule=trader_fcas_energy_regulating_raise_generator_penalty_rule)
+    m.E_CV_TRADER_JOINT_CAPACITY_RAISE_GENERATOR_LHS_PENALTY = pyo.Expression(
+        m.S_TRADER_OFFERS, rule=trader_joint_capacity_raise_generator_penalty_lhs_rule)
 
     # FCAS joint capacity constraint lower violation penalty
-    m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_GENERATOR_PENALTY = pyo.Expression(
-        m.S_TRADERS, rule=trader_fcas_energy_regulating_lower_generator_penalty_rule)
+    m.E_CV_TRADER_JOINT_CAPACITY_LOWER_GENERATOR_RHS_PENALTY = pyo.Expression(
+        m.S_TRADER_OFFERS, rule=trader_joint_capacity_lower_generator_penalty_rhs_rule)
+
+    # FCAS joint capacity constraint lower violation penalty
+    m.E_CV_TRADER_JOINT_CAPACITY_LOWER_GENERATOR_LHS_PENALTY = pyo.Expression(
+        m.S_TRADER_OFFERS, rule=trader_joint_capacity_lower_generator_penalty_lhs_rule)
+
+    # FCAS joint capacity constraint raise violation penalty - upper slope
+    m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_GENERATOR_RHS_PENALTY = pyo.Expression(
+        m.S_TRADERS, rule=trader_fcas_energy_regulating_raise_generator_rhs_penalty_rule)
+
+    # FCAS joint capacity constraint raise violation penalty - lower slope
+    m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_GENERATOR_LHS_PENALTY = pyo.Expression(
+        m.S_TRADERS, rule=trader_fcas_energy_regulating_raise_generator_lhs_penalty_rule)
+
+    # FCAS joint capacity constraint lower violation penalty - lower slope
+    m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_GENERATOR_LHS_PENALTY = pyo.Expression(
+        m.S_TRADERS, rule=trader_fcas_energy_regulating_lower_generator_lhs_penalty_rule)
+
+    # FCAS joint capacity constraint lower violation penalty - upper slope
+    m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_GENERATOR_RHS_PENALTY = pyo.Expression(
+        m.S_TRADERS, rule=trader_fcas_energy_regulating_lower_generator_rhs_penalty_rule)
+
 
     # FCAS joint ramping constraint raise violation penalty
     m.E_CV_TRADER_JOINT_RAMPING_RAISE_LOAD_PENALTY = pyo.Expression(
@@ -220,20 +285,36 @@ def define_constraint_violation_penalty_expressions(m):
         m.S_TRADERS, rule=trader_joint_ramping_lower_load_penalty_rule)
 
     # FCAS joint capacity constraint raise violation penalty
-    m.E_CV_TRADER_JOINT_CAPACITY_RAISE_LOAD_PENALTY = pyo.Expression(
-        m.S_TRADER_OFFERS, rule=trader_joint_capacity_raise_load_penalty_rule)
+    m.E_CV_TRADER_JOINT_CAPACITY_RAISE_LOAD_LHS_PENALTY = pyo.Expression(
+        m.S_TRADER_OFFERS, rule=trader_joint_capacity_raise_load_lhs_penalty_rule)
+
+    # FCAS joint capacity constraint raise violation penalty
+    m.E_CV_TRADER_JOINT_CAPACITY_RAISE_LOAD_RHS_PENALTY = pyo.Expression(
+        m.S_TRADER_OFFERS, rule=trader_joint_capacity_raise_load_rhs_penalty_rule)
 
     # FCAS joint capacity constraint lower violation penalty
-    m.E_CV_TRADER_JOINT_CAPACITY_LOWER_LOAD_PENALTY = pyo.Expression(
-        m.S_TRADER_OFFERS, rule=trader_joint_capacity_lower_load_penalty_rule)
+    m.E_CV_TRADER_JOINT_CAPACITY_LOWER_LOAD_LHS_PENALTY = pyo.Expression(
+        m.S_TRADER_OFFERS, rule=trader_joint_capacity_lower_load_lhs_penalty_rule)
+
+    # FCAS joint capacity constraint lower violation penalty
+    m.E_CV_TRADER_JOINT_CAPACITY_LOWER_LOAD_RHS_PENALTY = pyo.Expression(
+        m.S_TRADER_OFFERS, rule=trader_joint_capacity_lower_load_rhs_penalty_rule)
+
+    # FCAS joint capacity constraint raise violation penalty - lower slope
+    m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_LOAD_LHS_PENALTY = pyo.Expression(
+        m.S_TRADERS, rule=trader_fcas_energy_regulating_raise_load_lhs_penalty_rule)
+
+    # FCAS joint capacity constraint raise violation penalty - upper slope
+    m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_LOAD_RHS_PENALTY = pyo.Expression(
+        m.S_TRADERS, rule=trader_fcas_energy_regulating_raise_load_rhs_penalty_rule)
 
     # FCAS joint capacity constraint raise violation penalty
-    m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_LOAD_PENALTY = pyo.Expression(
-        m.S_TRADERS, rule=trader_fcas_energy_regulating_raise_load_penalty_rule)
+    m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_LOAD_RHS_PENALTY = pyo.Expression(
+        m.S_TRADERS, rule=trader_fcas_energy_regulating_lower_load_rhs_penalty_rule)
 
     # FCAS joint capacity constraint raise violation penalty
-    m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_LOAD_PENALTY = pyo.Expression(
-        m.S_TRADERS, rule=trader_fcas_energy_regulating_lower_load_penalty_rule)
+    m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_LOAD_LHS_PENALTY = pyo.Expression(
+        m.S_TRADERS, rule=trader_fcas_energy_regulating_lower_load_lhs_penalty_rule)
 
     # Constraint violation penalty for MNSP dispatched band amount exceeding bid amount
     m.E_CV_MNSP_OFFER_PENALTY = pyo.Expression(m.S_MNSP_OFFERS, m.S_BANDS, rule=mnsp_offer_penalty_rule)
@@ -262,16 +343,24 @@ def define_constraint_violation_penalty_expressions(m):
              + sum(m.E_CV_TRADER_FCAS_TRAPEZIUM_PENALTY[i] for i in m.S_TRADER_OFFERS)
              + sum(m.E_CV_TRADER_JOINT_RAMPING_RAISE_GENERATOR_PENALTY[i] for i in m.S_TRADERS)
              + sum(m.E_CV_TRADER_JOINT_RAMPING_LOWER_GENERATOR_PENALTY[i] for i in m.S_TRADERS)
-             + sum(m.E_CV_TRADER_JOINT_CAPACITY_RAISE_GENERATOR_PENALTY[i] for i in m.S_TRADER_OFFERS)
-             + sum(m.E_CV_TRADER_JOINT_CAPACITY_LOWER_GENERATOR_PENALTY[i] for i in m.S_TRADER_OFFERS)
-             + sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_GENERATOR_PENALTY[i] for i in m.S_TRADERS)
-             + sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_GENERATOR_PENALTY[i] for i in m.S_TRADERS)
+             + sum(m.E_CV_TRADER_JOINT_CAPACITY_RAISE_GENERATOR_RHS_PENALTY[i] for i in m.S_TRADER_OFFERS)
+             + sum(m.E_CV_TRADER_JOINT_CAPACITY_RAISE_GENERATOR_LHS_PENALTY[i] for i in m.S_TRADER_OFFERS)
+             + sum(m.E_CV_TRADER_JOINT_CAPACITY_LOWER_GENERATOR_RHS_PENALTY[i] for i in m.S_TRADER_OFFERS)
+             + sum(m.E_CV_TRADER_JOINT_CAPACITY_LOWER_GENERATOR_LHS_PENALTY[i] for i in m.S_TRADER_OFFERS)
+             + sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_GENERATOR_RHS_PENALTY[i] for i in m.S_TRADERS)
+             + sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_GENERATOR_LHS_PENALTY[i] for i in m.S_TRADERS)
+             + sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_GENERATOR_LHS_PENALTY[i] for i in m.S_TRADERS)
+             + sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_GENERATOR_RHS_PENALTY[i] for i in m.S_TRADERS)
              + sum(m.E_CV_TRADER_JOINT_RAMPING_RAISE_LOAD_PENALTY[i] for i in m.S_TRADERS)
              + sum(m.E_CV_TRADER_JOINT_RAMPING_LOWER_LOAD_PENALTY[i] for i in m.S_TRADERS)
-             + sum(m.E_CV_TRADER_JOINT_CAPACITY_RAISE_LOAD_PENALTY[i] for i in m.S_TRADER_OFFERS)
-             + sum(m.E_CV_TRADER_JOINT_CAPACITY_LOWER_LOAD_PENALTY[i] for i in m.S_TRADER_OFFERS)
-             + sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_LOAD_PENALTY[i] for i in m.S_TRADERS)
-             + sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_LOAD_PENALTY[i] for i in m.S_TRADERS)
+             + sum(m.E_CV_TRADER_JOINT_CAPACITY_RAISE_LOAD_LHS_PENALTY[i] for i in m.S_TRADER_OFFERS)
+             + sum(m.E_CV_TRADER_JOINT_CAPACITY_RAISE_LOAD_RHS_PENALTY[i] for i in m.S_TRADER_OFFERS)
+             + sum(m.E_CV_TRADER_JOINT_CAPACITY_LOWER_LOAD_LHS_PENALTY[i] for i in m.S_TRADER_OFFERS)
+             + sum(m.E_CV_TRADER_JOINT_CAPACITY_LOWER_LOAD_RHS_PENALTY[i] for i in m.S_TRADER_OFFERS)
+             + sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_LOAD_LHS_PENALTY[i] for i in m.S_TRADERS)
+             + sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_LOAD_RHS_PENALTY[i] for i in m.S_TRADERS)
+             + sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_LOAD_RHS_PENALTY[i] for i in m.S_TRADERS)
+             + sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_LOAD_LHS_PENALTY[i] for i in m.S_TRADERS)
              + sum(m.E_CV_MNSP_OFFER_PENALTY[i, j, k] for i, j in m.S_MNSP_OFFERS for k in m.S_BANDS)
              + sum(m.E_CV_MNSP_CAPACITY_PENALTY[i] for i in m.S_MNSP_OFFERS)
              + sum(m.E_CV_INTERCONNECTOR_FORWARD_PENALTY[i] for i in m.S_INTERCONNECTORS)
