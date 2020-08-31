@@ -48,6 +48,39 @@ def region_net_export_flow_rule(m, r):
     return net_flow
 
 
+def region_initial_net_export_flow_rule(m, r):
+    """Initial net flow out of region"""
+
+    net_flow = 0
+
+    for i in m.S_INTERCONNECTORS:
+
+        if r == m.P_INTERCONNECTOR_FROM_REGION[i]:
+            # Check if an MNSP
+            if m.P_INTERCONNECTOR_MNSP_STATUS[i] == '1':
+                factor = m.P_MNSP_FROM_REGION_LF[i]
+            else:
+                factor = 1
+
+            # net_flow += factor * m.V_FLOW_FROM_CP[i]
+            net_flow += m.P_INTERCONNECTOR_INITIAL_MW[i] / factor
+
+        elif r == m.P_INTERCONNECTOR_TO_REGION[i]:
+            # Check if an MNSP
+            if m.P_INTERCONNECTOR_MNSP_STATUS[i] == '1':
+                factor = m.P_MNSP_TO_REGION_LF[i]
+            else:
+                factor = 1
+
+            # net_flow += - (factor * m.V_FLOW_TO_CP[i])
+            net_flow += - (m.P_INTERCONNECTOR_INITIAL_MW[i] / factor)
+
+        else:
+            pass
+
+    return net_flow
+
+
 def total_initial_scheduled_load(m, r):
     """Total initial scheduled load in a given region"""
 
@@ -120,6 +153,9 @@ def define_aggregate_power_expressions(m):
 
     # Net flow out of region
     m.E_REGION_NET_EXPORT_FLOW = pyo.Expression(m.S_REGIONS, rule=region_net_export_flow_rule)
+
+    # Initial net flow out of region
+    m.E_REGION_INITIAL_NET_EXPORT_FLOW = pyo.Expression(m.S_REGIONS, rule=region_initial_net_export_flow_rule)
 
     # Total initial scheduled load
     m.E_TOTAL_INITIALMW_SCHEDULED_LOAD = pyo.Expression(m.S_REGIONS, rule=total_initial_scheduled_load)

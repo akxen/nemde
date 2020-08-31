@@ -217,6 +217,9 @@ class NEMDEModel:
         m.P_TRADER_SCADA_RAMP_UP_RATE = pyo.Param(m.S_TRADERS, initialize=data['P_TRADER_SCADA_RAMP_UP_RATE'])
         m.P_TRADER_SCADA_RAMP_DOWN_RATE = pyo.Param(m.S_TRADERS, initialize=data['P_TRADER_SCADA_RAMP_DOWN_RATE'])
 
+        # Interconnector initial MW
+        m.P_INTERCONNECTOR_INITIAL_MW = pyo.Param(m.S_INTERCONNECTORS, initialize=data['P_INTERCONNECTOR_INITIAL_MW'])
+
         # Interconnector 'to' and 'from' regions
         m.P_INTERCONNECTOR_TO_REGION = pyo.Param(m.S_INTERCONNECTORS, initialize=data['P_INTERCONNECTOR_TO_REGION'])
         m.P_INTERCONNECTOR_FROM_REGION = pyo.Param(m.S_INTERCONNECTORS, initialize=data['P_INTERCONNECTOR_FROM_REGION'])
@@ -891,3 +894,30 @@ if __name__ == '__main__':
         #
         # nemde.print_fcas_constraints(nemde_model, 'ER02')
         # nemde.print_fcas_constraints(nemde_model, 'TORRB4')
+
+        # Scheduled generation
+        initial_scheduled_generation = sum(nemde_model.P_TRADER_INITIAL_MW[i] for i, j in nemde_model.S_TRADER_OFFERS
+                                           if (j == 'ENOF')
+                                           and (nemde_model.P_TRADER_REGION[i] == 'VIC1')
+                                           and (nemde_model.P_TRADER_TYPE[i] in ['GENERATOR']))
+
+        # Scheduled load
+        initial_scheduled_load = sum(nemde_model.P_TRADER_INITIAL_MW[i] for i, j in nemde_model.S_TRADER_OFFERS
+                                     if (nemde_model.P_TRADER_SEMI_DISPATCH_STATUS[i] == '0')
+                                     and (j == 'LDOF')
+                                     and (nemde_model.P_TRADER_REGION[i] == 'VIC1')
+                                     and (nemde_model.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']))
+
+        # Initial net interchange
+        initial_net_interchange = nemde_model.E_REGION_INITIAL_NET_EXPORT_FLOW['VIC1'].expr()
+
+        # Initial allocated losses
+        initial_allocated_loss = nemde_model.E_TOTAL_INITIAL_ALLOCATED_LOSSES['VIC1'].expr()
+
+        # Aggregate dispatch error
+        initial_ade = nemde_model.P_REGION_ADE['VIC1']
+
+        # Delta forecast
+        initial_df = nemde_model.P_REGION_DF['VIC1']
+
+        net_demand = initial_scheduled_generation - initial_scheduled_load - initial_net_interchange - initial_allocated_loss + initial_ade + initial_df
