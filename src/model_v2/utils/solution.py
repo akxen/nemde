@@ -38,7 +38,10 @@ def get_region_solution(m) -> dict:
     # Container for output
     out = {}
     for r in m.S_REGIONS:
-        out[r] = {'EnergyPrice': m.dual[m.C_POWER_BALANCE[r]]}
+        out[r] = {
+            'EnergyPrice': m.dual[m.C_POWER_BALANCE[r]],
+            'FixedDemand': m.E_REGION_DEMAND[r].expr(),
+        }
 
     return out
 
@@ -55,10 +58,8 @@ def get_model_solution(m) -> dict:
         'period': get_period_solution(m),
         'traders': get_trader_solution(m),
         'interconnectors': get_interconnector_solution(m),
-        # 'regions': get_region_solution(m),
+        'regions': get_region_solution(m),
         # 'case': get_case_solution(m),
     }
 
     return solution
-
-

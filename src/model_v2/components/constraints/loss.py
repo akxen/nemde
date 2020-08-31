@@ -6,8 +6,10 @@ import pyomo.environ as pyo
 def approximated_loss_rule(m, i):
     """Approximate interconnector loss"""
 
-    return (m.V_LOSS[i] == sum(m.P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y[i, k] * m.V_LOSS_LAMBDA[i, k]
-                               for j, k in m.S_INTERCONNECTOR_LOSS_MODEL_BREAKPOINTS if j == i))
+    return (m.V_LOSS[i]
+            == sum(m.P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y[i, k] * m.V_LOSS_LAMBDA[i, k]
+                   for j, k in m.S_INTERCONNECTOR_LOSS_MODEL_BREAKPOINTS if j == i)
+            )
 
 
 def sos2_condition_1_rule(m, i):

@@ -65,13 +65,6 @@ def total_initial_allocated_losses(m, r):
 
     total = 0
     for i in m.S_INTERCONNECTORS:
-        # from_region = self.get_interconnector_period_attribute(i, 'FromRegion')
-        # to_region = self.get_interconnector_period_attribute(i, 'ToRegion')
-        # loss_share = self.get_interconnector_loss_model_attribute(i, 'LossShare')
-        # initial_flow = self.get_interconnector_initial_condition_attribute(i, 'InitialMW')
-
-        # TODO: need to figure out an abstraction here - pass data or model object (think model object is better)
-        # estimated_losses = loss_model.get_interconnector_loss_estimate(i, m.P_INTERCONNECTOR_INITIAL_MW[i])
 
         if r == m.P_INTERCONNECTOR_FROM_REGION[i]:
             total += m.P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE[i] * m.P_INTERCONNECTOR_LOSS_SHARE[i]

@@ -28,6 +28,28 @@ def get_observed_trader_solution(data):
     return out
 
 
+def get_observed_region_solution(data):
+    """Get observed region solution"""
+
+    # All regions
+    regions = data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('RegionSolution')
+
+    # Keys to be treated as strings
+    str_keys = ['@RegionID', '@PeriodID', '@Intervention']
+
+    # Container for output
+    out = {}
+    for i in regions:
+        out.setdefault(i['@RegionID'], {})
+        for j, k in i.items():
+            if j in str_keys:
+                out[i['@RegionID']][j] = str(k)
+            else:
+                out[i['@RegionID']][j] = float(k)
+
+    return out
+
+
 def get_trader_marginal_price_band(data, trader_id, trade_type, output):
     """Get marginal price for a given trader"""
 
@@ -76,7 +98,8 @@ def check_trader_solution(data, solution):
             region_id = fcas_calculations.get_trader_period_attribute(data, trader_id, '@RegionID', str)
 
             # Get region price for given trade type
-            region_price = fcas_calculations.get_region_solution_attribute(data, region_id, price_key_map[trade_type], float)
+            region_price = fcas_calculations.get_region_solution_attribute(data, region_id, price_key_map[trade_type],
+                                                                           float)
 
             # Observed output
             observed_output = observed[trader_id][key_map[trade_type]]
@@ -407,3 +430,26 @@ def check_fcas_max_availability(data, solution):
     df_c = df_s.join(df_m[['min']], how='left')
 
     return df_c
+
+
+def check_region_demand(data, solution):
+    """Compare region demand with FixedDemand for given case"""
+
+    # NEMDE output
+    observed = get_observed_region_solution(data)
+
+    # Output container
+    out = {i:
+        {
+            'observed': observed[i]['@FixedDemand'],
+            'model': solution['regions'][i]['FixedDemand'],
+            'difference': solution['regions'][i]['FixedDemand'] - observed[i]['@FixedDemand'],
+            'abs_difference': abs(solution['regions'][i]['FixedDemand'] - observed[i]['@FixedDemand']),
+        }
+        for i in observed.keys()
+    }
+
+    # Convert to DataFrame
+    df = pd.DataFrame(out).T
+
+    return out, df

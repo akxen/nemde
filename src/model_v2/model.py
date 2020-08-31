@@ -243,6 +243,10 @@ class NEMDEModel:
         m.P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y = pyo.Param(
             m.S_INTERCONNECTOR_LOSS_MODEL_BREAKPOINTS, initialize=data['P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y'])
 
+        # Interconnector loss demand constant
+        m.P_INTERCONNECTOR_LOSS_DEMAND_CONSTANT = pyo.Param(
+            m.S_INTERCONNECTORS, initialize=data['P_INTERCONNECTOR_LOSS_DEMAND_CONSTANT'])
+
         # Observed interconnector loss (obtained from NEMDE solution)
         m.P_INTERCONNECTOR_SOLUTION_LOSS = pyo.Param(m.S_INTERCONNECTORS,
                                                      initialize=data['P_INTERCONNECTOR_SOLUTION_LOSS'])
@@ -709,7 +713,7 @@ class NEMDEModel:
         t0 = time.time()
 
         print('Starting MILP solve:', time.time() - t0)
-        solve_status_1 = opt.solve(m, tee=True, options=solver_options, keepfiles=False)
+        solve_status_1 = opt.solve(m, tee=False, options=solver_options, keepfiles=False)
         print('Finished MILP solve:', time.time() - t0)
         print('Objective value - 1:', m.OBJECTIVE.expr())
 
@@ -718,7 +722,7 @@ class NEMDEModel:
         # m = self.fix_fcas_region_solution(m)
 
         print('Starting LP solve:', time.time() - t0)
-        solve_status_2 = opt.solve(m, tee=True, options=solver_options, keepfiles=False)
+        solve_status_2 = opt.solve(m, tee=False, options=solver_options, keepfiles=False)
         print('Finished LP solve:', time.time() - t0)
 
         # # Get FCAS price
@@ -806,77 +810,84 @@ if __name__ == '__main__':
     nemde = NEMDEModel()
 
     # Case data in json format
-    case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, 2019, 10, 10, 1)
+    for i in range(1, 2):
+        print('Iteration:', i)
+        case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, 2019, 10, 10, i)
 
-    # Get NEMDE model data as a Python dictionary
-    cdata = json.loads(case_data_json)
+        # Get NEMDE model data as a Python dictionary
+        cdata = json.loads(case_data_json)
 
-    # # Drop keys
-    # for k in ['ConstraintScadaDataCollection', 'GenericEquationCollection']:
-    #     cdata['NEMSPDCaseFile']['NemSpdInputs'].pop(k)
-    # with open('example.json', 'w') as f:
-    #     json.dump(cdata, f)
+        # # Drop keys
+        # for k in ['ConstraintScadaDataCollection', 'GenericEquationCollection']:
+        #     cdata['NEMSPDCaseFile']['NemSpdInputs'].pop(k)
+        # with open('example.json', 'w') as f:
+        #     json.dump(cdata, f)
 
-    case_data = utils.data.parse_case_data_json(case_data_json)
+        case_data = utils.data.parse_case_data_json(case_data_json)
 
-    # Construct model
-    nemde_model = nemde.construct_model(case_data)
+        # Construct model
+        nemde_model = nemde.construct_model(case_data)
 
-    # Solve model
-    nemde_model, status_milp, status_lp = nemde.solve_model(nemde_model)
+        # Solve model
+        nemde_model, status_milp, status_lp = nemde.solve_model(nemde_model)
 
-    # Extract solution
-    solution = utils.solution.get_model_solution(nemde_model)
+        # Extract solution
+        solution = utils.solution.get_model_solution(nemde_model)
 
-    # with open('solution_example.json', 'w') as f:
-    #     json.dump(solution, f)
+        # with open('solution_example.json', 'w') as f:
+        #     json.dump(solution, f)
 
-    # Difference
-    trader_solution, df_trader_solution = utils.analysis.check_trader_solution(cdata, solution)
-    df_trader_solution_r6se = df_trader_solution.loc[(slice(None), 'R6SE'), :]
-    df_trader_solution_r60s = df_trader_solution.loc[(slice(None), 'R60S'), :]
-    df_trader_solution_r5mi = df_trader_solution.loc[(slice(None), 'R5MI'), :]
-    df_trader_solution_r5re = df_trader_solution.loc[(slice(None), 'R5RE'), :]
-    df_trader_solution_l6se = df_trader_solution.loc[(slice(None), 'L6SE'), :]
-    df_trader_solution_l60s = df_trader_solution.loc[(slice(None), 'L60S'), :]
-    df_trader_solution_l5mi = df_trader_solution.loc[(slice(None), 'L5MI'), :]
-    df_trader_solution_l5re = df_trader_solution.loc[(slice(None), 'L5RE'), :]
-    print('Trader targets')
-    print(df_trader_solution.head(10))
-    print('\n')
+        # Difference
+        trader_solution, df_trader_solution = utils.analysis.check_trader_solution(cdata, solution)
+        df_trader_solution_r6se = df_trader_solution.loc[(slice(None), 'R6SE'), :]
+        df_trader_solution_r60s = df_trader_solution.loc[(slice(None), 'R60S'), :]
+        df_trader_solution_r5mi = df_trader_solution.loc[(slice(None), 'R5MI'), :]
+        df_trader_solution_r5re = df_trader_solution.loc[(slice(None), 'R5RE'), :]
+        df_trader_solution_l6se = df_trader_solution.loc[(slice(None), 'L6SE'), :]
+        df_trader_solution_l60s = df_trader_solution.loc[(slice(None), 'L60S'), :]
+        df_trader_solution_l5mi = df_trader_solution.loc[(slice(None), 'L5MI'), :]
+        df_trader_solution_l5re = df_trader_solution.loc[(slice(None), 'L5RE'), :]
+        print('Trader targets')
+        print(df_trader_solution.head(10))
+        print('\n')
 
-    # Interconnector solutions
-    flow_solution, df_flow_solution = utils.analysis.check_interconnector_solution(cdata, solution, 'Flow')
-    print('Flow')
-    print(df_flow_solution)
-    print('\n')
+        # # Interconnector solutions
+        # flow_solution, df_flow_solution = utils.analysis.check_interconnector_solution(cdata, solution, 'Flow')
+        # print('Flow')
+        # print(df_flow_solution)
+        # print('\n')
+        #
+        # losses_solution, df_losses_solution = utils.analysis.check_interconnector_solution(cdata, solution, 'Losses')
+        # print('Losses')
+        # print(df_losses_solution)
+        # print('\n')
+        #
+        # # # Plot interconnector solution
+        # utils.analysis.plot_interconnector_solution(cdata, solution)
+        # utils.analysis.plot_trader_solution_difference(cdata, solution)
 
-    losses_solution, df_losses_solution = utils.analysis.check_interconnector_solution(cdata, solution, 'Losses')
-    print('Losses')
-    print(df_losses_solution)
-    print('\n')
+        # FCAS solution
+        # utils.analysis.plot_fcas_solution(cdata, case_data, solution)
 
-    # # Plot interconnector solution
-    utils.analysis.plot_interconnector_solution(cdata, solution)
-    utils.analysis.plot_trader_solution_difference(cdata, solution)
+        # # Check FCAS availability - compare model and solution FCAS availability
+        # fcas_availability = utils.analysis.check_fcas_availability(cdata, case_data)
+        #
+        # Max FCAS available
+        # df_fcas_max = utils.analysis.check_fcas_max_availability(cdata, solution)
 
-    # FCAS solution
-    # utils.analysis.plot_fcas_solution(cdata, case_data, solution)
+        # Region solution
+        region_solution, df_region_solution = utils.analysis.check_region_demand(cdata, solution)
+        print('Region demand')
+        print(df_region_solution)
 
-    # # Check FCAS availability - compare model and solution FCAS availability
-    # fcas_availability = utils.analysis.check_fcas_availability(cdata, case_data)
-    #
-    # Max FCAS available
-    df_fcas_max = utils.analysis.check_fcas_max_availability(cdata, solution)
-
-    # Error metric - mean square error for each offer type
-    mse = utils.analysis.check_target_mse(cdata, solution)
-    print(mse)
-
-    print('Objective value:', nemde_model.OBJECTIVE.expr())
-
-    # dv = {i: nemde_model.dual[nemde_model.C_GENERIC_CONSTRAINT[i]] for i in nemde_model.S_GENERIC_CONSTRAINTS}
-    # df_gt0 = {k: v for k, v in dv.items() if abs(v) > 0}
-
-    nemde.print_fcas_constraints(nemde_model, 'ER02')
-    nemde.print_fcas_constraints(nemde_model, 'TORRB4')
+        # # Error metric - mean square error for each offer type
+        # mse = utils.analysis.check_target_mse(cdata, solution)
+        # print(mse)
+        #
+        # print('Objective value:', nemde_model.OBJECTIVE.expr())
+        #
+        # dv = {i: nemde_model.dual[nemde_model.C_GENERIC_CONSTRAINT[i]] for i in nemde_model.S_GENERIC_CONSTRAINTS}
+        # df_gt0 = {k: v for k, v in dv.items() if abs(v) > 0}
+        #
+        # nemde.print_fcas_constraints(nemde_model, 'ER02')
+        # nemde.print_fcas_constraints(nemde_model, 'TORRB4')

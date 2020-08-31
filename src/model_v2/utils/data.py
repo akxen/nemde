@@ -1260,6 +1260,8 @@ def parse_case_data_json(data) -> dict:
             get_interconnector_loss_model_breakpoints_x(data_dict),
         'P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y':
             get_interconnector_loss_model_breakpoints_y(data_dict),
+        'P_INTERCONNECTOR_LOSS_DEMAND_CONSTANT':
+            get_interconnector_period_collection_attribute(data_dict, '@LossDemandConstant', float),
         'P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE': get_interconnector_initial_loss_estimate(data_dict),
         'P_INTERCONNECTOR_SOLUTION_LOSS': get_interconnector_solution_attribute(data_dict, '@Losses', float),
         'P_MNSP_PRICE_BAND': get_mnsp_price_bands(data_dict),
