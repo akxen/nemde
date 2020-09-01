@@ -813,111 +813,73 @@ if __name__ == '__main__':
     nemde = NEMDEModel()
 
     # Case data in json format
-    for i in range(1, 2):
-        print('Iteration:', i)
-        case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, 2019, 10, 10, i)
+    case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, 2019, 10, 10, 10)
 
-        # Get NEMDE model data as a Python dictionary
-        cdata = json.loads(case_data_json)
+    # Get NEMDE model data as a Python dictionary
+    cdata = json.loads(case_data_json)
 
-        # # Drop keys
-        # for k in ['ConstraintScadaDataCollection', 'GenericEquationCollection']:
-        #     cdata['NEMSPDCaseFile']['NemSpdInputs'].pop(k)
-        # with open('example.json', 'w') as f:
-        #     json.dump(cdata, f)
+    # Drop keys
+    # for k in ['ConstraintScadaDataCollection', 'GenericEquationCollection']:
+    #     cdata['NEMSPDCaseFile']['NemSpdInputs'].pop(k)
+    # with open('example.json', 'w') as f:
+    #     json.dump(cdata, f)
 
-        case_data = utils.data.parse_case_data_json(case_data_json)
+    case_data = utils.data.parse_case_data_json(case_data_json)
 
-        # Construct model
-        nemde_model = nemde.construct_model(case_data)
+    # Construct model
+    nemde_model = nemde.construct_model(case_data)
 
-        # Solve model
-        nemde_model, status_milp, status_lp = nemde.solve_model(nemde_model)
+    # Solve model
+    nemde_model, status_milp, status_lp = nemde.solve_model(nemde_model)
 
-        # Extract solution
-        solution = utils.solution.get_model_solution(nemde_model)
+    # Extract solution
+    solution = utils.solution.get_model_solution(nemde_model)
 
-        # with open('solution_example.json', 'w') as f:
-        #     json.dump(solution, f)
+    # with open('solution_example.json', 'w') as f:
+    #     json.dump(solution, f)
 
-        # Difference
-        trader_solution, df_trader_solution = utils.analysis.check_trader_solution(cdata, solution)
-        df_trader_solution_r6se = df_trader_solution.loc[(slice(None), 'R6SE'), :]
-        df_trader_solution_r60s = df_trader_solution.loc[(slice(None), 'R60S'), :]
-        df_trader_solution_r5mi = df_trader_solution.loc[(slice(None), 'R5MI'), :]
-        df_trader_solution_r5re = df_trader_solution.loc[(slice(None), 'R5RE'), :]
-        df_trader_solution_l6se = df_trader_solution.loc[(slice(None), 'L6SE'), :]
-        df_trader_solution_l60s = df_trader_solution.loc[(slice(None), 'L60S'), :]
-        df_trader_solution_l5mi = df_trader_solution.loc[(slice(None), 'L5MI'), :]
-        df_trader_solution_l5re = df_trader_solution.loc[(slice(None), 'L5RE'), :]
-        print('Trader targets')
-        print(df_trader_solution.head(10))
-        print('\n')
+    # Difference
+    trader_solution, df_trader_solution = utils.analysis.check_trader_solution(cdata, solution)
+    df_trader_solution_r6se = df_trader_solution.loc[(slice(None), 'R6SE'), :]
+    df_trader_solution_r60s = df_trader_solution.loc[(slice(None), 'R60S'), :]
+    df_trader_solution_r5mi = df_trader_solution.loc[(slice(None), 'R5MI'), :]
+    df_trader_solution_r5re = df_trader_solution.loc[(slice(None), 'R5RE'), :]
+    df_trader_solution_l6se = df_trader_solution.loc[(slice(None), 'L6SE'), :]
+    df_trader_solution_l60s = df_trader_solution.loc[(slice(None), 'L60S'), :]
+    df_trader_solution_l5mi = df_trader_solution.loc[(slice(None), 'L5MI'), :]
+    df_trader_solution_l5re = df_trader_solution.loc[(slice(None), 'L5RE'), :]
+    print('Trader targets')
+    print(df_trader_solution.head(10))
+    print('\n')
 
-        # # Interconnector solutions
-        # flow_solution, df_flow_solution = utils.analysis.check_interconnector_solution(cdata, solution, 'Flow')
-        # print('Flow')
-        # print(df_flow_solution)
-        # print('\n')
-        #
-        # losses_solution, df_losses_solution = utils.analysis.check_interconnector_solution(cdata, solution, 'Losses')
-        # print('Losses')
-        # print(df_losses_solution)
-        # print('\n')
-        #
-        # # # Plot interconnector solution
-        # utils.analysis.plot_interconnector_solution(cdata, solution)
-        # utils.analysis.plot_trader_solution_difference(cdata, solution)
+    # Interconnector solutions
+    flow_solution, df_flow_solution = utils.analysis.check_interconnector_solution(cdata, solution, 'Flow')
+    print('Flow')
+    print(df_flow_solution)
+    print('\n')
 
-        # FCAS solution
-        # utils.analysis.plot_fcas_solution(cdata, case_data, solution)
+    losses_solution, df_losses_solution = utils.analysis.check_interconnector_solution(cdata, solution, 'Losses')
+    print('Losses')
+    print(df_losses_solution)
+    print('\n')
 
-        # # Check FCAS availability - compare model and solution FCAS availability
-        # fcas_availability = utils.analysis.check_fcas_availability(cdata, case_data)
-        #
-        # Max FCAS available
-        # df_fcas_max = utils.analysis.check_fcas_max_availability(cdata, solution)
+    # # Plot interconnector solution
+    utils.analysis.plot_interconnector_solution(cdata, solution)
+    utils.analysis.plot_trader_solution_difference(cdata, solution)
 
-        # Region solution
-        region_solution, df_region_solution = utils.analysis.check_region_demand(cdata, solution)
-        print('Region demand')
-        print(df_region_solution)
+    # FCAS solution
+    # utils.analysis.plot_fcas_solution(cdata, case_data, solution)
 
-        # # Error metric - mean square error for each offer type
-        # mse = utils.analysis.check_target_mse(cdata, solution)
-        # print(mse)
-        #
-        # print('Objective value:', nemde_model.OBJECTIVE.expr())
-        #
-        # dv = {i: nemde_model.dual[nemde_model.C_GENERIC_CONSTRAINT[i]] for i in nemde_model.S_GENERIC_CONSTRAINTS}
-        # df_gt0 = {k: v for k, v in dv.items() if abs(v) > 0}
-        #
-        # nemde.print_fcas_constraints(nemde_model, 'ER02')
-        # nemde.print_fcas_constraints(nemde_model, 'TORRB4')
+    # # Check FCAS availability - compare model and solution FCAS availability
+    # fcas_availability = utils.analysis.check_fcas_availability(cdata, case_data)
 
-        # Scheduled generation
-        initial_scheduled_generation = sum(nemde_model.P_TRADER_INITIAL_MW[i] for i, j in nemde_model.S_TRADER_OFFERS
-                                           if (j == 'ENOF')
-                                           and (nemde_model.P_TRADER_REGION[i] == 'VIC1')
-                                           and (nemde_model.P_TRADER_TYPE[i] in ['GENERATOR']))
+    # Region solution
+    region_solution, df_region_solution = utils.analysis.check_region_demand(cdata, solution)
+    print('Region demand')
+    print(df_region_solution)
 
-        # Scheduled load
-        initial_scheduled_load = sum(nemde_model.P_TRADER_INITIAL_MW[i] for i, j in nemde_model.S_TRADER_OFFERS
-                                     if (nemde_model.P_TRADER_SEMI_DISPATCH_STATUS[i] == '0')
-                                     and (j == 'LDOF')
-                                     and (nemde_model.P_TRADER_REGION[i] == 'VIC1')
-                                     and (nemde_model.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']))
+    # Error metric - mean square error for each offer type
+    mse = utils.analysis.check_target_mse(cdata, solution)
+    print(mse)
 
-        # Initial net interchange
-        initial_net_interchange = nemde_model.E_REGION_INITIAL_NET_EXPORT_FLOW['VIC1'].expr()
-
-        # Initial allocated losses
-        initial_allocated_loss = nemde_model.E_TOTAL_INITIAL_ALLOCATED_LOSSES['VIC1'].expr()
-
-        # Aggregate dispatch error
-        initial_ade = nemde_model.P_REGION_ADE['VIC1']
-
-        # Delta forecast
-        initial_df = nemde_model.P_REGION_DF['VIC1']
-
-        net_demand = initial_scheduled_generation - initial_scheduled_load - initial_net_interchange - initial_allocated_loss + initial_ade + initial_df
+    print('Objective value:', nemde_model.OBJECTIVE.expr())
