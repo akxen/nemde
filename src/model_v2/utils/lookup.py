@@ -167,6 +167,21 @@ def get_interconnector_period_collection_attribute(data, interconnector_id, attr
     raise Exception('Attribute not found:', interconnector_id, attribute, func)
 
 
+def get_interconnector_loss_model_attribute(data, interconnector_id, attribute, func):
+    """Get interconnector loss model attribute"""
+
+    # NEMSPDCaseFile.NemSpdInputs.InterconnectorCollection.Interconnector[0].LossModelCollection.LossModel.@LossShare
+    # All interconnectors
+    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('InterconnectorCollection')
+                       .get('Interconnector'))
+
+    for i in interconnectors:
+        if i['@InterconnectorID'] == interconnector_id:
+            return func(i.get('LossModelCollection').get('LossModel')[attribute])
+
+    raise Exception('Attribute not found:', interconnector_id, attribute)
+
+
 def get_interconnector_solution_attribute(data, interconnector_id, attribute, func, intervention='0'):
     """Get interconnector solution attribute"""
 
