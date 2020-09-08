@@ -54,13 +54,13 @@ def get_region_period_collection_attribute(data, region_id, attribute, func):
     raise Exception('Attribute not found:', region_id, attribute)
 
 
-def get_region_solution_attribute(data, region_id, attribute, func):
+def get_region_solution_attribute(data, region_id, attribute, func, intervention='0'):
     """Extract region solution attribute"""
 
     # All regions
     regions = data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('RegionSolution')
     for i in regions:
-        if i['@RegionID'] == region_id:
+        if (i['@RegionID'] == region_id) and (i['@Intervention'] == intervention):
             return func(i[attribute])
 
     raise Exception('Attribute not found:', region_id, attribute)

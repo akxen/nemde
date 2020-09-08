@@ -481,7 +481,150 @@ def get_solution_total_scheduled_load(data) -> float:
     return total
 
 
-def get_calculated_region_cleared_demand(data, region_id):
+def get_solution_region_net_interconnector_flow(data, region_id) -> float:
+    """Get net export for a given region"""
+
+    # All interconnectors
+    interconnectors = get_interconnector_index(data)
+
+    total = 0
+    for i in interconnectors:
+        from_region = lookup.get_interconnector_period_collection_attribute(data, i, '@FromRegion', str)
+        to_region = lookup.get_interconnector_period_collection_attribute(data, i, '@ToRegion', str)
+
+        if region_id not in [from_region, to_region]:
+            continue
+
+        # Get solution power flow
+        flow = lookup.get_interconnector_solution_attribute(data, i, '@Flow', float)
+
+        # Positive flow indicates export out of FromRegion
+        if region_id == from_region:
+            total += flow
+
+        # Positive flow indicates import into ToRegion, so take negative
+        elif region_id == to_region:
+            total -= flow
+
+        else:
+            pass
+
+    return total
+
+
+def get_solution_region_interconnector_losses(data, region_id) -> float:
+    """Get interconnector loss allocated to given region"""
+
+    # All interconnectors
+    interconnectors = get_interconnector_index(data)
+
+    total = 0
+    for i in interconnectors:
+        from_region = lookup.get_interconnector_period_collection_attribute(data, i, '@FromRegion', str)
+        to_region = lookup.get_interconnector_period_collection_attribute(data, i, '@ToRegion', str)
+
+        if region_id not in [from_region, to_region]:
+            continue
+
+        # Get loss and loss share for interconnector
+        loss = lookup.get_interconnector_solution_attribute(data, i, '@Losses', float)
+        loss_share = lookup.get_interconnector_loss_model_attribute(data, i, '@LossShare', float)
+
+        # Loss if from region
+        if region_id == from_region:
+            total += loss * loss_share
+
+        # Loss if to region
+        elif region_id == to_region:
+            total += loss * (1 - loss_share)
+
+        else:
+            pass
+
+    return total
+
+
+def get_solution_region_mnsp_losses(data, region_id) -> float:
+    """Get interconnector loss allocated to given region from MNSP"""
+
+    # All interconnectors
+    interconnectors = get_interconnector_index(data)
+
+    total = 0
+    for i in interconnectors:
+        # MNSP status
+        mnsp_status = lookup.get_interconnector_period_collection_attribute(data, i, '@MNSP', str)
+
+        # Skip non-MNSPs
+        if mnsp_status == '0':
+            continue
+
+        # From and To region
+        from_region = lookup.get_interconnector_period_collection_attribute(data, i, '@FromRegion', str)
+        to_region = lookup.get_interconnector_period_collection_attribute(data, i, '@ToRegion', str)
+
+        if region_id not in [from_region, to_region]:
+            continue
+
+        # Power flow
+        flow = lookup.get_interconnector_collection_initial_condition_attribute(data, i, 'InitialMW', float)
+
+        # From region is exporting, To region is importing
+        if flow >= 0:
+            from_lf = lookup.get_interconnector_period_collection_attribute(data, i, '@FromRegionLFExport', float)
+            to_lf = lookup.get_interconnector_period_collection_attribute(data, i, '@ToRegionLFImport', float)
+        # From region is importing and To region is exporting
+        else:
+            from_lf = lookup.get_interconnector_period_collection_attribute(data, i, '@FromRegionLFImport', float)
+            to_lf = lookup.get_interconnector_period_collection_attribute(data, i, '@ToRegionLFExport', float)
+
+        # Loss if from region
+        if region_id == from_region:
+            total += abs(flow) * (1 - from_lf)
+
+        # Loss if to region
+        elif region_id == to_region:
+            total += abs(flow) * (1 - to_lf)
+
+        else:
+            pass
+
+    return total
+
+
+def get_solution_region_scheduled_load(data, region_id) -> float:
+    """Get solution region scheduled load"""
+
+    # All traders
+    traders = get_trader_index(data)
+
+    total = 0
+    for i in traders:
+        trader_type = lookup.get_trader_collection_attribute(data, i, '@TraderType', str)
+        semi_dispatch = lookup.get_trader_collection_attribute(data, i, '@SemiDispatch', str)
+        trader_region_id = lookup.get_trader_period_collection_attribute(data, i, '@RegionID', str)
+        if (trader_type in ['LOAD', 'NORMALLY_ON_LOAD']) and (semi_dispatch == '0') and (region_id == trader_region_id):
+            total += lookup.get_trader_solution_attribute(data, i, '@EnergyTarget', float)
+
+    return total
+
+
+def get_solution_region_net_export(data, region_id):
+    """Get calculation net export"""
+
+    # Net outflow from region over interconnectors
+    net_outflow = get_solution_region_net_interconnector_flow(data, region_id)
+
+    # Region allocated losses
+    region_loss = get_solution_region_interconnector_losses(data, region_id)
+
+    # MNSP loss
+    # mnsp_loss = get_solution_region_mnsp_losses(data, region_id)
+
+    return net_outflow + region_loss
+
+
+def get_solution_region_cleared_demand(data, region_id):
     """Get region cleared demand based on FixedDemand calculation, observed flows, scheduled load, and losses"""
 
     # Cleared demand calculation parameters
@@ -650,70 +793,30 @@ def check_initial_total_cleared_demand(data):
     return out
 
 
-def print_summary(data):
-    """Print summary of key inputs"""
+def check_solution_region_net_export(data):
+    """Check solution region net export"""
 
-    solution_total_generation = get_solution_total_generation(data)
-    solution_total_cleared_demand = get_solution_total_cleared_demand(data)
-    solution_total_fixed_demand = get_solution_total_fixed_demand(data)
-    solution_total_normally_on_load = get_solution_total_normally_on_load(data)
-    solution_total_scheduled_load = get_solution_total_scheduled_load(data)
-    solution_total_losses = get_solution_total_losses(data)
-    solution_total_mnsp_losses = get_solution_total_mnsp_losses(data)
-    initial_total_losses = get_initial_total_regional_losses(data)
-    initial_total_ade = get_initial_total_ade(data)
-    initial_total_df = get_initial_total_df(data)
-    initial_total_generation = get_initial_total_generation(data)
-    initial_total_scheduled_load = get_initial_total_scheduled_load(data)
-    initial_total_demand = get_initial_total_demand(data)
-    initial_total_mnsp_losses = get_initial_total_mnsp_losses(data)
+    # All regions
+    regions = get_region_index(data)
 
-    print('Total solution total generation:', solution_total_generation)
-    print('Total solution cleared demand:', solution_total_cleared_demand)
-    print('Total solution fixed demand:', solution_total_fixed_demand)
-    print('Total solution normally on load:', solution_total_normally_on_load)
-    print('Total solution scheduled load:', solution_total_scheduled_load)
-    print('Total solution losses:', solution_total_losses)
-    print('Total solution MNSP losses:', solution_total_mnsp_losses)
-    print('\n')
-    print('Total initial losses initial:', initial_total_losses)
-    print('Total initial ADE:', initial_total_ade)
-    print('Total initial DF:', initial_total_df)
-    print('Total initial generation:', initial_total_generation)
-    print('Total initial scheduled load:', initial_total_scheduled_load)
-    print('Total initial total demand:', initial_total_demand)
-    print('Total initial MNSP loss:', initial_total_mnsp_losses)
+    # Container for output
+    out = {}
+    for i in regions:
+        # Calculated and observed net export
+        calculated = get_solution_region_net_export(data, i)
+        observed = lookup.get_region_solution_attribute(data, i, '@NetExport', float)
 
+        out[i] = {
+            'calculated': calculated,
+            'observed': observed,
+            'difference': calculated - observed,
+            'abs_difference': abs(calculated - observed),
+        }
 
-def get_region_net_export(data, region_id):
-    """Get net export for a given region"""
+    # Convert to to DataFrame
+    df = pd.DataFrame(out).T
 
-    # All interconnectors
-    interconnectors = get_interconnector_index(data)
-
-    total = 0
-    for i in interconnectors:
-        from_region = lookup.get_interconnector_period_collection_attribute(data, i, '@FromRegion', str)
-        to_region = lookup.get_interconnector_period_collection_attribute(data, i, '@ToRegion', str)
-
-        if region_id not in [from_region, to_region]:
-            continue
-
-        # Get initial MW
-        initial_mw = lookup.get_interconnector_collection_initial_condition_attribute(data, i, 'InitialMW', float)
-
-        # Positive flow indicates export out of FromRegion
-        if region_id == from_region:
-            total += initial_mw
-
-        # Positive flow indicates import into ToRegion, so take negative
-        elif region_id == to_region:
-            total -= initial_mw
-
-        else:
-            pass
-
-    return total
+    return out, df
 
 
 def check_net_export(data):
@@ -759,6 +862,40 @@ def perform_checks(data_dir, n=5):
     print('Max absolute net export difference', max_net_export_difference)
 
 
+def print_summary(data):
+    """Print summary of key inputs"""
+
+    solution_total_generation = get_solution_total_generation(data)
+    solution_total_cleared_demand = get_solution_total_cleared_demand(data)
+    solution_total_fixed_demand = get_solution_total_fixed_demand(data)
+    solution_total_normally_on_load = get_solution_total_normally_on_load(data)
+    solution_total_scheduled_load = get_solution_total_scheduled_load(data)
+    solution_total_losses = get_solution_total_losses(data)
+    solution_total_mnsp_losses = get_solution_total_mnsp_losses(data)
+    initial_total_losses = get_initial_total_regional_losses(data)
+    initial_total_ade = get_initial_total_ade(data)
+    initial_total_df = get_initial_total_df(data)
+    initial_total_generation = get_initial_total_generation(data)
+    initial_total_scheduled_load = get_initial_total_scheduled_load(data)
+    initial_total_demand = get_initial_total_demand(data)
+    initial_total_mnsp_losses = get_initial_total_mnsp_losses(data)
+
+    print('Total solution total generation:', solution_total_generation)
+    print('Total solution cleared demand:', solution_total_cleared_demand)
+    print('Total solution fixed demand:', solution_total_fixed_demand)
+    print('Total solution normally on load:', solution_total_normally_on_load)
+    print('Total solution scheduled load:', solution_total_scheduled_load)
+    print('Total solution losses:', solution_total_losses)
+    print('Total solution MNSP losses:', solution_total_mnsp_losses)
+    print('\n')
+    print('Total initial losses initial:', initial_total_losses)
+    print('Total initial ADE:', initial_total_ade)
+    print('Total initial DF:', initial_total_df)
+    print('Total initial generation:', initial_total_generation)
+    print('Total initial scheduled load:', initial_total_scheduled_load)
+    print('Total initial total demand:', initial_total_demand)
+    print('Total initial MNSP loss:', initial_total_mnsp_losses)
+
 
 if __name__ == '__main__':
     # Directory containing case data
@@ -775,4 +912,4 @@ if __name__ == '__main__':
     # Check results to ensure demand calculations correspond with NEMDE solution
     # perform_checks(data_directory, n=20)
 
-    a1 = check_net_export(cdata)
+    a1 = get_solution_region_net_export(cdata, 'SA1')
