@@ -112,10 +112,7 @@ def check_total_cleared_demand_calculation_sample(data_dir, n=5):
     # Compute fixed demand for each interval
     for d, i in sample:
         # Case data in json format
-        try:
-            data_json = loaders.load_dispatch_interval_json(data_dir, 2019, 10, d, i)
-        except KeyError:
-            continue
+        data_json = loaders.load_dispatch_interval_json(data_dir, 2019, 10, d, i)
 
         # Get NEMDE model data as a Python dictionary
         case_data = json.loads(data_json)
@@ -337,10 +334,7 @@ def check_total_fixed_demand_calculation_sample(data_dir, n=5):
     # Compute fixed demand for each interval
     for d, i in sample:
         # Case data in json format
-        try:
-            data_json = loaders.load_dispatch_interval_json(data_dir, 2019, 10, d, i)
-        except KeyError:
-            continue
+        data_json = loaders.load_dispatch_interval_json(data_dir, 2019, 10, d, i)
 
         # Get NEMDE model data as a Python dictionary
         case_data = json.loads(data_json)
@@ -412,15 +406,30 @@ def check_region_net_export_calculation(data, region_id):
         flow = lookup.get_interconnector_solution_attribute(data, i, '@Flow', float)
         loss = lookup.get_interconnector_solution_attribute(data, i, '@Losses', float)
         loss_share = lookup.get_interconnector_loss_model_attribute(data, i, '@LossShare', float)
+        initial_mw = lookup.get_interconnector_collection_initial_condition_attribute(data, i, 'InitialMW', float)
+
+        # TODO: Using InitialMW seems best model for now - real NEMDE does 2 runs. Perhaps second run identifies flow
+        #  direction has changed and updates loss factor
+        
+        # MNSP losses applied to sending end - based on InitialMW
+        if mnsp_status == '1':
+            if initial_mw >= 0:
+                mnsp_loss_share = 1
+            else:
+                mnsp_loss_share = 0
+
+        # # MNSP losses applied to sending end - based on solution flow
+        # if mnsp_status == '1':
+        #     if flow >= 0:
+        #         mnsp_loss_share = 1
+        #     else:
+        #         mnsp_loss_share = 0
 
         # Positive flow indicates export from FromRegion
         if region_id == from_region:
-            # Loss applied to sending end if MNSP TODO: this conditional logic may be problematic - check
+            # Loss applied to sending end if MNSP
             if mnsp_status == '1':
-                if flow >= 0:
-                    region_interconnector_loss += loss
-                else:
-                    continue
+                region_interconnector_loss += loss * mnsp_loss_share
             else:
                 region_interconnector_loss += loss * loss_share
 
@@ -428,10 +437,7 @@ def check_region_net_export_calculation(data, region_id):
         elif region_id == to_region:
             # Loss applied to sending end if MNSP
             if mnsp_status == '1':
-                if flow < 0:
-                    region_interconnector_loss += loss
-                else:
-                    continue
+                region_interconnector_loss += loss * (1 - mnsp_loss_share)
             else:
                 region_interconnector_loss += loss * (1 - loss_share)
 
@@ -463,13 +469,16 @@ def check_region_net_export_calculation_sample(data_dir, n=5):
 
     # Container for model output
     out = {}
+
+    # Placeholder for max absolute difference observed
+    max_abs_difference = 0
+    max_abs_difference_interval = None
+
     # Compute fixed demand for each interval
-    for d, i in sample:
+    for i, (day, interval) in enumerate(sample):
+        print(f'{i + 1}/{len(sample)}')
         # Case data in json format
-        try:
-            data_json = loaders.load_dispatch_interval_json(data_dir, 2019, 10, d, i)
-        except KeyError:
-            continue
+        data_json = loaders.load_dispatch_interval_json(data_dir, 2019, 10, day, interval)
 
         # Get NEMDE model data as a Python dictionary
         case_data = json.loads(data_json)
@@ -483,10 +492,18 @@ def check_region_net_export_calculation_sample(data_dir, n=5):
             difference = check_region_net_export_calculation(case_data, j)
 
             # Add date to keys
-            demand_calculations = {(d, i, j): {'difference': difference, 'abs_difference': abs(difference)}}
+            demand_calculations = {(day, interval, j): {'difference': difference, 'abs_difference': abs(difference)}}
+
+            if abs(difference) > max_abs_difference:
+                max_abs_difference = abs(difference)
+                max_abs_difference_interval = (day, interval, j)
 
             # Append to main container
             out = {**out, **demand_calculations}
+
+        # Periodically print max absolute difference observed
+        if i % 10 == 0:
+            print('Max absolute difference:', max_abs_difference_interval, max_abs_difference)
 
     # Convert to DataFrame
     df = pd.DataFrame(out).T
@@ -587,10 +604,7 @@ def check_region_cleared_demand_calculation_sample(data_dir, n=5):
     # Compute fixed demand for each interval
     for d, i in sample:
         # Case data in json format
-        try:
-            data_json = loaders.load_dispatch_interval_json(data_dir, 2019, 10, d, i)
-        except KeyError:
-            continue
+        data_json = loaders.load_dispatch_interval_json(data_dir, 2019, 10, d, i)
 
         # Get NEMDE model data as a Python dictionary
         case_data = json.loads(data_json)
@@ -637,7 +651,8 @@ def check_region_fixed_demand_calculation(data, region_id):
         trader_region = lookup.get_trader_period_collection_attribute(data, i, '@RegionID', str)
 
         if (trader_type in ['LOAD', 'NORMALLY_ON_LOAD']) and (semi_dispatch == '0') and (trader_region == region_id):
-            total_scheduled_load += lookup.get_trader_collection_initial_condition_attribute(data, i, 'InitialMW', float)
+            total_scheduled_load += lookup.get_trader_collection_initial_condition_attribute(data, i, 'InitialMW',
+                                                                                             float)
 
     # All interconnectors
     interconnectors = get_interconnector_index(data)
@@ -711,10 +726,7 @@ def check_region_fixed_demand_calculation_sample(data_dir, n=5):
     # Compute fixed demand for each interval
     for d, i in sample:
         # Case data in json format
-        try:
-            data_json = loaders.load_dispatch_interval_json(data_dir, 2019, 10, d, i)
-        except KeyError:
-            continue
+        data_json = loaders.load_dispatch_interval_json(data_dir, 2019, 10, d, i)
 
         # Get NEMDE model data as a Python dictionary
         case_data = json.loads(data_json)
@@ -750,15 +762,17 @@ if __name__ == '__main__':
                                   'NEMDE', 'zipped')
 
     # Case data in json format
-    case_data_json = loaders.load_dispatch_interval_json(data_directory, 2019, 10, 22, 159)
+    case_data_json = loaders.load_dispatch_interval_json(data_directory, 2019, 10, 1, 217)
 
     # Get NEMDE model data as a Python dictionary
     cdata = json.loads(case_data_json)
 
-    c1, c1_df, c1_max_diff = check_total_cleared_demand_calculation_sample(data_directory, n=1000)
-    c2, c2_df, c2_max_diff = check_total_fixed_demand_calculation_sample(data_directory, n=1000)
-    c3, c3_df, c3_max_diff = check_region_net_export_calculation_sample(data_directory, n=1000)
-    c4, c4_df, c4_max_diff = check_region_cleared_demand_calculation_sample(data_directory, n=1000)
-    c5, c5_df, c5_max_diff = check_region_fixed_demand_calculation_sample(data_directory, n=1000)
+    # c1, c1_df, c1_max_diff = check_total_cleared_demand_calculation_sample(data_directory, n=1000)
+    # c2, c2_df, c2_max_diff = check_total_fixed_demand_calculation_sample(data_directory, n=1000)
 
-    # c5 = check_region_fixed_demand_calculation(cdata, 'SA1')
+    # c3, c3_df, c3_max_diff = check_region_net_export_calculation_sample(data_directory, n=1000)
+
+    # c4, c4_df, c4_max_diff = check_region_cleared_demand_calculation_sample(data_directory, n=1000)
+    # c5, c5_df, c5_max_diff = check_region_fixed_demand_calculation_sample(data_directory, n=1000)
+
+    c6 = check_region_net_export_calculation(cdata, 'TAS1')

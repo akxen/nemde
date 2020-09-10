@@ -43,8 +43,12 @@ def load_file(data_dir, year, month, day, interval):
             z_2_data = io.BytesIO(z_2.read())
 
             with zipfile.ZipFile(z_2_data) as z_3:
-                z_3_name = f'NEMSPDOutputs_{year}{month:02}{day:02}{interval:03}00.loaded'
-                return z_3.open(z_3_name).read()
+                try:
+                    z_3_name = f'NEMSPDOutputs_{year}{month:02}{day:02}{interval:03}00.loaded'
+                    return z_3.open(z_3_name).read()
+                except KeyError:
+                    z_3_name = f'NEMSPDOutputs_{year}{month:02}{day:02}{interval:03}00_OCD.loaded'
+                    return z_3.open(z_3_name).read()
 
 
 def load_dispatch_interval_json(data_dir, year, month, day, interval):
