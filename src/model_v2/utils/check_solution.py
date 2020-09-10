@@ -291,7 +291,8 @@ def get_solution_region_mnsp_loss_estimate(data, region_id) -> float:
         if region_id not in [from_region, to_region]:
             continue
 
-        # Initial MW flow
+        # Initial MW and solution flow
+        initial_mw = lookup.get_interconnector_collection_initial_condition_attribute(data, i, 'InitialMW', float)
         flow = lookup.get_interconnector_solution_attribute(data, i, '@Flow', float)
 
         to_lf_export = lookup.get_interconnector_period_collection_attribute(data, i, '@ToRegionLFExport', float)
@@ -300,18 +301,25 @@ def get_solution_region_mnsp_loss_estimate(data, region_id) -> float:
         from_lf_import = lookup.get_interconnector_period_collection_attribute(data, i, '@FromRegionLFImport', float)
         from_lf_export = lookup.get_interconnector_period_collection_attribute(data, i, '@FromRegionLFExport', float)
 
-        # Initial loss estimate over interconnector
+        # Loss over interconnector
         loss = lookup.get_interconnector_solution_attribute(data, i, '@Losses', float)
+
+        # MNSP loss share - loss applied to sending end
+        if flow >= 0:
+            # Total loss allocated to FromRegion
+            mnsp_loss_share = 1
+        else:
+            # Total loss allocated to ToRegion
+            mnsp_loss_share = 0
 
         # FromRegion is exporting, ToRegion is importing
         if flow >= 0:
             if region_id == from_region:
-                export_flow = abs(flow) + (loss_share * loss)
+                export_flow = abs(flow) + (mnsp_loss_share * loss)
                 mnsp_loss = export_flow * (1 - from_lf_export)
 
             elif region_id == to_region:
-                # + ((1 - loss_share) * initial_loss_estimate) TODO: check why allocated loss doesn't need to be added
-                import_flow = abs(flow)
+                import_flow = abs(flow) - ((1 - mnsp_loss_share) * loss)
                 mnsp_loss = import_flow * (1 - to_lf_import)
 
             else:
@@ -320,11 +328,11 @@ def get_solution_region_mnsp_loss_estimate(data, region_id) -> float:
         # FromRegion is importing, ToRegion is exporting
         else:
             if region_id == from_region:
-                import_flow = abs(flow) - (loss_share * loss)
+                import_flow = abs(flow) - (mnsp_loss_share * loss)
                 mnsp_loss = import_flow * (1 - from_lf_import)
 
             elif region_id == to_region:
-                export_flow = abs(flow) + ((1 - loss_share) * loss)
+                export_flow = abs(flow) + ((1 - mnsp_loss_share) * loss)
                 mnsp_loss = export_flow * (1 - to_lf_export)
 
             else:
@@ -662,12 +670,12 @@ if __name__ == '__main__':
     cdata = json.loads(case_data_json)
 
     # Check aggregate values for entire system
-    c1, c1_df, c1_max = check_total_calculation_sample(data_directory, check_total_cleared_demand_calculation, n=1000)
-    c2, c2_df, c2_max = check_total_calculation_sample(data_directory, check_total_fixed_demand_calculation, n=1000)
+    # c1, c1_df, c1_max = check_total_calculation_sample(data_directory, check_total_cleared_demand_calculation, n=1000)
+    # c2, c2_df, c2_max = check_total_calculation_sample(data_directory, check_total_fixed_demand_calculation, n=1000)
 
     # Check values for each region
     c3, c3_df, c3_max = check_region_calculation_sample(data_directory, check_region_net_export_calculation, n=1000)
-    c4, c4_df, c4_max = check_region_calculation_sample(data_directory, check_region_cleared_demand_calculation, n=1000)
-    c5, c5_df, c5_max = check_region_calculation_sample(data_directory, check_region_fixed_demand_calculation, n=1000)
+    # c4, c4_df, c4_max = check_region_calculation_sample(data_directory, check_region_cleared_demand_calculation, n=1000)
+    # c5, c5_df, c5_max = check_region_calculation_sample(data_directory, check_region_fixed_demand_calculation, n=1000)
 
-    c6 = check_region_fixed_demand_calculation(cdata, 'VIC1')
+    # c6 = check_region_fixed_demand_calculation(cdata, 'VIC1')
