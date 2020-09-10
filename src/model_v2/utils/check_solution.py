@@ -363,34 +363,11 @@ def check_total_fixed_demand_calculation_sample(data_dir, n=5):
     return out, df, max_abs_difference
 
 
-def check_region_net_export_calculation(data, region_id):
-    """Check net export calculation for a given region"""
+def get_solution_region_interconnector_loss(data, region_id):
+    """Get loss allocated to each region"""
 
     # All interconnectors
     interconnectors = get_interconnector_index(data)
-
-    # Flow over interconnectors
-    interconnector_export = 0
-    for i in interconnectors:
-        from_region = lookup.get_interconnector_period_collection_attribute(data, i, '@FromRegion', str)
-        to_region = lookup.get_interconnector_period_collection_attribute(data, i, '@ToRegion', str)
-
-        if region_id not in [from_region, to_region]:
-            continue
-
-        # Interconnector flow from solution
-        flow = lookup.get_interconnector_solution_attribute(data, i, '@Flow', float)
-
-        # Positive flow indicates export from FromRegion
-        if region_id == from_region:
-            interconnector_export += flow
-
-        # Positive flow indicates import to ToRegion (take negative to get export from ToRegion)
-        elif region_id == to_region:
-            interconnector_export -= flow
-
-        else:
-            pass
 
     # Allocated interconnector losses
     region_interconnector_loss = 0
@@ -410,7 +387,7 @@ def check_region_net_export_calculation(data, region_id):
 
         # TODO: Using InitialMW seems best model for now - real NEMDE does 2 runs. Perhaps second run identifies flow
         #  direction has changed and updates loss factor
-        
+
         # MNSP losses applied to sending end - based on InitialMW
         if mnsp_status == '1':
             if initial_mw >= 0:
@@ -443,6 +420,103 @@ def check_region_net_export_calculation(data, region_id):
 
         else:
             pass
+
+    return region_interconnector_loss
+
+
+def get_initial_region_interconnector_loss(data, region_id):
+    """Get initial loss allocated to each region"""
+
+    # All interconnectors
+    interconnectors = get_interconnector_index(data)
+
+    # Allocated interconnector losses
+    region_interconnector_loss = 0
+    for i in interconnectors:
+        from_region = lookup.get_interconnector_period_collection_attribute(data, i, '@FromRegion', str)
+        to_region = lookup.get_interconnector_period_collection_attribute(data, i, '@ToRegion', str)
+        mnsp_status = lookup.get_interconnector_period_collection_attribute(data, i, '@MNSP', str)
+
+        if region_id not in [from_region, to_region]:
+            continue
+
+        # Interconnector flow from solution
+        initial_mw = lookup.get_interconnector_collection_initial_condition_attribute(data, i, 'InitialMW', float)
+
+        # loss = lookup.get_interconnector_solution_attribute(data, i, '@Losses', float)
+        loss = calculations.get_interconnector_loss_estimate(data, i, initial_mw)
+        loss_share = lookup.get_interconnector_loss_model_attribute(data, i, '@LossShare', float)
+
+        # TODO: Using InitialMW seems best model for now - real NEMDE does 2 runs. Perhaps second run identifies flow
+        #  direction has changed and updates loss factor
+
+        # MNSP losses applied to sending end - based on InitialMW
+        if mnsp_status == '1':
+            if initial_mw >= 0:
+                mnsp_loss_share = 1
+            else:
+                mnsp_loss_share = 0
+
+        # # MNSP losses applied to sending end - based on solution flow
+        # if mnsp_status == '1':
+        #     if flow >= 0:
+        #         mnsp_loss_share = 1
+        #     else:
+        #         mnsp_loss_share = 0
+
+        # Positive flow indicates export from FromRegion
+        if region_id == from_region:
+            # Loss applied to sending end if MNSP
+            if mnsp_status == '1':
+                region_interconnector_loss += loss * mnsp_loss_share
+            else:
+                region_interconnector_loss += loss * loss_share
+
+        # Positive flow indicates import to ToRegion (take negative to get export from ToRegion)
+        elif region_id == to_region:
+            # Loss applied to sending end if MNSP
+            if mnsp_status == '1':
+                region_interconnector_loss += loss * (1 - mnsp_loss_share)
+            else:
+                region_interconnector_loss += loss * (1 - loss_share)
+
+        else:
+            pass
+
+    return region_interconnector_loss
+
+
+def check_region_net_export_calculation(data, region_id):
+    """Check net export calculation for a given region"""
+
+    # All interconnectors
+    interconnectors = get_interconnector_index(data)
+
+    # Flow over interconnectors
+    interconnector_export = 0
+    for i in interconnectors:
+        from_region = lookup.get_interconnector_period_collection_attribute(data, i, '@FromRegion', str)
+        to_region = lookup.get_interconnector_period_collection_attribute(data, i, '@ToRegion', str)
+
+        if region_id not in [from_region, to_region]:
+            continue
+
+        # Interconnector flow from solution
+        flow = lookup.get_interconnector_solution_attribute(data, i, '@Flow', float)
+
+        # Positive flow indicates export from FromRegion
+        if region_id == from_region:
+            interconnector_export += flow
+
+        # Positive flow indicates import to ToRegion (take negative to get export from ToRegion)
+        elif region_id == to_region:
+            interconnector_export -= flow
+
+        else:
+            pass
+
+    # Loss allocated to region due to interconnector flow
+    region_interconnector_loss = get_solution_region_interconnector_loss(data, region_id)
 
     # MNSP loss estimate
     mnsp_loss = get_solution_region_mnsp_loss_estimate(data, region_id)
@@ -521,48 +595,8 @@ def check_region_cleared_demand_calculation(data, region_id):
     # Fixed demand from NEMDE solution
     fixed_demand = lookup.get_region_solution_attribute(data, region_id, '@FixedDemand', float)
 
-    # All interconnectors
-    interconnectors = get_interconnector_index(data)
-
-    # Allocated interconnector losses
-    region_interconnector_loss = 0
-    for i in interconnectors:
-        from_region = lookup.get_interconnector_period_collection_attribute(data, i, '@FromRegion', str)
-        to_region = lookup.get_interconnector_period_collection_attribute(data, i, '@ToRegion', str)
-        mnsp_status = lookup.get_interconnector_period_collection_attribute(data, i, '@MNSP', str)
-
-        if region_id not in [from_region, to_region]:
-            continue
-
-        # Interconnector flow from solution
-        flow = lookup.get_interconnector_solution_attribute(data, i, '@Flow', float)
-        loss = lookup.get_interconnector_solution_attribute(data, i, '@Losses', float)
-        loss_share = lookup.get_interconnector_loss_model_attribute(data, i, '@LossShare', float)
-
-        # Positive flow indicates export from FromRegion
-        if region_id == from_region:
-            # Loss applied to sending end if MNSP TODO: this conditional logic may be problematic - check
-            if mnsp_status == '1':
-                if flow >= 0:
-                    region_interconnector_loss += loss
-                else:
-                    continue
-            else:
-                region_interconnector_loss += loss * loss_share
-
-        # Positive flow indicates import to ToRegion (take negative to get export from ToRegion)
-        elif region_id == to_region:
-            # Loss applied to sending end if MNSP
-            if mnsp_status == '1':
-                if flow < 0:
-                    region_interconnector_loss += loss
-                else:
-                    continue
-            else:
-                region_interconnector_loss += loss * (1 - loss_share)
-
-        else:
-            pass
+    # Loss allocated to region based on interconnector flow
+    region_interconnector_loss = get_solution_region_interconnector_loss(data, region_id)
 
     # All traders
     traders = get_trader_index(data)
@@ -601,10 +635,17 @@ def check_region_cleared_demand_calculation_sample(data_dir, n=5):
 
     # Container for model output
     out = {}
+
+    # Placeholder for max absolute difference observed
+    max_abs_difference = 0
+    max_abs_difference_interval = None
+
     # Compute fixed demand for each interval
-    for d, i in sample:
+    for i, (day, interval) in enumerate(sample):
+        print(f'{i + 1}/{len(sample)}')
+
         # Case data in json format
-        data_json = loaders.load_dispatch_interval_json(data_dir, 2019, 10, d, i)
+        data_json = loaders.load_dispatch_interval_json(data_dir, 2019, 10, day, interval)
 
         # Get NEMDE model data as a Python dictionary
         case_data = json.loads(data_json)
@@ -618,10 +659,18 @@ def check_region_cleared_demand_calculation_sample(data_dir, n=5):
             difference = check_region_cleared_demand_calculation(case_data, j)
 
             # Add date to keys
-            demand_calculations = {(d, i, j): {'difference': difference, 'abs_difference': abs(difference)}}
+            demand_calculations = {(day, interval, j): {'difference': difference, 'abs_difference': abs(difference)}}
+
+            if abs(difference) > max_abs_difference:
+                max_abs_difference = abs(difference)
+                max_abs_difference_interval = (day, interval, j)
 
             # Append to main container
             out = {**out, **demand_calculations}
+
+        # Periodically print max absolute difference observed
+        if i % 10 == 0:
+            print('Max absolute difference:', max_abs_difference_interval, max_abs_difference)
 
     # Convert to DataFrame
     df = pd.DataFrame(out).T
@@ -653,55 +702,13 @@ def check_region_fixed_demand_calculation(data, region_id):
         if (trader_type in ['LOAD', 'NORMALLY_ON_LOAD']) and (semi_dispatch == '0') and (trader_region == region_id):
             total_scheduled_load += lookup.get_trader_collection_initial_condition_attribute(data, i, 'InitialMW',
                                                                                              float)
-
-    # All interconnectors
-    interconnectors = get_interconnector_index(data)
-
-    # Allocated interconnector losses
-    region_interconnector_loss = 0
-    for i in interconnectors:
-        from_region = lookup.get_interconnector_period_collection_attribute(data, i, '@FromRegion', str)
-        to_region = lookup.get_interconnector_period_collection_attribute(data, i, '@ToRegion', str)
-        mnsp_status = lookup.get_interconnector_period_collection_attribute(data, i, '@MNSP', str)
-
-        if region_id not in [from_region, to_region]:
-            continue
-
-        # Interconnector flow from solution
-        flow = lookup.get_interconnector_collection_initial_condition_attribute(data, i, 'InitialMW', float)
-        loss = calculations.get_interconnector_loss_estimate(data, i, flow)
-        # loss = lookup.get_interconnector_solution_attribute(data, i, '@Losses', float)
-        loss_share = lookup.get_interconnector_loss_model_attribute(data, i, '@LossShare', float)
-
-        # Positive flow indicates export from FromRegion
-        if region_id == from_region:
-            # Loss applied to sending end if MNSP TODO: this conditional logic may be problematic - check
-            if mnsp_status == '1':
-                if flow >= 0:
-                    region_interconnector_loss += loss
-                else:
-                    continue
-            else:
-                region_interconnector_loss += loss * loss_share
-
-        # Positive flow indicates import to ToRegion (take negative to get export from ToRegion)
-        elif region_id == to_region:
-            # Loss applied to sending end if MNSP
-            if mnsp_status == '1':
-                if flow < 0:
-                    region_interconnector_loss += loss
-                else:
-                    continue
-            else:
-                region_interconnector_loss += loss * (1 - loss_share)
-
-        else:
-            pass
+    # Region interconnector loss
+    region_interconnector_loss = get_initial_region_interconnector_loss(data, region_id)
 
     # MNSP loss estimate
     mnsp_loss = get_initial_region_mnsp_loss_estimate(data, region_id)
 
-    # Compute fixed demand
+    # Fixed demand from NEMDE solution
     fixed_demand = lookup.get_region_solution_attribute(data, region_id, '@FixedDemand', float)
 
     return demand - total_scheduled_load + ade + delta_forecast - region_interconnector_loss + mnsp_loss - fixed_demand
@@ -723,10 +730,17 @@ def check_region_fixed_demand_calculation_sample(data_dir, n=5):
 
     # Container for model output
     out = {}
+
+    # Placeholder for max absolute difference observed
+    max_abs_difference = 0
+    max_abs_difference_interval = None
+
     # Compute fixed demand for each interval
-    for d, i in sample:
+    for i, (day, interval) in enumerate(sample):
+        print(f'{i + 1}/{len(sample)}')
+
         # Case data in json format
-        data_json = loaders.load_dispatch_interval_json(data_dir, 2019, 10, d, i)
+        data_json = loaders.load_dispatch_interval_json(data_dir, 2019, 10, day, interval)
 
         # Get NEMDE model data as a Python dictionary
         case_data = json.loads(data_json)
@@ -740,10 +754,18 @@ def check_region_fixed_demand_calculation_sample(data_dir, n=5):
             difference = check_region_fixed_demand_calculation(case_data, j)
 
             # Add date to keys
-            demand_calculations = {(d, i, j): {'difference': difference, 'abs_difference': abs(difference)}}
+            demand_calculations = {(day, interval, j): {'difference': difference, 'abs_difference': abs(difference)}}
+
+            if abs(difference) > max_abs_difference:
+                max_abs_difference = abs(difference)
+                max_abs_difference_interval = (day, interval, j)
 
             # Append to main container
             out = {**out, **demand_calculations}
+
+        # Periodically print max absolute difference observed
+        if i % 10 == 0:
+            print('Max absolute difference:', max_abs_difference_interval, max_abs_difference)
 
     # Convert to DataFrame
     df = pd.DataFrame(out).T
@@ -762,17 +784,15 @@ if __name__ == '__main__':
                                   'NEMDE', 'zipped')
 
     # Case data in json format
-    case_data_json = loaders.load_dispatch_interval_json(data_directory, 2019, 10, 1, 217)
+    case_data_json = loaders.load_dispatch_interval_json(data_directory, 2019, 10, 8, 6)
 
     # Get NEMDE model data as a Python dictionary
     cdata = json.loads(case_data_json)
 
     # c1, c1_df, c1_max_diff = check_total_cleared_demand_calculation_sample(data_directory, n=1000)
     # c2, c2_df, c2_max_diff = check_total_fixed_demand_calculation_sample(data_directory, n=1000)
-
     # c3, c3_df, c3_max_diff = check_region_net_export_calculation_sample(data_directory, n=1000)
-
     # c4, c4_df, c4_max_diff = check_region_cleared_demand_calculation_sample(data_directory, n=1000)
     # c5, c5_df, c5_max_diff = check_region_fixed_demand_calculation_sample(data_directory, n=1000)
 
-    c6 = check_region_net_export_calculation(cdata, 'TAS1')
+    # c6 = check_region_fixed_demand_calculation(cdata, 'NSW1')
