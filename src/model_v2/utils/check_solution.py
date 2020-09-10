@@ -89,12 +89,14 @@ def get_initial_region_interconnector_loss(data, region_id) -> float:
         # Interconnector flow from solution
         initial_mw = lookup.get_interconnector_collection_initial_condition_attribute(data, i, 'InitialMW', float)
 
-        # loss = lookup.get_interconnector_solution_attribute(data, i, '@Losses', float)
+        # Compute loss
         loss = calculations.get_interconnector_loss_estimate(data, i, initial_mw)
         loss_share = lookup.get_interconnector_loss_model_attribute(data, i, '@LossShare', float)
 
         # TODO: Using InitialMW seems best model for now - real NEMDE does 2 runs. Perhaps second run identifies flow
-        #  direction has changed and updates loss factor
+        #  direction has changed and updates loss factor. Seems like NEMDE implementation is incorrect. Discrepancy
+        #  arises even when considering InitialMW flow. Flow at end of the dispatch interval shouldn't impact fixed
+        #  demand at the start of the interval, but it does.
 
         # MNSP losses applied to sending end - based on InitialMW
         if mnsp_status == '1':
@@ -148,7 +150,7 @@ def get_initial_region_mnsp_loss_estimate(data, region_id) -> float:
             continue
 
         # Initial MW flow
-        flow = lookup.get_interconnector_collection_initial_condition_attribute(data, i, 'InitialMW', float)
+        initial_mw = lookup.get_interconnector_collection_initial_condition_attribute(data, i, 'InitialMW', float)
 
         to_lf_export = lookup.get_interconnector_period_collection_attribute(data, i, '@ToRegionLFExport', float)
         to_lf_import = lookup.get_interconnector_period_collection_attribute(data, i, '@ToRegionLFImport', float)
@@ -157,18 +159,17 @@ def get_initial_region_mnsp_loss_estimate(data, region_id) -> float:
         from_lf_export = lookup.get_interconnector_period_collection_attribute(data, i, '@FromRegionLFExport', float)
 
         # Initial loss estimate over interconnector
-        loss = calculations.get_interconnector_loss_estimate(data, i, flow)
-        # loss = lookup.get_interconnector_solution_attribute(data, i, '@Losses', float)
+        loss = calculations.get_interconnector_loss_estimate(data, i, initial_mw)
 
         # FromRegion is exporting, ToRegion is importing
-        if flow >= 0:
+        if initial_mw >= 0:
             if region_id == from_region:
-                export_flow = abs(flow) + (loss_share * loss)
+                export_flow = abs(initial_mw) + (loss_share * loss)
                 mnsp_loss = export_flow * (1 - from_lf_export)
 
             elif region_id == to_region:
                 # + ((1 - loss_share) * initial_loss_estimate) TODO: check why allocated loss doesn't need to be added
-                import_flow = abs(flow)
+                import_flow = abs(initial_mw)
                 mnsp_loss = import_flow * (1 - to_lf_import)
 
             else:
@@ -177,21 +178,21 @@ def get_initial_region_mnsp_loss_estimate(data, region_id) -> float:
         # FromRegion is importing, ToRegion is exporting
         else:
             if region_id == from_region:
-                import_flow = abs(flow) - (loss_share * loss)
+                import_flow = abs(initial_mw) - (loss_share * loss)
                 mnsp_loss = import_flow * (1 - from_lf_import)
 
             elif region_id == to_region:
-                export_flow = abs(flow) + ((1 - loss_share) * loss)
+                export_flow = abs(initial_mw) + ((1 - loss_share) * loss)
                 mnsp_loss = export_flow * (1 - to_lf_export)
 
             else:
                 raise Exception('Unexpected region:', region_id)
 
-        # Not sure why, but seems need to multiply loss by -1 when considering positive flow
-        if flow >= 0:
-            total -= mnsp_loss
-        else:
+        # Not sure why, but seems need to multiply loss by -1 when considering negative flow
+        if initial_mw >= 0:
             total += mnsp_loss
+        else:
+            total -= mnsp_loss
 
     return total
 
@@ -329,11 +330,11 @@ def get_solution_region_mnsp_loss_estimate(data, region_id) -> float:
             else:
                 raise Exception('Unexpected region:', region_id)
 
-        # Not sure why, but seems need to multiply loss by -1 when considering positive flow
+        # Not sure why, but seems need to multiply loss by -1 when considering negative flow
         if flow >= 0:
-            total -= mnsp_loss
-        else:
             total += mnsp_loss
+        else:
+            total -= mnsp_loss
 
     return total
 
@@ -453,7 +454,7 @@ def check_total_fixed_demand_calculation(data) -> float:
             total_scheduled_load += lookup.get_trader_solution_attribute(data, i, '@EnergyTarget', float)
 
     # TODO: check why sometimes total_mnsp_loss should be positive and other times negative
-    return total_fixed_demand + total_interconnector_loss - total_mnsp_loss + total_scheduled_load - total_cleared_demand
+    return total_fixed_demand + total_interconnector_loss + total_mnsp_loss + total_scheduled_load - total_cleared_demand
 
 
 def check_total_calculation_sample(data_dir, func, n=5):
@@ -539,7 +540,7 @@ def check_region_cleared_demand_calculation(data, region_id) -> float:
     # Cleared demand from NEMDE solution
     cleared_demand = lookup.get_region_solution_attribute(data, region_id, '@ClearedDemand', float)
 
-    return fixed_demand + region_interconnector_loss + total_scheduled_load - mnsp_loss - cleared_demand
+    return fixed_demand + region_interconnector_loss + total_scheduled_load + mnsp_loss - cleared_demand
 
 
 def check_region_fixed_demand_calculation(data, region_id) -> float:
@@ -562,7 +563,7 @@ def check_region_fixed_demand_calculation(data, region_id) -> float:
     # Fixed demand from NEMDE solution
     fixed_demand = lookup.get_region_solution_attribute(data, region_id, '@FixedDemand', float)
 
-    return demand - total_scheduled_load + ade + delta_forecast - region_interconnector_loss + mnsp_loss - fixed_demand
+    return demand - total_scheduled_load + ade + delta_forecast - region_interconnector_loss - mnsp_loss - fixed_demand
 
 
 def check_region_net_export_calculation(data, region_id) -> float:
@@ -580,7 +581,7 @@ def check_region_net_export_calculation(data, region_id) -> float:
     # Net export from solution
     net_export = lookup.get_region_solution_attribute(data, region_id, '@NetExport', float)
 
-    return interconnector_export + region_interconnector_loss - mnsp_loss - net_export
+    return interconnector_export + region_interconnector_loss + mnsp_loss - net_export
 
 
 def check_region_calculation_sample(data_dir, func, n=5):
@@ -655,16 +656,18 @@ if __name__ == '__main__':
                                   'NEMDE', 'zipped')
 
     # Case data in json format
-    case_data_json = loaders.load_dispatch_interval_json(data_directory, 2019, 10, 8, 6)
+    case_data_json = loaders.load_dispatch_interval_json(data_directory, 2019, 10, 1, 217)
 
     # Get NEMDE model data as a Python dictionary
     cdata = json.loads(case_data_json)
 
     # Check aggregate values for entire system
-    c1, c1_df, c1_max = check_total_calculation_sample(data_directory, check_total_cleared_demand_calculation, n=10)
-    c2, c2_df, c2_max = check_total_calculation_sample(data_directory, check_total_fixed_demand_calculation, n=10)
+    c1, c1_df, c1_max = check_total_calculation_sample(data_directory, check_total_cleared_demand_calculation, n=1000)
+    c2, c2_df, c2_max = check_total_calculation_sample(data_directory, check_total_fixed_demand_calculation, n=1000)
 
     # Check values for each region
-    c3, c3_df, c3_max = check_region_calculation_sample(data_directory, check_region_net_export_calculation, n=10)
-    c4, c4_df, c4_max = check_region_calculation_sample(data_directory, check_region_cleared_demand_calculation, n=10)
-    c5, c5_df, c5_max = check_region_calculation_sample(data_directory, check_region_fixed_demand_calculation, n=10)
+    c3, c3_df, c3_max = check_region_calculation_sample(data_directory, check_region_net_export_calculation, n=1000)
+    c4, c4_df, c4_max = check_region_calculation_sample(data_directory, check_region_cleared_demand_calculation, n=1000)
+    c5, c5_df, c5_max = check_region_calculation_sample(data_directory, check_region_fixed_demand_calculation, n=1000)
+
+    c6 = check_region_fixed_demand_calculation(cdata, 'VIC1')
