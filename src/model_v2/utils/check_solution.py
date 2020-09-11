@@ -94,7 +94,7 @@ def get_initial_region_interconnector_loss(data, region_id) -> float:
         loss_share = lookup.get_interconnector_loss_model_attribute(data, i, '@LossShare', float)
 
         # TODO: Using InitialMW seems best model for now - real NEMDE does 2 runs. Perhaps second run identifies flow
-        #  direction has changed and updates loss factor. Seems like NEMDE implementation is incorrect. Discrepancy
+        #  direction has changed and updates loss share. Seems like NEMDE implementation is incorrect. Discrepancy
         #  arises even when considering InitialMW flow. Flow at end of the dispatch interval shouldn't impact fixed
         #  demand at the start of the interval, but it does.
 
@@ -104,13 +104,6 @@ def get_initial_region_interconnector_loss(data, region_id) -> float:
                 mnsp_loss_share = 1
             else:
                 mnsp_loss_share = 0
-
-        # # MNSP losses applied to sending end - based on solution flow
-        # if mnsp_status == '1':
-        #     if flow >= 0:
-        #         mnsp_loss_share = 1
-        #     else:
-        #         mnsp_loss_share = 0
 
         # Positive flow indicates export from FromRegion
         if region_id == from_region:
@@ -161,15 +154,22 @@ def get_initial_region_mnsp_loss_estimate(data, region_id) -> float:
         # Initial loss estimate over interconnector
         loss = calculations.get_interconnector_loss_estimate(data, i, initial_mw)
 
+        # MNSP loss share - loss applied to sending end
+        if initial_mw >= 0:
+            # Total loss allocated to FromRegion
+            mnsp_loss_share = 1
+        else:
+            # Total loss allocated to ToRegion
+            mnsp_loss_share = 0
+
         # FromRegion is exporting, ToRegion is importing
         if initial_mw >= 0:
             if region_id == from_region:
-                export_flow = abs(initial_mw) + (loss_share * loss)
+                export_flow = abs(initial_mw) + (mnsp_loss_share * loss)
                 mnsp_loss = export_flow * (1 - from_lf_export)
 
             elif region_id == to_region:
-                # + ((1 - loss_share) * initial_loss_estimate) TODO: check why allocated loss doesn't need to be added
-                import_flow = abs(initial_mw)
+                import_flow = abs(initial_mw) - ((1 - mnsp_loss_share) * loss)
                 mnsp_loss = import_flow * (1 - to_lf_import)
 
             else:
@@ -178,11 +178,11 @@ def get_initial_region_mnsp_loss_estimate(data, region_id) -> float:
         # FromRegion is importing, ToRegion is exporting
         else:
             if region_id == from_region:
-                import_flow = abs(initial_mw) - (loss_share * loss)
+                import_flow = abs(initial_mw) - (mnsp_loss_share * loss)
                 mnsp_loss = import_flow * (1 - from_lf_import)
 
             elif region_id == to_region:
-                export_flow = abs(initial_mw) + ((1 - loss_share) * loss)
+                export_flow = abs(initial_mw) + ((1 - mnsp_loss_share) * loss)
                 mnsp_loss = export_flow * (1 - to_lf_export)
 
             else:
@@ -246,13 +246,6 @@ def get_solution_region_interconnector_loss(data, region_id) -> float:
                 mnsp_loss_share = 1
             else:
                 mnsp_loss_share = 0
-
-        # # MNSP losses applied to sending end - based on solution flow
-        # if mnsp_status == '1':
-        #     if flow >= 0:
-        #         mnsp_loss_share = 1
-        #     else:
-        #         mnsp_loss_share = 0
 
         # Positive flow indicates export from FromRegion
         if region_id == from_region:
@@ -670,12 +663,12 @@ if __name__ == '__main__':
     cdata = json.loads(case_data_json)
 
     # Check aggregate values for entire system
-    # c1, c1_df, c1_max = check_total_calculation_sample(data_directory, check_total_cleared_demand_calculation, n=1000)
-    # c2, c2_df, c2_max = check_total_calculation_sample(data_directory, check_total_fixed_demand_calculation, n=1000)
+    c1, c1_df, c1_max = check_total_calculation_sample(data_directory, check_total_cleared_demand_calculation, n=1000)
+    c2, c2_df, c2_max = check_total_calculation_sample(data_directory, check_total_fixed_demand_calculation, n=1000)
 
     # Check values for each region
     c3, c3_df, c3_max = check_region_calculation_sample(data_directory, check_region_net_export_calculation, n=1000)
-    # c4, c4_df, c4_max = check_region_calculation_sample(data_directory, check_region_cleared_demand_calculation, n=1000)
-    # c5, c5_df, c5_max = check_region_calculation_sample(data_directory, check_region_fixed_demand_calculation, n=1000)
+    c4, c4_df, c4_max = check_region_calculation_sample(data_directory, check_region_cleared_demand_calculation, n=1000)
+    c5, c5_df, c5_max = check_region_calculation_sample(data_directory, check_region_fixed_demand_calculation, n=1000)
 
     # c6 = check_region_fixed_demand_calculation(cdata, 'VIC1')

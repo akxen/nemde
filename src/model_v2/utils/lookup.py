@@ -5,7 +5,7 @@ def convert_to_list(list_or_dict):
     """Convert list to dict or return input list"""
 
     if isinstance(list_or_dict, dict):
-        return list(list_or_dict)
+        return [list_or_dict]
     elif isinstance(list_or_dict, list):
         return list_or_dict
     else:
@@ -108,6 +108,22 @@ def get_trader_period_collection_attribute(data, trader_id, attribute, func):
     raise Exception('Attribute not found:', trader_id, attribute)
 
 
+def get_trader_quantity_band_attribute(data, trader_id, trade_type, attribute, func):
+    """Get trader quantity band attribute"""
+
+    # All traders
+    traders = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
+               .get('TraderPeriodCollection').get('TraderPeriod'))
+
+    for i in traders:
+        if i['@TraderID'] == trader_id:
+            for j in convert_to_list(i.get('TradeCollection').get('Trade')):
+                if j['@TradeType'] == trade_type:
+                    return func(j[attribute])
+
+    raise Exception('Attribute not found:', trader_id, trade_type, attribute)
+
+
 def get_trader_solution_attribute(data, trader_id, attribute, func, intervention='0'):
     """Get trader solution attribute"""
 
@@ -193,3 +209,19 @@ def get_interconnector_solution_attribute(data, interconnector_id, attribute, fu
             return func(i[attribute])
 
     raise Exception('Attribute not found:', interconnector_id, attribute, intervention)
+
+
+def get_trader_offer_index(data) -> list:
+    """Get tuples describing all offers made by traders"""
+
+    # All traders
+    traders = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
+               .get('TraderPeriodCollection').get('TraderPeriod'))
+
+    # Trader offers
+    out = []
+    for i in traders:
+        for j in convert_to_list(i.get('TradeCollection').get('Trade')):
+            out.append((i.get('@TraderID'), j.get('@TradeType')))
+
+    return out
