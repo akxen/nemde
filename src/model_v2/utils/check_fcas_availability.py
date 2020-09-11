@@ -63,6 +63,60 @@ def get_generator_effective_regulation_lower_max_available(data, trader_id):
     return min(max_avail, ramp_down_rate)
 
 
+def get_generator_effective_regulation_raise_enablement_max(data, trader_id):
+    """Get effective R5RE enablement max"""
+
+    # Offer enablement max
+    enablement_max = lookup.get_trader_quantity_band_attribute(data, trader_id, 'R5RE', '@EnablementMax', float)
+
+    # Upper AGC limit
+    agc_up_limit = lookup.get_trader_collection_initial_condition_attribute(data, trader_id, 'HMW', float)
+
+    return min([enablement_max, agc_up_limit])
+
+
+def get_generator_effective_regulation_raise_enablement_min(data, trader_id):
+    """Get effective R5RE enablement min"""
+
+    # Offer enablement min
+    enablement_min = lookup.get_trader_quantity_band_attribute(data, trader_id, 'R5RE', '@EnablementMin', float)
+
+    # Upper AGC limit
+    agc_down_limit = lookup.get_trader_collection_initial_condition_attribute(data, trader_id, 'LMW', float)
+
+    return max([enablement_min, agc_down_limit])
+
+
+def get_upper_slope_coefficient(data, trader_id, trade_type):
+    """Get upper slope coefficient"""
+
+    # FCAS trapezium parameters
+    enablement_max = lookup.get_trader_quantity_band_attribute(data, trader_id, trade_type, '@EnablementMax', float)
+    high_breakpoint = lookup.get_trader_quantity_band_attribute(data, trader_id, trade_type, '@HighBreakpoint', float)
+    max_avail = lookup.get_trader_quantity_band_attribute(data, trader_id, trade_type, '@MaxAvail', float)
+
+    # If MaxAvail is 0 then upper slope coefficient is undefined - return None
+    if max_avail == 0:
+        return None
+    else:
+        return (enablement_max - high_breakpoint) / max_avail
+
+
+def get_lower_slope_coefficient(data, trader_id, trade_type):
+    """Get lower slope coefficient"""
+
+    # FCAS trapezium parameters
+    enablement_min = lookup.get_trader_quantity_band_attribute(data, trader_id, trade_type, '@EnablementMin', float)
+    low_breakpoint = lookup.get_trader_quantity_band_attribute(data, trader_id, trade_type, '@LowBreakpoint', float)
+    max_avail = lookup.get_trader_quantity_band_attribute(data, trader_id, trade_type, '@MaxAvail', float)
+
+    # If MaxAvail is 0 then lower slope coefficient is undefined - return None
+    if max_avail == 0:
+        return None
+    else:
+        return (low_breakpoint - enablement_min) / max_avail
+
+
 def get_generator_regulation_raise_term_1(data, trader_id):
     """Get R5RE term 1 in FCAS availability calculation"""
 
@@ -72,14 +126,46 @@ def get_generator_regulation_raise_term_1(data, trader_id):
     return max_avail
 
 
+def get_generator_regulation_raise_term_2(data, trader_id):
+    """Get R5RE term 2 in FCAS availability calculation"""
+
+    # Term parameters
+    enablement_max = get_generator_effective_regulation_raise_enablement_max(data, trader_id)
+    energy_target = lookup.get_trader_solution_attribute(data, trader_id, '@R5RegTarget', float)
+    upper_slope_coefficient = get_upper_slope_coefficient(data, trader_id, 'R5RE')
+
+    # Undefined because max available is 0 - so max R5RE is 0
+    if upper_slope_coefficient is None:
+        return 0
+    else:
+        return (enablement_max - energy_target) / upper_slope_coefficient
+
+
+def get_generator_regulation_raise_term_3(data, trader_id):
+    """Get R5RE term 3 in FCAS availability calculation"""
+
+    # Term parameters
+    enablement_min = get_generator_effective_regulation_raise_enablement_min(data, trader_id)
+    energy_target = lookup.get_trader_solution_attribute(data, trader_id, '@R5RegTarget', float)
+    lower_slope_coefficient = get_lower_slope_coefficient(data, trader_id, 'R5RE')
+
+    # Undefined because max available is 0 - so max R5RE is 0
+    if lower_slope_coefficient is None:
+        return 0
+    else:
+        return (energy_target - enablement_min) / lower_slope_coefficient
+
+
 def get_generator_regulation_raise_availability(data, trader_id):
     """Get raise regulation availability"""
 
     # Terms
     term_1 = get_generator_regulation_raise_term_1(data, trader_id)
+    term_2 = get_generator_regulation_raise_term_2(data, trader_id)
+    term_3 = get_generator_regulation_raise_term_3(data, trader_id)
 
     # Compute minimum of all terms - yields FCAS availability
-    max_available = min([term_1])
+    max_available = min([term_1, term_2, term_3])
 
     return max_available
 
@@ -141,7 +227,7 @@ def get_trader_fcas_availability(data, trader_id, trade_type):
     # Trader type
     trader_type = lookup.get_trader_collection_attribute(data, trader_id, '@TraderType', str)
 
-    if trade_type == 'GENERATOR':
+    if trader_type == 'GENERATOR':
         if trade_type == 'R5RE':
             return get_generator_regulation_raise_availability(data, trader_id)
         elif trade_type == 'L5RE':
@@ -263,7 +349,8 @@ if __name__ == '__main__':
     cdata = json.loads(case_data_json)
 
     # Observed FCAS availability
-    df_o = get_observed_fcas_availability(fcas_directory, tmp_directory)
+    # df_o = get_observed_fcas_availability(fcas_directory, tmp_directory)
+    df_o = pd.read_pickle('tmp/fcas_availability.pickle')
 
     # Calculated FCAS availability
     fcas_avail, df_fcas_avail = get_calculated_fcas_availability_sample(nemde_directory, n=1)
