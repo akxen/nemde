@@ -681,6 +681,24 @@ def check_region_calculation_sample(data_dir, func, n=5):
     return out, df, max_abs_difference
 
 
+def get_values(data_dir, index, func, *args):
+    """Extract values from multiple dispatch intervals"""
+
+    # Container for output
+    out = {}
+    for day, interval in index:
+        # Case data in json format
+        data_json = loaders.load_dispatch_interval_json(data_dir, 2019, 10, day, interval)
+
+        # Get NEMDE model data as a Python dictionary
+        case_data = json.loads(data_json)
+
+        out[(day, interval)] = func(case_data, *args)
+
+    return out
+
+
+
 if __name__ == '__main__':
     # Directory containing case data
     data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
@@ -693,13 +711,21 @@ if __name__ == '__main__':
     # Get NEMDE model data as a Python dictionary
     cdata = json.loads(case_data_json)
 
-    # Check aggregate values for entire system
-    c1, c1_df, c1_max = check_total_calculation_sample(data_directory, check_total_cleared_demand_calculation, n=1000)
-    c2, c2_df, c2_max = check_total_calculation_sample(data_directory, check_total_fixed_demand_calculation, n=1000)
+    # # Check aggregate values for entire system
+    # c1, c1_df, c1_max = check_total_calculation_sample(data_directory, check_total_cleared_demand_calculation, n=1000)
+    # c2, c2_df, c2_max = check_total_calculation_sample(data_directory, check_total_fixed_demand_calculation, n=1000)
+    #
+    # # Check values for each region
+    c3, c3_df, c3_max = check_region_calculation_sample(data_directory, check_region_net_export_calculation, n=20)
+    # c4, c4_df, c4_max = check_region_calculation_sample(data_directory, check_region_cleared_demand_calculation, n=1000)
+    # c5, c5_df, c5_max = check_region_calculation_sample(data_directory, check_region_fixed_demand_calculation, n=1000)
 
-    # Check values for each region
-    c3, c3_df, c3_max = check_region_calculation_sample(data_directory, check_region_net_export_calculation, n=1000)
-    c4, c4_df, c4_max = check_region_calculation_sample(data_directory, check_region_cleared_demand_calculation, n=1000)
-    c5, c5_df, c5_max = check_region_calculation_sample(data_directory, check_region_fixed_demand_calculation, n=1000)
+    interval_index = list(set([i[:2] for i in c3_df.index.to_list()]))
+    c6 = get_values(data_directory, interval_index, lookup.get_interconnector_collection_initial_condition_attribute, 'T-V-MNSP1', 'InitialMW', float)
+    c7 = get_values(data_directory, interval_index, lookup.get_interconnector_solution_attribute, 'T-V-MNSP1', '@Flow', float)
 
-    # c6 = check_region_net_export_calculation(cdata, 'VIC1')
+    c6_df = pd.Series(c6).rename('InitialMW').rename_axis(['day', 'interval'])
+    c7_df = pd.Series(c7).rename('Flow').rename_axis(['day', 'interval'])
+
+    c3_df = c3_df.rename_axis(['day', 'interval', 'region'])
+    c3_df.join(c6_df).join(c7_df)
