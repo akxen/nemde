@@ -128,7 +128,17 @@ def get_initial_region_interconnector_loss(data, region_id) -> float:
 
 
 def get_initial_region_mnsp_loss_estimate(data, region_id) -> float:
-    """Get estimate of MNSP loss allocated to given region"""
+    """
+    Get estimate of MNSP loss allocated to given region
+
+    MLFs used to compute loss. MLF equation: MLF = 1 + (DeltaLoss / DeltaLoad) where load is varied at the connection
+    point. Must compute the load the connection point for the MNSP - this will be positive or negative (i.e. generation)
+    depending on the direction of flow over the interconnector.
+
+    From the MLF equation: DeltaLoss = (MLF - 1) x DeltaLoad. So need to compute the effective load at the connection
+    point in order to compute the loss. Note the loss may be positive or negative depending on the MLF and the effective
+    load at the connection point.
+    """
 
     # All interconnectors
     mnsps = get_mnsp_index(data)
@@ -142,8 +152,9 @@ def get_initial_region_mnsp_loss_estimate(data, region_id) -> float:
         if region_id not in [from_region, to_region]:
             continue
 
-        # Initial MW flow
+        # Initial MW and solution flow
         initial_mw = lookup.get_interconnector_collection_initial_condition_attribute(data, i, 'InitialMW', float)
+        flow = lookup.get_interconnector_solution_attribute(data, i, '@Flow', float)
 
         to_lf_export = lookup.get_interconnector_period_collection_attribute(data, i, '@ToRegionLFExport', float)
         to_lf_import = lookup.get_interconnector_period_collection_attribute(data, i, '@ToRegionLFImport', float)
@@ -162,37 +173,42 @@ def get_initial_region_mnsp_loss_estimate(data, region_id) -> float:
             # Total loss allocated to ToRegion
             mnsp_loss_share = 0
 
-        # FromRegion is exporting, ToRegion is importing
         if initial_mw >= 0:
-            if region_id == from_region:
-                export_flow = abs(initial_mw) + (mnsp_loss_share * loss)
-                mnsp_loss = export_flow * (1 - from_lf_export)
+            if from_region == region_id:
+                export_flow = initial_mw + (mnsp_loss_share * loss)
+                mnsp_loss = (from_lf_export - 1) * export_flow
+            elif to_region == region_id:
+                import_flow = initial_mw - ((1 - mnsp_loss_share) * loss)
 
-            elif region_id == to_region:
-                import_flow = abs(initial_mw) - ((1 - mnsp_loss_share) * loss)
-                mnsp_loss = import_flow * (1 - to_lf_import)
+                # Multiply by -1 because flow from MNSP connection point to ToRegion can be considered a negative load
+                # MLF describes how loss changes with an incremental change to load at the connection point. So when
+                # flow is positive (e.g. flow from TAS to VIC) then must consider a negative load (i.e. a generator)
+                # when computing MNSP losses.
+                mnsp_loss = (to_lf_import - 1) * import_flow * -1
 
             else:
                 raise Exception('Unexpected region:', region_id)
 
-        # FromRegion is importing, ToRegion is exporting
         else:
-            if region_id == from_region:
-                import_flow = abs(initial_mw) - (mnsp_loss_share * loss)
-                mnsp_loss = import_flow * (1 - from_lf_import)
+            if from_region == region_id:
+                # Flow is negative, so add the allocated MNSP loss to get the total import flow
+                import_flow = initial_mw + (mnsp_loss_share * loss)
 
-            elif region_id == to_region:
-                export_flow = abs(initial_mw) + ((1 - mnsp_loss_share) * loss)
-                mnsp_loss = export_flow * (1 - to_lf_export)
+                # Import flow is negative, so can be considered as generation at the connection point (negative load)
+                mnsp_loss = (from_lf_import - 1) * import_flow
+
+            elif to_region == region_id:
+                # Flow is negative, so subtract the allocated MNSP loss to get the total export flow
+                export_flow = initial_mw - ((1 - mnsp_loss_share) * loss)
+
+                # Export flow is negative. Multiply by -1 so can be considered as load at the connection point.
+                mnsp_loss = (to_lf_export - 1) * export_flow * -1
 
             else:
                 raise Exception('Unexpected region:', region_id)
 
-        # Not sure why, but seems need to multiply loss by -1 when considering negative flow
-        if initial_mw >= 0:
-            total += mnsp_loss
-        else:
-            total -= mnsp_loss
+        # Add to total MNSP loss allocated to a given region
+        total += mnsp_loss
 
     return total
 
@@ -270,7 +286,17 @@ def get_solution_region_interconnector_loss(data, region_id) -> float:
 
 
 def get_solution_region_mnsp_loss_estimate(data, region_id) -> float:
-    """Get estimate of MNSP loss allocated to given region"""
+    """
+    Get estimate of MNSP loss allocated to given region
+
+    MLFs used to compute loss. MLF equation: MLF = 1 + (DeltaLoss / DeltaLoad) where load is varied at the connection
+    point. Must compute the load the connection point for the MNSP - this will be positive or negative (i.e. generation)
+    depending on the direction of flow over the interconnector.
+
+    From the MLF equation: DeltaLoss = (MLF - 1) x DeltaLoad. So need to compute the effective load at the connection
+    point in order to compute the loss. Note the loss may be positive or negative depending on the MLF and the effective
+    load at the connection point.
+    """
 
     # All interconnectors
     mnsps = get_mnsp_index(data)
@@ -305,37 +331,42 @@ def get_solution_region_mnsp_loss_estimate(data, region_id) -> float:
             # Total loss allocated to ToRegion
             mnsp_loss_share = 0
 
-        # FromRegion is exporting, ToRegion is importing
         if flow >= 0:
-            if region_id == from_region:
-                export_flow = abs(flow) + (mnsp_loss_share * loss)
-                mnsp_loss = export_flow * (1 - from_lf_export)
+            if from_region == region_id:
+                export_flow = flow + (mnsp_loss_share * loss)
+                mnsp_loss = (from_lf_export - 1) * export_flow
+            elif to_region == region_id:
+                import_flow = flow - ((1 - mnsp_loss_share) * loss)
 
-            elif region_id == to_region:
-                import_flow = abs(flow) - ((1 - mnsp_loss_share) * loss)
-                mnsp_loss = import_flow * (1 - to_lf_import)
+                # Multiply by -1 because flow from MNSP connection point to ToRegion can be considered a negative load
+                # MLF describes how loss changes with an incremental change to load at the connection point. So when
+                # flow is positive (e.g. flow from TAS to VIC) then must consider a negative load (i.e. a generator)
+                # when computing MNSP losses.
+                mnsp_loss = (to_lf_import - 1) * import_flow * -1
 
             else:
                 raise Exception('Unexpected region:', region_id)
 
-        # FromRegion is importing, ToRegion is exporting
         else:
-            if region_id == from_region:
-                import_flow = abs(flow) - (mnsp_loss_share * loss)
-                mnsp_loss = import_flow * (1 - from_lf_import)
+            if from_region == region_id:
+                # Flow is negative, so add the allocated MNSP loss to get the total import flow
+                import_flow = flow + (mnsp_loss_share * loss)
 
-            elif region_id == to_region:
-                export_flow = abs(flow) + ((1 - mnsp_loss_share) * loss)
-                mnsp_loss = export_flow * (1 - to_lf_export)
+                # Import flow is negative, so can be considered as generation at the connection point (negative load)
+                mnsp_loss = (from_lf_import - 1) * import_flow
+
+            elif to_region == region_id:
+                # Flow is negative, so subtract the allocated MNSP loss to get the total export flow
+                export_flow = flow - ((1 - mnsp_loss_share) * loss)
+
+                # Export flow is negative. Multiply by -1 so can be considered as load at the connection point.
+                mnsp_loss = (to_lf_export - 1) * export_flow * -1
 
             else:
                 raise Exception('Unexpected region:', region_id)
 
-        # Not sure why, but seems need to multiply loss by -1 when considering negative flow
-        if flow >= 0:
-            total += mnsp_loss
-        else:
-            total -= mnsp_loss
+        # Add to total MNSP loss allocated to a given region
+        total += mnsp_loss
 
     return total
 
@@ -657,18 +688,18 @@ if __name__ == '__main__':
                                   'NEMDE', 'zipped')
 
     # Case data in json format
-    case_data_json = loaders.load_dispatch_interval_json(data_directory, 2019, 10, 1, 217)
+    case_data_json = loaders.load_dispatch_interval_json(data_directory, 2019, 10, 13, 11)
 
     # Get NEMDE model data as a Python dictionary
     cdata = json.loads(case_data_json)
 
     # Check aggregate values for entire system
-    c1, c1_df, c1_max = check_total_calculation_sample(data_directory, check_total_cleared_demand_calculation, n=1000)
-    c2, c2_df, c2_max = check_total_calculation_sample(data_directory, check_total_fixed_demand_calculation, n=1000)
+    # c1, c1_df, c1_max = check_total_calculation_sample(data_directory, check_total_cleared_demand_calculation, n=1000)
+    # c2, c2_df, c2_max = check_total_calculation_sample(data_directory, check_total_fixed_demand_calculation, n=1000)
 
     # Check values for each region
-    c3, c3_df, c3_max = check_region_calculation_sample(data_directory, check_region_net_export_calculation, n=1000)
-    c4, c4_df, c4_max = check_region_calculation_sample(data_directory, check_region_cleared_demand_calculation, n=1000)
+    # c3, c3_df, c3_max = check_region_calculation_sample(data_directory, check_region_net_export_calculation, n=1000)
+    # c4, c4_df, c4_max = check_region_calculation_sample(data_directory, check_region_cleared_demand_calculation, n=1000)
     c5, c5_df, c5_max = check_region_calculation_sample(data_directory, check_region_fixed_demand_calculation, n=1000)
 
-    # c6 = check_region_fixed_demand_calculation(cdata, 'VIC1')
+    # c6 = check_region_net_export_calculation(cdata, 'VIC1')
