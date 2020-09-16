@@ -22,7 +22,7 @@ def get_region_collection_attribute(data, region_id, attribute, func):
         if i['@RegionID'] == region_id:
             return func(i[attribute])
 
-    raise Exception('Attribute not found:', region_id, attribute)
+    raise LookupError('Attribute not found:', region_id, attribute)
 
 
 def get_region_collection_initial_condition_attribute(data, region_id, attribute, func):
@@ -37,7 +37,7 @@ def get_region_collection_initial_condition_attribute(data, region_id, attribute
                 if j['@InitialConditionID'] == attribute:
                     return func(j['@Value'])
 
-    raise Exception('Attribute not found:', region_id, attribute)
+    raise LookupError('Attribute not found:', region_id, attribute)
 
 
 def get_region_period_collection_attribute(data, region_id, attribute, func):
@@ -51,7 +51,7 @@ def get_region_period_collection_attribute(data, region_id, attribute, func):
         if i['@RegionID'] == region_id:
             return func(i[attribute])
 
-    raise Exception('Attribute not found:', region_id, attribute)
+    raise LookupError('Attribute not found:', region_id, attribute)
 
 
 def get_region_solution_attribute(data, region_id, attribute, func, intervention='0'):
@@ -63,7 +63,7 @@ def get_region_solution_attribute(data, region_id, attribute, func, intervention
         if (i['@RegionID'] == region_id) and (i['@Intervention'] == intervention):
             return func(i[attribute])
 
-    raise Exception('Attribute not found:', region_id, attribute)
+    raise LookupError('Attribute not found:', region_id, attribute)
 
 
 def get_trader_collection_attribute(data, trader_id, attribute, func):
@@ -76,7 +76,7 @@ def get_trader_collection_attribute(data, trader_id, attribute, func):
         if i['@TraderID'] == trader_id:
             return func(i[attribute])
 
-    raise Exception('Attribute not found:', trader_id, attribute)
+    raise LookupError('Attribute not found:', trader_id, attribute)
 
 
 def get_trader_collection_initial_condition_attribute(data, trader_id, attribute, func):
@@ -91,7 +91,7 @@ def get_trader_collection_initial_condition_attribute(data, trader_id, attribute
                 if j['@InitialConditionID'] == attribute:
                     return func(j['@Value'])
 
-    raise Exception('Attribute not found:', trader_id, attribute)
+    raise LookupError('Attribute not found:', trader_id, attribute)
 
 
 def get_trader_period_collection_attribute(data, trader_id, attribute, func):
@@ -105,7 +105,7 @@ def get_trader_period_collection_attribute(data, trader_id, attribute, func):
         if i['@TraderID'] == trader_id:
             return func(i[attribute])
 
-    raise Exception('Attribute not found:', trader_id, attribute)
+    raise LookupError('Attribute not found:', trader_id, attribute)
 
 
 def get_trader_quantity_band_attribute(data, trader_id, trade_type, attribute, func):
@@ -121,7 +121,7 @@ def get_trader_quantity_band_attribute(data, trader_id, trade_type, attribute, f
                 if j['@TradeType'] == trade_type:
                     return func(j[attribute])
 
-    raise Exception('Attribute not found:', trader_id, trade_type, attribute)
+    raise LookupError('Attribute not found:', trader_id, trade_type, attribute)
 
 
 def get_trader_solution_attribute(data, trader_id, attribute, func, intervention='0'):
@@ -134,7 +134,7 @@ def get_trader_solution_attribute(data, trader_id, attribute, func, intervention
         if (i['@TraderID'] == trader_id) and (i['@Intervention'] == intervention):
             return func(i[attribute])
 
-    raise Exception('Attribute not found:', trader_id, attribute, intervention)
+    raise LookupError('Attribute not found:', trader_id, attribute, intervention)
 
 
 def get_interconnector_collection_attribute(data, interconnector_id, attribute, func):
@@ -148,7 +148,7 @@ def get_interconnector_collection_attribute(data, interconnector_id, attribute, 
         if i['@InterconnectorID'] == interconnector_id:
             return func(i[attribute])
 
-    raise Exception('Attribute not found:', interconnector_id, attribute, func)
+    raise LookupError('Attribute not found:', interconnector_id, attribute, func)
 
 
 def get_interconnector_collection_initial_condition_attribute(data, interconnector_id, attribute, func):
@@ -166,7 +166,7 @@ def get_interconnector_collection_initial_condition_attribute(data, interconnect
                 if j['@InitialConditionID'] == attribute:
                     return func(j['@Value'])
 
-    raise Exception('Attribute not found:', interconnector_id, attribute, func)
+    raise LookupError('Attribute not found:', interconnector_id, attribute, func)
 
 
 def get_interconnector_period_collection_attribute(data, interconnector_id, attribute, func):
@@ -180,13 +180,12 @@ def get_interconnector_period_collection_attribute(data, interconnector_id, attr
         if i['@InterconnectorID'] == interconnector_id:
             return func(i[attribute])
 
-    raise Exception('Attribute not found:', interconnector_id, attribute, func)
+    raise LookupError('Attribute not found:', interconnector_id, attribute, func)
 
 
 def get_interconnector_loss_model_attribute(data, interconnector_id, attribute, func):
     """Get interconnector loss model attribute"""
 
-    # NEMSPDCaseFile.NemSpdInputs.InterconnectorCollection.Interconnector[0].LossModelCollection.LossModel.@LossShare
     # All interconnectors
     interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('InterconnectorCollection')
                        .get('Interconnector'))
@@ -208,7 +207,7 @@ def get_interconnector_solution_attribute(data, interconnector_id, attribute, fu
         if (i['@InterconnectorID'] == interconnector_id) and (i['@Intervention'] == intervention):
             return func(i[attribute])
 
-    raise Exception('Attribute not found:', interconnector_id, attribute, intervention)
+    raise LookupError('Attribute not found:', interconnector_id, attribute, intervention)
 
 
 def get_trader_offer_index(data) -> list:
