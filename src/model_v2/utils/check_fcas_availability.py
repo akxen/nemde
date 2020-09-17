@@ -889,7 +889,7 @@ def check_fcas_availability_status(data):
         return calculated_is_available == observed_is_available
 
     # Compare calculated and observed availabilities
-    df['comparison'] = df_s.apply(compare_availabilities, axis=1)
+    df['comparison'] = df.apply(compare_availabilities, axis=1)
 
     # Offers where a difference between calculated and observed values exists
     difference = df.loc[~df['comparison'], :].index.tolist()
@@ -899,7 +899,56 @@ def check_fcas_availability_status(data):
 
 def check_fcas_availability_status_sample(data_dir, n=5):
     """Check FCAS availability for a random sample of dispatch intervals"""
-    pass
+
+    print('Checking FCAS availability status')
+
+    # Seed random number generator to get reproducable results
+    np.random.seed(10)
+
+    # Population of dispatch intervals for a given month
+    population = [(i, j) for i in range(1, 30) for j in range(1, 289)]
+    population_map = {i: j for i, j in enumerate(population)}
+
+    # Random sample of dispatch intervals
+    sample_keys = np.random.choice(list(population_map.keys()), n, replace=False)
+    sample = [population_map[i] for i in sample_keys]
+
+    # Container for model output
+    out = {}
+
+    # Placeholder for max difference observed
+    max_difference = 0
+    max_difference_interval = None
+
+    # Compute fixed demand for each interval
+    for i, (day, interval) in enumerate(sample):
+        print(f'{i + 1}/{len(sample)}')
+
+        # Case data in json format
+        data_json = loaders.load_dispatch_interval_json(data_dir, 2019, 10, day, interval)
+
+        # Get NEMDE model data as a Python dictionary
+        case_data = json.loads(data_json)
+
+        # Check FCAS availability for dispatch interval - find all generators for which a difference exists
+        _, _, difference = check_fcas_availability_status(case_data)
+
+        # Append to container
+        out[(day, interval)] = difference
+
+        # Update max difference
+        if len(difference) > max_difference:
+            max_difference = len(difference)
+            max_difference_interval = (day, interval)
+
+        # Periodically print max absolute difference observed
+        if (i + 1) % 10 == 0:
+            print('Max number of intervals with difference:', max_difference_interval, max_difference)
+
+    # All intervals with a difference
+    intervals_with_difference = {k: v for k, v in out.items() if len(v) > 0}
+
+    return out, intervals_with_difference
 
 
 if __name__ == '__main__':
@@ -923,3 +972,6 @@ if __name__ == '__main__':
 
     # FCAS availability comparison
     status, df_s, diff = check_fcas_availability_status(cdata)
+
+    # Check FCAS status over a random sample of dispatch intervals
+    fcas_status, fcas_status_difference = check_fcas_availability_status_sample(nemde_directory, n=1000)
