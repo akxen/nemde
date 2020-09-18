@@ -1157,14 +1157,15 @@ def get_case_solution(data) -> dict:
             for k, v in data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('CaseSolution').items()}
 
 
-def get_period_solution(data) -> dict:
+def get_period_solution(data, intervention='0') -> dict:
     """Get period solution"""
 
     # Keys that should be converted to type string. All other keys to be converted to type float.
     str_keys = ['@PeriodID', '@Intervention', '@SwitchRunBestStatus', '@SolverStatus', '@NPLStatus']
 
     return {k: str(v) if k in str_keys else float(v)
-            for k, v in data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('PeriodSolution').items()}
+            for i in convert_to_list(data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('PeriodSolution'))
+            for k, v in i.items() if i['@Intervention'] == intervention}
 
 
 def parse_case_data_json(data) -> dict:
@@ -1195,8 +1196,8 @@ def parse_case_data_json(data) -> dict:
         'S_TRADER_OFFERS': get_trader_offer_index(data_dict),
         'S_TRADER_ENERGY_OFFERS': get_trader_energy_offer_index(data_dict),
         'S_TRADER_FCAS_OFFERS': get_trader_fcas_offer_index(data_dict),
-        'S_TRADER_FCAS_UNAVAILABLE_OFFERS': get_trader_fcas_unavailable_offers_index(data_dict),
-        'S_TRADER_FCAS_AVAILABLE_OFFERS': get_trader_fcas_available_offers_index(data_dict),
+        # 'S_TRADER_FCAS_UNAVAILABLE_OFFERS': get_trader_fcas_unavailable_offers_index(data_dict),
+        # 'S_TRADER_FCAS_AVAILABLE_OFFERS': get_trader_fcas_available_offers_index(data_dict),
         'S_TRADER_FCAS_R5RE_OFFERS': get_trader_fcas_filtered_offers_index(data_dict, 'R5RE'),
         'S_TRADER_FCAS_R6SE_OFFERS': get_trader_fcas_filtered_offers_index(data_dict, 'R6SE'),
         'S_TRADER_FCAS_R60S_OFFERS': get_trader_fcas_filtered_offers_index(data_dict, 'R60S'),
@@ -1295,8 +1296,8 @@ def parse_case_data_json(data) -> dict:
         'preprocessed': {
             'GC_LHS_TERMS': get_generic_constraint_lhs_terms(data_dict),
             'FCAS_TRAPEZIUM': get_trader_fcas_trapezium(data_dict),
-            'FCAS_TRAPEZIUM_SCALED': get_trader_fcas_trapezium_scaled(data_dict),
-            'FCAS_AVAILABILITY': get_trader_fcas_availability(data_dict)
+            # 'FCAS_TRAPEZIUM_SCALED': get_trader_fcas_trapezium_scaled(data_dict),
+            # 'FCAS_AVAILABILITY': get_trader_fcas_availability(data_dict)
         },
         'solution': {
             'traders': get_trader_solution(data_dict),  # TODO: check DUID is unique

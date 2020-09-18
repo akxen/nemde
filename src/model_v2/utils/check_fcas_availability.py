@@ -556,10 +556,10 @@ def get_generator_regulation_raise_term_2(data, trader_id, trade_type):
     }
 
     # FCAS availability
-    fcas_availability = data_handler.get_trader_fcas_availability(data)
+    fcas_availability = get_trader_fcas_availability_status(data, trader_id, trade_type)
 
     # No constraint constructed if contingency FCAS unavailable
-    if not fcas_availability[(trader_id, trade_type)]:
+    if not fcas_availability:
         return None
 
     # Parameters
@@ -567,10 +567,6 @@ def get_generator_regulation_raise_term_2(data, trader_id, trade_type):
     energy_target = lookup.get_trader_solution_attribute(data, trader_id, '@EnergyTarget', float)
     upper_slope_coefficient = get_upper_slope_coefficient(data, trader_id, trade_type)
     contingency_target = lookup.get_trader_solution_attribute(data, trader_id, fcas_map[trade_type], float)
-
-    # Ignore limit if slope coefficient = 0
-    if upper_slope_coefficient == 0:
-        return None
 
     return enablement_max - energy_target - (upper_slope_coefficient * contingency_target)
 
@@ -625,6 +621,13 @@ def get_generator_regulation_raise_term_5(data, trader_id):
 def get_generator_regulation_raise_availability(data, trader_id):
     """Get raise regulation availability"""
 
+    # Check if service is available
+    fcas_status = get_trader_fcas_availability_status(data, trader_id, 'R5RE')
+
+    # Return 0 if service is unavailable
+    if not fcas_status:
+        return 0
+
     # All trader offers
     offers = lookup.get_trader_offer_index(data)
 
@@ -644,6 +647,7 @@ def get_generator_regulation_raise_availability(data, trader_id):
 
     # All terms
     terms = [term_1, term_3, term_4, term_5] + contingency_fcas_terms
+    # terms = [term_1] + contingency_fcas_terms
 
     # Compute minimum of all terms - yields FCAS availability
     max_available = min([i for i in terms if i is not None])
@@ -797,7 +801,7 @@ def check_fcas_availability(calculated, observed):
     df_1 = df_1.rename_axis(['DISPATCHINTERVAL', 'DUID'])
 
     # Join observed FCAS availability
-    df_2 = df_1.join(observed.loc[(slice(None), slice(None), '0'), :], how='left')
+    df_2 = df_1.join(observed.loc[(slice(None), slice(None), '1'), :], how='left')
 
     # Calculated and observed FCAS availability labels
     labels = [('R5RE', 'RAISEREGACTUALAVAILABILITY')]
@@ -964,14 +968,28 @@ if __name__ == '__main__':
     tmp_directory = os.path.join(os.path.dirname(__file__), 'tmp')
 
     # Case data in json format
-    case_data_json = loaders.load_dispatch_interval_json(nemde_directory, 2019, 10, 10, 1)
+    case_data_json = loaders.load_dispatch_interval_json(nemde_directory, 2019, 10, 19, 131)
 
     # Get NEMDE model data as a Python dictionary
     cdata = json.loads(case_data_json)
     cdata_parsed = data_handler.parse_case_data_json(case_data_json)
 
+    # with open('example.json', 'w') as f:
+    #     cdata['NEMSPDCaseFile']['NemSpdInputs']['ConstraintScadaDataCollection'] = {}
+    #     json.dump(cdata, f)
+
     # FCAS availability comparison
     status, df_s, diff = check_fcas_availability_status(cdata)
 
     # Check FCAS status over a random sample of dispatch intervals
-    fcas_status, fcas_status_difference = check_fcas_availability_status_sample(nemde_directory, n=1000)
+    # fcas_status_sample, fcas_status_sample_difference = check_fcas_availability_status_sample(nemde_directory, n=1000)
+
+    fcas_calculated, df_fcas_calculated = get_calculated_fcas_availability_sample(nemde_directory, n=1)
+
+    # df_fcas_observed = get_observed_fcas_availability(fcas_directory, tmp_directory)
+    df_fcas_observed = pd.read_pickle('tmp/fcas_availability.pickle')
+
+    df_fcas_check, fcas_check_max_difference = check_fcas_availability(df_fcas_calculated, df_fcas_observed)
+    print(df_fcas_check.abs().sort_values(by='R5RE', ascending=False))
+
+    c1 = get_generator_regulation_raise_availability(cdata, 'TUNGATIN')

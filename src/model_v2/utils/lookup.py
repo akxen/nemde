@@ -54,7 +54,7 @@ def get_region_period_collection_attribute(data, region_id, attribute, func):
     raise LookupError('Attribute not found:', region_id, attribute)
 
 
-def get_region_solution_attribute(data, region_id, attribute, func, intervention='0'):
+def get_region_solution_attribute(data, region_id, attribute, func, intervention='1'):
     """Extract region solution attribute"""
 
     # All regions
@@ -124,7 +124,7 @@ def get_trader_quantity_band_attribute(data, trader_id, trade_type, attribute, f
     raise LookupError('Attribute not found:', trader_id, trade_type, attribute)
 
 
-def get_trader_solution_attribute(data, trader_id, attribute, func, intervention='0'):
+def get_trader_solution_attribute(data, trader_id, attribute, func, intervention='1'):
     """Get trader solution attribute"""
 
     # All traders
@@ -197,7 +197,7 @@ def get_interconnector_loss_model_attribute(data, interconnector_id, attribute, 
     raise Exception('Attribute not found:', interconnector_id, attribute)
 
 
-def get_interconnector_solution_attribute(data, interconnector_id, attribute, func, intervention='0'):
+def get_interconnector_solution_attribute(data, interconnector_id, attribute, func, intervention='1'):
     """Get interconnector solution attribute"""
 
     # All interconnectors
