@@ -536,17 +536,17 @@ def get_lower_slope_coefficient(data, trader_id, trade_type):
         return (low_breakpoint - enablement_min) / max_avail
 
 
-def get_generator_regulation_raise_term_1(data, trader_id):
+def get_generator_regulation_raise_term_1(data, trader_id, intervention):
     """Get R5RE term 1 in FCAS availability calculation"""
 
     # Parameters
     joint_ramp_raise_max = get_generator_joint_ramp_raise_max(data, trader_id)
-    energy_target = lookup.get_trader_solution_attribute(data, trader_id, '@EnergyTarget', float)
+    energy_target = lookup.get_trader_solution_attribute(data, trader_id, '@EnergyTarget', float, intervention)
 
     return joint_ramp_raise_max - energy_target
 
 
-def get_generator_regulation_raise_term_2(data, trader_id, trade_type):
+def get_generator_regulation_raise_term_2(data, trader_id, trade_type, intervention):
     """Get R5RE term 2 in FCAS availability calculation"""
 
     # Map between FCAS keys
@@ -564,19 +564,19 @@ def get_generator_regulation_raise_term_2(data, trader_id, trade_type):
 
     # Parameters
     enablement_max = lookup.get_trader_quantity_band_attribute(data, trader_id, trade_type, '@EnablementMax', float)
-    energy_target = lookup.get_trader_solution_attribute(data, trader_id, '@EnergyTarget', float)
+    energy_target = lookup.get_trader_solution_attribute(data, trader_id, '@EnergyTarget', float, intervention)
     upper_slope_coefficient = get_upper_slope_coefficient(data, trader_id, trade_type)
-    contingency_target = lookup.get_trader_solution_attribute(data, trader_id, fcas_map[trade_type], float)
+    fcas_target = lookup.get_trader_solution_attribute(data, trader_id, fcas_map[trade_type], float, intervention)
 
-    return enablement_max - energy_target - (upper_slope_coefficient * contingency_target)
+    return enablement_max - energy_target - (upper_slope_coefficient * fcas_target)
 
 
-def get_generator_regulation_raise_term_3(data, trader_id):
+def get_generator_regulation_raise_term_3(data, trader_id, intervention):
     """Get R5RE term 3 in FCAS availability calculation"""
 
     # Term parameters
     enablement_max = get_generator_effective_regulation_raise_enablement_max(data, trader_id)
-    energy_target = lookup.get_trader_solution_attribute(data, trader_id, '@EnergyTarget', float)
+    energy_target = lookup.get_trader_solution_attribute(data, trader_id, '@EnergyTarget', float, intervention)
     upper_slope_coefficient = get_upper_slope_coefficient(data, trader_id, 'R5RE')
 
     # Ignore limit if slope coefficient = 0
@@ -590,12 +590,12 @@ def get_generator_regulation_raise_term_3(data, trader_id):
         return (enablement_max - energy_target) / upper_slope_coefficient
 
 
-def get_generator_regulation_raise_term_4(data, trader_id):
+def get_generator_regulation_raise_term_4(data, trader_id, intervention):
     """Get R5RE term 4 in FCAS availability calculation"""
 
     # Term parameters
     enablement_min = get_generator_effective_regulation_raise_enablement_min(data, trader_id)
-    energy_target = lookup.get_trader_solution_attribute(data, trader_id, '@EnergyTarget', float)
+    energy_target = lookup.get_trader_solution_attribute(data, trader_id, '@EnergyTarget', float, intervention)
     lower_slope_coefficient = get_lower_slope_coefficient(data, trader_id, 'R5RE')
 
     # Ignore limit if slope coefficient = 0
@@ -618,7 +618,7 @@ def get_generator_regulation_raise_term_5(data, trader_id):
     return max_avail
 
 
-def get_generator_regulation_raise_availability(data, trader_id):
+def get_generator_regulation_raise_availability(data, trader_id, intervention):
     """Get raise regulation availability"""
 
     # Check if service is available
@@ -632,22 +632,21 @@ def get_generator_regulation_raise_availability(data, trader_id):
     offers = lookup.get_trader_offer_index(data)
 
     # Terms
-    term_1 = get_generator_regulation_raise_term_1(data, trader_id)
+    term_1 = get_generator_regulation_raise_term_1(data, trader_id, intervention)
 
     # Container for contingency FCAS terms
     contingency_fcas_terms = []
     for i in ['R6SE', 'R60S', 'R5MI', 'L6SE', 'L60S', 'L5MI']:
         # Check if contingency offer made by generator
         if (trader_id, i) in offers:
-            contingency_fcas_terms.append(get_generator_regulation_raise_term_2(data, trader_id, i))
+            contingency_fcas_terms.append(get_generator_regulation_raise_term_2(data, trader_id, i, intervention))
 
-    term_3 = get_generator_regulation_raise_term_3(data, trader_id)
-    term_4 = get_generator_regulation_raise_term_4(data, trader_id)
+    term_3 = get_generator_regulation_raise_term_3(data, trader_id, intervention)
+    term_4 = get_generator_regulation_raise_term_4(data, trader_id, intervention)
     term_5 = get_generator_regulation_raise_term_5(data, trader_id)
 
     # All terms
     terms = [term_1, term_3, term_4, term_5] + contingency_fcas_terms
-    # terms = [term_1] + contingency_fcas_terms
 
     # Compute minimum of all terms - yields FCAS availability
     max_available = min([i for i in terms if i is not None])
@@ -706,7 +705,7 @@ def get_load_contingency_lower_availability(data, trader_id, trade_type):
     pass
 
 
-def get_trader_fcas_availability(data, trader_id, trade_type):
+def get_trader_fcas_availability(data, trader_id, trade_type, intervention):
     """Compute FCAS availability for a given trade type"""
 
     # Trader type
@@ -714,7 +713,7 @@ def get_trader_fcas_availability(data, trader_id, trade_type):
 
     if trader_type == 'GENERATOR':
         if trade_type == 'R5RE':
-            return get_generator_regulation_raise_availability(data, trader_id)
+            return get_generator_regulation_raise_availability(data, trader_id, intervention)
         elif trade_type == 'L5RE':
             return get_generator_regulation_lower_availability(data, trader_id)
         elif trade_type in ['R6SE', 'R60S', 'R5MI']:
@@ -740,8 +739,59 @@ def get_trader_fcas_availability(data, trader_id, trade_type):
         raise Exception(f'Unexpected trader type: {trader_id} {trader_type} {trader_type}')
 
 
-def get_calculated_fcas_availability_sample(data_dir, n=5):
-    """Compute FCAS availability for all traders over a random sample of dispatch intervals"""
+def check_fcas_availability(data, observed, trade_type):
+    """Check FCAS availability with observed values"""
+
+    # Case ID - corresponds to dispatch interval ID
+    case_id = lookup.get_case_attribute(data, '@CaseID', str)
+
+    # All trader FCAS offers
+    trader_offers = lookup.get_trader_offer_index(data)
+
+    # Check if a intervention pricing run occurred
+    intervention_flag = lookup.get_case_attribute(data, '@Intervention', str)
+
+    # TODO: Need to abstract intervention flag status
+    # Intervention flag is '0' if no pricing run occurs. '1'=physical run, '0'=pricing run
+    if intervention_flag == 'False':
+        intervention = '0'
+    else:
+        intervention = '1'
+
+    # Mapping between trade type and trader solution attribute
+    solution_map = {'R5RE': '@R5RegTarget'}
+
+    out = {}
+    for i, j in trader_offers:
+        if j == trade_type:
+            out[(case_id, i, j)] = {
+                'calculated': get_trader_fcas_availability(data, i, j, intervention),
+                'solution': lookup.get_trader_solution_attribute(data, i, solution_map[j], float, intervention)
+            }
+
+    # Calculated FCAS availability
+    df_1 = pd.DataFrame(out).T.rename_axis(['DISPATCHINTERVAL', 'DUID', 'TRADETYPE'])
+
+    # Mapping between trade types and calculated FCAS availability column names
+    availability_map = {'R5RE': 'RAISEREGACTUALAVAILABILITY'}
+    flag_map = {'R5RE': 'RAISEREGFLAGS'}
+
+    # Columns from observed FCAS target DataFrame to be retained
+    columns = [availability_map[trade_type], flag_map[trade_type]]
+
+    # Join calculated and observed values in single DataFrame
+    df_2 = df_1.join(observed.loc[(case_id, slice(None), intervention), columns])
+
+    # Compute difference
+    df_2['difference'] = df_2['calculated'] - df_2[availability_map[trade_type]]
+    df_2['abs_difference'] = df_2['difference'].abs()
+    df_2 = df_2.sort_values(by='abs_difference', ascending=False)
+
+    return df_2
+
+
+def check_fcas_availability_sample(data_dir, observed, trade_type, n=5):
+    """Check FCAS availability for random sample of dispatch intervals"""
 
     # Seed random number generator to get reproducable results
     np.random.seed(10)
@@ -755,11 +805,11 @@ def get_calculated_fcas_availability_sample(data_dir, n=5):
     sample = [population_map[i] for i in sample_keys]
 
     # Container for model output
-    out = {}
+    out = []
 
     # Compute fixed demand for each interval
     for i, (day, interval) in enumerate(sample):
-        print(f'{i + 1}/{len(sample)}')
+        print(f'{i + 1}/{len(sample)}: ({day}, {interval})')
 
         # Case data in json format
         data_json = loaders.load_dispatch_interval_json(data_dir, 2019, 10, day, interval)
@@ -770,49 +820,16 @@ def get_calculated_fcas_availability_sample(data_dir, n=5):
         # Dispatch interval
         dispatch_interval = f'{2019}{10:02}{day:02}{interval:03}'
 
-        # All trader FCAS offers
-        trader_offers = lookup.get_trader_offer_index(data)
+        # Chek FCAS availability for a given dispatch interval
+        df = check_fcas_availability(data, observed, trade_type)
 
-        # Check FCAS availability for each trader
-        for trader_id, trade_type in trader_offers:
-            # if trade_type not in ['L6SE', 'L60S', 'L5MI', 'L5RE', 'R6SE', 'R60S', 'R5MI', 'R5RE']:
-            if trade_type not in ['R5RE']:
-                continue
+        # Append to main container
+        out.append(df)
 
-            # FCAS availability calculation
-            fcas_availability = {
-                (dispatch_interval, trader_id, trade_type): get_trader_fcas_availability(data, trader_id, trade_type)
-            }
+    # Concatenate results for all dispatch intervals
+    df_c = pd.concat(out)
 
-            # Append to main container
-            out = {**out, **fcas_availability}
-
-    # Convert to pandas Series
-    df = pd.Series(out)
-
-    return out, df
-
-
-def check_fcas_availability(calculated, observed):
-    """Check FCAS availability"""
-
-    # Re-arrange calculated FCAS availability frame
-    df_1 = calculated.unstack()
-    df_1 = df_1.rename_axis(['DISPATCHINTERVAL', 'DUID'])
-
-    # Join observed FCAS availability
-    df_2 = df_1.join(observed.loc[(slice(None), slice(None), '1'), :], how='left')
-
-    # Calculated and observed FCAS availability labels
-    labels = [('R5RE', 'RAISEREGACTUALAVAILABILITY')]
-
-    # Difference
-    difference = pd.concat([df_2[i].subtract(df_2[j]).rename(i) for i, j in labels], axis=1)
-
-    # Compute max difference
-    max_difference = difference.abs().max()
-
-    return difference, max_difference
+    return df_c
 
 
 def check_trader_fcas_trapezium(data, trader_id, trade_type, show=False):
@@ -926,7 +943,7 @@ def check_fcas_availability_status_sample(data_dir, n=5):
 
     # Compute fixed demand for each interval
     for i, (day, interval) in enumerate(sample):
-        print(f'{i + 1}/{len(sample)}')
+        print(f'{i + 1}/{len(sample)}: ({day}, {interval})')
 
         # Case data in json format
         data_json = loaders.load_dispatch_interval_json(data_dir, 2019, 10, day, interval)
@@ -984,12 +1001,8 @@ if __name__ == '__main__':
     # Check FCAS status over a random sample of dispatch intervals
     # fcas_status_sample, fcas_status_sample_difference = check_fcas_availability_status_sample(nemde_directory, n=1000)
 
-    fcas_calculated, df_fcas_calculated = get_calculated_fcas_availability_sample(nemde_directory, n=1)
-
     # df_fcas_observed = get_observed_fcas_availability(fcas_directory, tmp_directory)
     df_fcas_observed = pd.read_pickle('tmp/fcas_availability.pickle')
 
-    df_fcas_check, fcas_check_max_difference = check_fcas_availability(df_fcas_calculated, df_fcas_observed)
-    print(df_fcas_check.abs().sort_values(by='R5RE', ascending=False))
-
-    c1 = get_generator_regulation_raise_availability(cdata, 'TUNGATIN')
+    df_a1 = check_fcas_availability(cdata, df_fcas_observed, 'R5RE')
+    df_a2 = check_fcas_availability_sample(nemde_directory, df_fcas_observed, 'R5RE', n=100)

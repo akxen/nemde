@@ -12,6 +12,12 @@ def convert_to_list(list_or_dict):
         raise Exception('Unexpected type:', type(list_or_dict), list_or_dict)
 
 
+def get_case_attribute(data, attribute, func):
+    """Get case attribute"""
+
+    return func(data['NEMSPDCaseFile']['NemSpdInputs']['Case'][attribute])
+
+
 def get_region_collection_attribute(data, region_id, attribute, func):
     """Get region collection attribute"""
 
