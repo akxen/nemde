@@ -828,14 +828,75 @@ def get_generator_regulation_lower_availability(data, trader_id, intervention) -
     return max([0, max_available])
 
 
-def get_generator_contingency_raise_availability(data, trader_id, trade_type):
+def get_generator_contingency_raise_availability_term_1(data, trader_id, trade_type, intervention):
+    """Get generator contingency raise term 1"""
+
+    # Parameters
+    upper_slope_coefficient = get_upper_slope_coefficient(data, trader_id, trade_type)
+
+    if upper_slope_coefficient == 0:
+        return None
+
+    enablement_max = lookup.get_trader_quantity_band_attribute(data, trader_id, trade_type, '@EnablementMax', float)
+    reg_target = lookup.get_trader_solution_attribute(data, trader_id, '@R5RegTarget', float, intervention)
+    energy_target = lookup.get_trader_solution_attribute(data, trader_id, '@EnergyTarget', float, intervention)
+
+    # Only have UIGF for semi-dispatchable plant
+    try:
+        uigf = lookup.get_trader_period_collection_attribute(data, trader_id, '@UIGF', float)
+    except LookupError:
+        uigf = None
+
+    effective_enablement_max = min([i for i in [enablement_max, uigf] if i is not None])
+
+    return (effective_enablement_max - reg_target - energy_target) / upper_slope_coefficient
+
+
+def get_generator_contingency_raise_availability_term_2(data, trader_id, trade_type, intervention):
+    """Get generator contingency raise term 2"""
+
+    # Parameters
+    lower_slope_coefficient = get_lower_slope_coefficient(data, trader_id, trade_type)
+
+    if lower_slope_coefficient == 0:
+        return None
+
+    enablement_min = lookup.get_trader_quantity_band_attribute(data, trader_id, trade_type, '@EnablementMin', float)
+    reg_target = lookup.get_trader_solution_attribute(data, trader_id, '@L5RegTarget', float, intervention)
+    energy_target = lookup.get_trader_solution_attribute(data, trader_id, '@EnergyTarget', float, intervention)
+
+    return (energy_target - reg_target - enablement_min) / lower_slope_coefficient
+
+
+def get_generator_contingency_raise_availability_term_3(data, trader_id, trade_type):
+    """Get generator contingency raise term 2"""
+
+    return lookup.get_trader_quantity_band_attribute(data, trader_id, trade_type, '@MaxAvail', float)
+
+
+def get_generator_contingency_fcas_availability(data, trader_id, trade_type, intervention) -> float:
     """Get FCAS availability for contingency raise service"""
-    pass
 
+    # Check if service is available
+    fcas_status = get_trader_fcas_availability_status(data, trader_id, trade_type)
 
-def get_generator_contingency_lower_availability(data, trader_id, trade_type):
-    """Get FCAS availability for contingency lower service"""
-    pass
+    # Return 0 if service is unavailable
+    if not fcas_status:
+        return 0
+
+    # Terms
+    term_1 = get_generator_contingency_raise_availability_term_1(data, trader_id, trade_type, intervention)
+    term_2 = get_generator_contingency_raise_availability_term_2(data, trader_id, trade_type, intervention)
+    term_3 = get_generator_contingency_raise_availability_term_3(data, trader_id, trade_type)
+
+    # All terms in a single list
+    terms = [term_1, term_2, term_3]
+
+    # Compute max available
+    max_available = min([i for i in terms if i is not None])
+
+    # Ensure max available >= 0
+    return max([0, max_available])
 
 
 def get_load_regulation_raise_availability(data, trader_id):
@@ -869,10 +930,8 @@ def get_trader_fcas_availability(data, trader_id, trade_type, intervention):
             return get_generator_regulation_raise_availability(data, trader_id, intervention)
         elif trade_type == 'L5RE':
             return get_generator_regulation_lower_availability(data, trader_id, intervention)
-        elif trade_type in ['R6SE', 'R60S', 'R5MI']:
-            return get_generator_contingency_raise_availability(data, trader_id, trade_type)
-        elif trade_type in ['L6SE', 'L60S', 'L5MI']:
-            return get_generator_contingency_lower_availability(data, trader_id, trade_type)
+        elif trade_type in ['R6SE', 'R60S', 'R5MI', 'L6SE', 'L60S', 'L5MI']:
+            return get_generator_contingency_fcas_availability(data, trader_id, trade_type, intervention)
         else:
             raise Exception(f'Unexpected trade type: {trader_id} {trade_type}')
 
@@ -912,7 +971,16 @@ def check_fcas_availability(data, observed, trade_type):
         intervention = '1'
 
     # Mapping between trade type and trader solution attribute
-    solution_map = {'R5RE': '@R5RegTarget', 'L5RE': '@L5RegTarget'}
+    solution_map = {
+        'R5RE': '@R5RegTarget',
+        'L5RE': '@L5RegTarget',
+        'R6SE': '@R6Target',
+        'R60S': '@R60Target',
+        'R5MI': '@R5Target',
+        'L6SE': '@L6Target',
+        'L60S': '@L60Target',
+        'L5MI': '@L5Target',
+    }
 
     out = {}
     for i, j in trader_offers:
@@ -927,8 +995,27 @@ def check_fcas_availability(data, observed, trade_type):
     df_1 = pd.DataFrame(out).T.rename_axis(['DISPATCHINTERVAL', 'DUID', 'TRADETYPE'])
 
     # Mapping between trade types and calculated FCAS availability column names
-    availability_map = {'R5RE': 'RAISEREGACTUALAVAILABILITY', 'L5RE': 'LOWERREGACTUALAVAILABILITY'}
-    flag_map = {'R5RE': 'RAISEREGFLAGS', 'L5RE': 'LOWERREGFLAGS'}
+    availability_map = {
+        'R5RE': 'RAISEREGACTUALAVAILABILITY',
+        'L5RE': 'LOWERREGACTUALAVAILABILITY',
+        'R6SE': 'RAISE6SECACTUALAVAILABILITY',
+        'R60S': 'RAISE60SECACTUALAVAILABILITY',
+        'R5MI': 'RAISE5MINACTUALAVAILABILITY',
+        'L6SE': 'LOWER6SECACTUALAVAILABILITY',
+        'L60S': 'LOWER60SECACTUALAVAILABILITY',
+        'L5MI': 'LOWER5MINACTUALAVAILABILITY',
+    }
+
+    flag_map = {
+        'R5RE': 'RAISEREGFLAGS',
+        'L5RE': 'LOWERREGFLAGS',
+        'R6SE': 'RAISE6SECFLAGS',
+        'R60S': 'RAISE60SECFLAGS',
+        'R5MI': 'RAISE5MINFLAGS',
+        'L6SE': 'LOWER6SECFLAGS',
+        'L60S': 'LOWER60SECFLAGS',
+        'L5MI': 'LOWER5MINFLAGS',
+    }
 
     # Columns from observed FCAS target DataFrame to be retained
     columns = [availability_map[trade_type], flag_map[trade_type]]
@@ -1158,8 +1245,8 @@ if __name__ == '__main__':
     # df_fcas_observed = get_observed_fcas_availability(fcas_directory, tmp_directory)
     df_fcas_observed = pd.read_pickle('tmp/fcas_availability.pickle')
 
-    df_a1 = check_fcas_availability(cdata, df_fcas_observed, 'L5RE')
-    df_a2 = check_fcas_availability_sample(nemde_directory, df_fcas_observed, 'L5RE', n=100)
+    df_a1 = check_fcas_availability(cdata, df_fcas_observed, 'L5MI')
+    # df_a2 = check_fcas_availability_sample(nemde_directory, df_fcas_observed, 'L5RE', n=100)
 
     # di_year, di_month, di_day, di = 2019, 10, 25, 254
     # duid = 'HDWF3'
