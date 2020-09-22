@@ -380,13 +380,6 @@ def get_trader_fcas_availability_enablement_min_condition(data, trader_id, trade
         # Trader may not have an energy offer, in which case set max energy available to None
         energy_max_avail = None
 
-    # # If no energy offer return True
-    # if energy_max_avail is None:
-    #     return True
-    # # Check if energy max available >= FCAS enablement min
-    # else:
-    #     return energy_max_avail >= trapezium['EnablementMin']
-
     return energy_max_avail >= trapezium['EnablementMin'] if energy_max_avail is not None else True
 
 
@@ -395,11 +388,8 @@ def get_trader_fcas_availability_agc_status_condition(data, trader_id, trade_typ
 
     # Check AGC status if presented with a regulating FCAS offer
     if trade_type in ['L5RE', 'R5RE']:
+        # AGC is active='1', AGC is inactive='0'
         agc_status = lookup.get_trader_collection_initial_condition_attribute(data, trader_id, 'AGCStatus', str)
-        # if agc_status == '1':
-        #     return True
-        # else:
-        #     return False
 
         return True if agc_status == '1' else False
 
@@ -408,7 +398,7 @@ def get_trader_fcas_availability_agc_status_condition(data, trader_id, trade_typ
         return True
 
 
-def get_trader_fcas_availability_status(data, trader_id, trade_type):
+def get_trader_fcas_availability_status(data, trader_id, trade_type) -> bool:
     """Get trader FCAS availability status"""
 
     # Scaled FCAS trapezium
@@ -441,7 +431,7 @@ def get_trader_fcas_availability_status(data, trader_id, trade_type):
     return fcas_status
 
 
-def get_generator_effective_regulation_raise_max_available(data, trader_id):
+def get_generator_effective_regulation_raise_max_available(data, trader_id) -> float:
     """Get effective R5RE max available"""
 
     # Max available from FCAS offer
@@ -449,34 +439,30 @@ def get_generator_effective_regulation_raise_max_available(data, trader_id):
 
     try:
         # AGC ramp up rate - divide by 12 to get ramp rate over dispatch interval
-        ramp_up = lookup.get_trader_collection_initial_condition_attribute(data, trader_id, 'SCADARampUpRate',
-                                                                           float) / 12
+        ramp_up = lookup.get_trader_collection_initial_condition_attribute(data, trader_id, 'SCADARampUpRate', float)
     except LookupError:
         ramp_up = None
 
-    # #
-    # if (ramp_up is None) or (ramp_up == 0):
-    #     return max_avail
-    # else:
-    #     return min([max_avail, ramp_up])
-
     # No scaling applied if SCADA ramp rate = 0 or absent
-    return max_avail if ((ramp_up is None) or (ramp_up == 0)) else min([max_avail, ramp_up])
+    return max_avail if ((ramp_up is None) or (ramp_up == 0)) else min([max_avail, ramp_up / 12])
 
 
-def get_generator_effective_regulation_lower_max_available(data, trader_id):
+def get_generator_effective_regulation_lower_max_available(data, trader_id) -> float:
     """Get effective L5RE max available"""
 
     # Max available from FCAS offer
-    max_avail = lookup.get_trader_quantity_band_attribute(data, trader_id, 'L5RE', 'MaxAvail', float)
+    max_avail = lookup.get_trader_quantity_band_attribute(data, trader_id, 'L5RE', '@MaxAvail', float)
 
     # AGC ramp down rate - divide by 12 to get ramp rate over dispatch interval
-    ramp_down_rate = lookup.get_trader_initial_condition(data, trader_id, 'SCADARampDnRate', float) / 12
+    try:
+        ramp_down = lookup.get_trader_collection_initial_condition_attribute(data, trader_id, 'SCADARampDnRate', float)
+    except LookupError:
+        ramp_down = None
 
-    return min([max_avail, ramp_down_rate])
+    return max_avail if ((ramp_down is None) or (ramp_down == 0)) else min([max_avail, ramp_down / 12])
 
 
-def get_generator_effective_regulation_raise_enablement_max(data, trader_id):
+def get_generator_effective_regulation_raise_enablement_max(data, trader_id) -> float:
     """Get effective R5RE enablement max"""
 
     # Offer enablement max
@@ -500,11 +486,53 @@ def get_generator_effective_regulation_raise_enablement_max(data, trader_id):
     return min([i for i in terms if i is not None])
 
 
-def get_generator_effective_regulation_raise_enablement_min(data, trader_id):
+def get_generator_effective_regulation_lower_enablement_max(data, trader_id) -> float:
+    """Get effective L5RE enablement max"""
+
+    # Offer enablement max
+    enablement_max = lookup.get_trader_quantity_band_attribute(data, trader_id, 'L5RE', '@EnablementMax', float)
+
+    # Upper AGC limit
+    try:
+        agc_up_limit = lookup.get_trader_collection_initial_condition_attribute(data, trader_id, 'HMW', float)
+    except LookupError:
+        agc_up_limit = None
+
+    # UIGF from semi-dispatchable plant
+    try:
+        uigf = lookup.get_trader_period_collection_attribute(data, trader_id, '@UIGF', float)
+    except LookupError:
+        uigf = None
+
+    # Terms used to determine effective enablement max
+    terms = [enablement_max, agc_up_limit, uigf]
+
+    return min([i for i in terms if i is not None])
+
+
+def get_generator_effective_regulation_raise_enablement_min(data, trader_id) -> float:
     """Get effective R5RE enablement min"""
 
     # Offer enablement min
     enablement_min = lookup.get_trader_quantity_band_attribute(data, trader_id, 'R5RE', '@EnablementMin', float)
+
+    # Upper AGC limit
+    try:
+        agc_down_limit = lookup.get_trader_collection_initial_condition_attribute(data, trader_id, 'LMW', float)
+    except LookupError:
+        agc_down_limit = None
+
+    # Terms used to compute effective enablement min
+    terms = [enablement_min, agc_down_limit]
+
+    return max([i for i in terms if i is not None])
+
+
+def get_generator_effective_regulation_lower_enablement_min(data, trader_id) -> float:
+    """Get effective L5RE enablement min"""
+
+    # Offer enablement min
+    enablement_min = lookup.get_trader_quantity_band_attribute(data, trader_id, 'L5RE', '@EnablementMin', float)
 
     # Upper AGC limit
     try:
@@ -529,12 +557,6 @@ def get_generator_joint_ramp_raise_max(data, trader_id) -> Union[float, None]:
     except LookupError:
         ramp_up = None
 
-    # # Also return None if ramp rate is 0 - from docs
-    # if ramp_up == 0:
-    #     return None
-    #
-    # return initial_mw + (ramp_up / 12)
-
     return initial_mw + (ramp_up / 12) if ((ramp_up is not None) and (ramp_up != 0)) else None
 
 
@@ -548,7 +570,7 @@ def get_generator_joint_ramp_lower_min(data, trader_id) -> Union[float, None]:
     except LookupError:
         return None
 
-    return initial_mw - (ramp_down / 12)
+    return initial_mw - (ramp_down / 12) if ((ramp_down is not None) and (ramp_down != 0)) else None
 
 
 def get_upper_slope_coefficient(data, trader_id, trade_type) -> Union[float, None]:
@@ -558,12 +580,6 @@ def get_upper_slope_coefficient(data, trader_id, trade_type) -> Union[float, Non
     enablement_max = lookup.get_trader_quantity_band_attribute(data, trader_id, trade_type, '@EnablementMax', float)
     high_breakpoint = lookup.get_trader_quantity_band_attribute(data, trader_id, trade_type, '@HighBreakpoint', float)
     max_avail = lookup.get_trader_quantity_band_attribute(data, trader_id, trade_type, '@MaxAvail', float)
-
-    # If MaxAvail is 0 then upper slope coefficient is undefined - return None
-    # if max_avail == 0:
-    #     return None
-    # else:
-    #     return (enablement_max - high_breakpoint) / max_avail
 
     return None if max_avail == 0 else (enablement_max - high_breakpoint) / max_avail
 
@@ -583,13 +599,14 @@ def get_lower_slope_coefficient(data, trader_id, trade_type) -> Union[float, Non
 def get_generator_regulation_raise_term_1(data, trader_id, intervention) -> Union[float, None]:
     """Get R5RE term 1 in FCAS availability calculation"""
 
-    # Parameters
+    # Joint raise max
     joint_ramp_raise_max = get_generator_joint_ramp_raise_max(data, trader_id)
 
     # No scaling applied because SCADARampUpRate is missing or 0
     if joint_ramp_raise_max is None:
         return None
 
+    # Energy target
     energy_target = lookup.get_trader_solution_attribute(data, trader_id, '@EnergyTarget', float, intervention)
 
     return joint_ramp_raise_max - energy_target
@@ -632,12 +649,6 @@ def get_generator_regulation_raise_term_3(data, trader_id, intervention) -> Unio
     if upper_slope_coefficient == 0:
         return None
 
-    # Undefined because max available is 0 - so max R5RE is 0
-    # if upper_slope_coefficient is None:
-    #     return 0
-    # else:
-    #     return (enablement_max - energy_target) / upper_slope_coefficient
-    #
     return 0 if (upper_slope_coefficient is None) else (enablement_max - energy_target) / upper_slope_coefficient
 
 
@@ -653,16 +664,10 @@ def get_generator_regulation_raise_term_4(data, trader_id, intervention) -> Unio
     if lower_slope_coefficient == 0:
         return None
 
-    # Undefined because max available is 0 - so max R5RE is 0
-    # if lower_slope_coefficient is None:
-    #     return 0
-    # else:
-    #     return (energy_target - enablement_min) / lower_slope_coefficient
-    #
     return 0 if (lower_slope_coefficient is None) else (energy_target - enablement_min) / lower_slope_coefficient
 
 
-def get_generator_regulation_raise_term_5(data, trader_id):
+def get_generator_regulation_raise_term_5(data, trader_id) -> float:
     """Get R5RE term 5 in FCAS availability calculation"""
 
     # Effective max available
@@ -671,7 +676,7 @@ def get_generator_regulation_raise_term_5(data, trader_id):
     return max_avail
 
 
-def get_generator_regulation_raise_availability(data, trader_id, intervention):
+def get_generator_regulation_raise_availability(data, trader_id, intervention) -> float:
     """Get raise regulation availability"""
 
     # Check if service is available
@@ -707,8 +712,79 @@ def get_generator_regulation_raise_availability(data, trader_id, intervention):
     return max([0, max_available])
 
 
-def get_generator_regulation_lower_term_1(data, trader_id):
+def get_generator_regulation_lower_term_1(data, trader_id, intervention) -> Union[float, None]:
     """Get L5RE term 1 in FCAS availability calculation"""
+
+    # Joint lower min term
+    joint_ramp_lower_min = get_generator_joint_ramp_lower_min(data, trader_id)
+
+    # No scaling applied because SCADARampDnRate is missing or 0
+    if joint_ramp_lower_min is None:
+        return None
+
+    # Energy target
+    energy_target = lookup.get_trader_solution_attribute(data, trader_id, '@EnergyTarget', float, intervention)
+
+    return energy_target - joint_ramp_lower_min
+
+
+def get_generator_regulation_lower_term_2(data, trader_id, trade_type, intervention) -> Union[float, None]:
+    """Get L5RE term 2 in FCAS availability calculation"""
+
+    # Map between FCAS keys
+    fcas_map = {
+        'R6SE': '@R6Target', 'R60S': '@R60Target', 'R5MI': '@R5Target',
+        'L6SE': '@L6Target', 'L60S': '@L60Target', 'L5MI': '@L5Target'
+    }
+
+    # FCAS availability
+    fcas_availability = get_trader_fcas_availability_status(data, trader_id, trade_type)
+
+    # No constraint constructed if contingency FCAS unavailable
+    if not fcas_availability:
+        return None
+
+    # Parameters
+    enablement_min = lookup.get_trader_quantity_band_attribute(data, trader_id, trade_type, '@EnablementMin', float)
+    energy_target = lookup.get_trader_solution_attribute(data, trader_id, '@EnergyTarget', float, intervention)
+    lower_slope_coefficient = get_lower_slope_coefficient(data, trader_id, trade_type)
+    fcas_target = lookup.get_trader_solution_attribute(data, trader_id, fcas_map[trade_type], float, intervention)
+
+    return energy_target - (lower_slope_coefficient * fcas_target) - enablement_min
+
+
+def get_generator_regulation_lower_term_3(data, trader_id, intervention) -> Union[float, None]:
+    """Get L5RE term 3 in FCAS availability calculation"""
+
+    # Parameters
+    enablement_max = get_generator_effective_regulation_lower_enablement_max(data, trader_id)
+    energy_target = lookup.get_trader_solution_attribute(data, trader_id, '@EnergyTarget', float, intervention)
+    upper_slope_coefficient = get_upper_slope_coefficient(data, trader_id, 'L5RE')
+
+    # Ignore limit if slope coefficient = 0
+    if upper_slope_coefficient == 0:
+        return None
+
+    return 0 if (upper_slope_coefficient is None) else (enablement_max - energy_target) / upper_slope_coefficient
+
+
+def get_generator_regulation_lower_term_4(data, trader_id, intervention) -> Union[float, None]:
+    """Get L5RE term 4 in FCAS availability calculation"""
+
+    # Term parameters
+    enablement_min = get_generator_effective_regulation_lower_enablement_min(data, trader_id)
+    energy_target = lookup.get_trader_solution_attribute(data, trader_id, '@EnergyTarget', float, intervention)
+    lower_slope_coefficient = get_lower_slope_coefficient(data, trader_id, 'L5RE')
+
+    # Ignore limit if slope coefficient = 0
+    if lower_slope_coefficient == 0:
+        return None
+
+    return 0 if (lower_slope_coefficient is None) else (energy_target - enablement_min) / lower_slope_coefficient
+
+
+def get_generator_regulation_lower_term_5(data, trader_id) -> float:
+    """Get L5RE term 5 in FCAS availability calculation"""
 
     # Effective max available
     max_avail = get_generator_effective_regulation_lower_max_available(data, trader_id)
@@ -716,16 +792,40 @@ def get_generator_regulation_lower_term_1(data, trader_id):
     return max_avail
 
 
-def get_generator_regulation_lower_availability(data, trader_id):
+def get_generator_regulation_lower_availability(data, trader_id, intervention) -> float:
     """Get lower regulation availability"""
 
+    # Check if service is available
+    fcas_status = get_trader_fcas_availability_status(data, trader_id, 'L5RE')
+
+    # Return 0 if service is unavailable
+    if not fcas_status:
+        return 0
+
+    # All trader offers
+    offers = lookup.get_trader_offer_index(data)
+
     # Terms
-    term_1 = get_generator_regulation_lower_term_1(data, trader_id)
+    term_1 = get_generator_regulation_lower_term_1(data, trader_id, intervention)
+
+    # Container for contingency FCAS terms
+    contingency_fcas_terms = []
+    for i in ['R6SE', 'R60S', 'R5MI', 'L6SE', 'L60S', 'L5MI']:
+        # Check if contingency offer made by generator
+        if (trader_id, i) in offers:
+            contingency_fcas_terms.append(get_generator_regulation_lower_term_2(data, trader_id, i, intervention))
+
+    term_3 = get_generator_regulation_lower_term_3(data, trader_id, intervention)
+    term_4 = get_generator_regulation_lower_term_4(data, trader_id, intervention)
+    term_5 = get_generator_regulation_lower_term_5(data, trader_id)
+
+    # All terms
+    terms = [term_1, term_3, term_4, term_5] + contingency_fcas_terms
 
     # Compute minimum of all terms - yields FCAS availability
-    max_available = min(term_1)
+    max_available = min([i for i in terms if i is not None])
 
-    return max_available
+    return max([0, max_available])
 
 
 def get_generator_contingency_raise_availability(data, trader_id, trade_type):
@@ -768,7 +868,7 @@ def get_trader_fcas_availability(data, trader_id, trade_type, intervention):
         if trade_type == 'R5RE':
             return get_generator_regulation_raise_availability(data, trader_id, intervention)
         elif trade_type == 'L5RE':
-            return get_generator_regulation_lower_availability(data, trader_id)
+            return get_generator_regulation_lower_availability(data, trader_id, intervention)
         elif trade_type in ['R6SE', 'R60S', 'R5MI']:
             return get_generator_contingency_raise_availability(data, trader_id, trade_type)
         elif trade_type in ['L6SE', 'L60S', 'L5MI']:
@@ -812,7 +912,7 @@ def check_fcas_availability(data, observed, trade_type):
         intervention = '1'
 
     # Mapping between trade type and trader solution attribute
-    solution_map = {'R5RE': '@R5RegTarget'}
+    solution_map = {'R5RE': '@R5RegTarget', 'L5RE': '@L5RegTarget'}
 
     out = {}
     for i, j in trader_offers:
@@ -827,8 +927,8 @@ def check_fcas_availability(data, observed, trade_type):
     df_1 = pd.DataFrame(out).T.rename_axis(['DISPATCHINTERVAL', 'DUID', 'TRADETYPE'])
 
     # Mapping between trade types and calculated FCAS availability column names
-    availability_map = {'R5RE': 'RAISEREGACTUALAVAILABILITY'}
-    flag_map = {'R5RE': 'RAISEREGFLAGS'}
+    availability_map = {'R5RE': 'RAISEREGACTUALAVAILABILITY', 'L5RE': 'LOWERREGACTUALAVAILABILITY'}
+    flag_map = {'R5RE': 'RAISEREGFLAGS', 'L5RE': 'LOWERREGFLAGS'}
 
     # Columns from observed FCAS target DataFrame to be retained
     columns = [availability_map[trade_type], flag_map[trade_type]]
@@ -1058,8 +1158,8 @@ if __name__ == '__main__':
     # df_fcas_observed = get_observed_fcas_availability(fcas_directory, tmp_directory)
     df_fcas_observed = pd.read_pickle('tmp/fcas_availability.pickle')
 
-    df_a1 = check_fcas_availability(cdata, df_fcas_observed, 'R5RE')
-    df_a2 = check_fcas_availability_sample(nemde_directory, df_fcas_observed, 'R5RE', n=100)
+    df_a1 = check_fcas_availability(cdata, df_fcas_observed, 'L5RE')
+    df_a2 = check_fcas_availability_sample(nemde_directory, df_fcas_observed, 'L5RE', n=100)
 
     # di_year, di_month, di_day, di = 2019, 10, 25, 254
     # duid = 'HDWF3'
