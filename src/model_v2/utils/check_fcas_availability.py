@@ -366,6 +366,9 @@ def get_trader_fcas_availability_enablement_min_condition(data, trader_id, trade
     # Try and use specified FCAS condition, but if energy offer doesn't exist, then set cond_3=True by default
     trader_type = lookup.get_trader_collection_attribute(data, trader_id, '@TraderType', str)
 
+    # Semi-dispatch flag
+    semi_dispatch = lookup.get_trader_collection_attribute(data, trader_id, '@SemiDispatch', str)
+
     if trader_type == 'GENERATOR':
         energy_offer = 'ENOF'
     elif trader_type in ['LOAD', 'NORMALLY_ON_LOAD']:
@@ -375,7 +378,11 @@ def get_trader_fcas_availability_enablement_min_condition(data, trader_id, trade
 
     # Get max available for trader's energy offer
     try:
-        energy_max_avail = lookup.get_trader_quantity_band_attribute(data, trader_id, energy_offer, '@MaxAvail', float)
+        if semi_dispatch == '1':
+            energy_max_avail = lookup.get_trader_quantity_band_attribute(data, trader_id, energy_offer, '@UIGF', float)
+        else:
+            energy_max_avail = lookup.get_trader_quantity_band_attribute(data, trader_id, energy_offer, '@MaxAvail',
+                                                                         float)
     except LookupError:
         # Trader may not have an energy offer, in which case set max energy available to None
         energy_max_avail = None
@@ -790,7 +797,7 @@ def get_generator_regulation_lower_availability(data, trader_id, intervention) -
     return max([0, max_available])
 
 
-def get_generator_contingency_raise_availability_term_1(data, trader_id, trade_type, intervention):
+def get_generator_contingency_fcas_availability_term_1(data, trader_id, trade_type, intervention):
     """Get generator contingency raise term 1"""
 
     # Parameters
@@ -814,7 +821,7 @@ def get_generator_contingency_raise_availability_term_1(data, trader_id, trade_t
     return (effective_enablement_max - reg_target - energy_target) / upper_slope_coefficient
 
 
-def get_generator_contingency_raise_availability_term_2(data, trader_id, trade_type, intervention):
+def get_generator_contingency_fcas_availability_term_2(data, trader_id, trade_type, intervention):
     """Get generator contingency raise term 2"""
 
     # Parameters
@@ -830,7 +837,7 @@ def get_generator_contingency_raise_availability_term_2(data, trader_id, trade_t
     return (energy_target - reg_target - enablement_min) / lower_slope_coefficient
 
 
-def get_generator_contingency_raise_availability_term_3(data, trader_id, trade_type):
+def get_generator_contingency_fcas_availability_term_3(data, trader_id, trade_type):
     """Get generator contingency raise term 2"""
 
     return lookup.get_trader_quantity_band_attribute(data, trader_id, trade_type, '@MaxAvail', float)
@@ -847,9 +854,9 @@ def get_generator_contingency_fcas_availability(data, trader_id, trade_type, int
         return 0
 
     # Terms
-    term_1 = get_generator_contingency_raise_availability_term_1(data, trader_id, trade_type, intervention)
-    term_2 = get_generator_contingency_raise_availability_term_2(data, trader_id, trade_type, intervention)
-    term_3 = get_generator_contingency_raise_availability_term_3(data, trader_id, trade_type)
+    term_1 = get_generator_contingency_fcas_availability_term_1(data, trader_id, trade_type, intervention)
+    term_2 = get_generator_contingency_fcas_availability_term_2(data, trader_id, trade_type, intervention)
+    term_3 = get_generator_contingency_fcas_availability_term_3(data, trader_id, trade_type)
 
     # All terms in a single list
     terms = [term_1, term_2, term_3]
@@ -1113,14 +1120,75 @@ def get_load_regulation_lower_availability(data, trader_id, intervention):
     return max([0, max_available])
 
 
-def get_load_contingency_raise_availability(data, trader_id, trade_type):
-    """Get FCAS availability for raise contingency service - loads"""
-    pass
+def get_load_contingency_fcas_availability_term_1(data, trader_id, trade_type, intervention):
+    """Get load contingency FCAS term 1"""
+
+    # Parameters
+    upper_slope_coefficient = get_upper_slope_coefficient(data, trader_id, trade_type)
+
+    if upper_slope_coefficient == 0:
+        return None
+
+    enablement_max = lookup.get_trader_quantity_band_attribute(data, trader_id, trade_type, '@EnablementMax', float)
+    energy_target = lookup.get_trader_solution_attribute(data, trader_id, '@EnergyTarget', float, intervention)
+    reg_target = lookup.get_trader_solution_attribute(data, trader_id, '@L5RegTarget', float, intervention)
+
+    # Only have UIGF for semi-dispatchable plant
+    try:
+        uigf = lookup.get_trader_period_collection_attribute(data, trader_id, '@UIGF', float)
+    except LookupError:
+        uigf = None
+
+    effective_enablement_max = min([i for i in [enablement_max, uigf] if i is not None])
+
+    return (effective_enablement_max - energy_target - reg_target) / upper_slope_coefficient
 
 
-def get_load_contingency_lower_availability(data, trader_id, trade_type):
-    """Get FCAS availability for lower contingency service - loads"""
-    pass
+def get_load_contingency_fcas_availability_term_2(data, trader_id, trade_type, intervention):
+    """Get load contingency FCAS term 2"""
+
+    # Parameters
+    lower_slope_coefficient = get_lower_slope_coefficient(data, trader_id, trade_type)
+
+    if lower_slope_coefficient == 0:
+        return None
+
+    enablement_min = lookup.get_trader_quantity_band_attribute(data, trader_id, trade_type, '@EnablementMin', float)
+    energy_target = lookup.get_trader_solution_attribute(data, trader_id, '@EnergyTarget', float, intervention)
+    reg_target = lookup.get_trader_solution_attribute(data, trader_id, '@R5RegTarget', float, intervention)
+
+    return (energy_target - reg_target - enablement_min) / lower_slope_coefficient
+
+
+def get_load_contingency_fcas_availability_term_3(data, trader_id, trade_type):
+    """Get load contingency raise term 3"""
+
+    return lookup.get_trader_quantity_band_attribute(data, trader_id, trade_type, '@MaxAvail', float)
+
+
+def get_load_contingency_fcas_availability(data, trader_id, trade_type, intervention) -> float:
+    """Get FCAS availability for contingency raise service - loads"""
+
+    # Check if service is available
+    fcas_status = get_trader_fcas_availability_status(data, trader_id, trade_type)
+
+    # Return 0 if service is unavailable
+    if not fcas_status:
+        return 0
+
+    # Terms
+    term_1 = get_load_contingency_fcas_availability_term_1(data, trader_id, trade_type, intervention)
+    term_2 = get_load_contingency_fcas_availability_term_2(data, trader_id, trade_type, intervention)
+    term_3 = get_load_contingency_fcas_availability_term_3(data, trader_id, trade_type)
+
+    # All terms in a single list
+    terms = [term_1, term_2, term_3]
+
+    # Compute max available
+    max_available = min([i for i in terms if i is not None])
+
+    # Ensure max available >= 0
+    return max([0, max_available])
 
 
 def get_trader_fcas_availability(data, trader_id, trade_type, intervention):
@@ -1144,10 +1212,8 @@ def get_trader_fcas_availability(data, trader_id, trade_type, intervention):
             return get_load_regulation_raise_availability(data, trader_id, intervention)
         elif trade_type == 'L5RE':
             return get_load_regulation_lower_availability(data, trader_id, intervention)
-        elif trade_type in ['R6SE', 'R60S', 'R5MI']:
-            return get_load_contingency_raise_availability(data, trader_id, trade_type)
-        elif trade_type in ['L6SE', 'L60S', 'L5MI']:
-            return get_load_contingency_lower_availability(data, trader_id, trade_type)
+        elif trade_type in ['R6SE', 'R60S', 'R5MI', 'L6SE', 'L60S', 'L5MI']:
+            return get_load_contingency_fcas_availability(data, trader_id, trade_type, intervention)
         else:
             raise Exception(f'Unexpected trade type: {trader_id} {trade_type}')
 
@@ -1449,13 +1515,20 @@ if __name__ == '__main__':
     # df_fcas_observed = get_observed_fcas_availability(fcas_directory, tmp_directory)
     df_fcas_observed = pd.read_pickle('tmp/fcas_availability.pickle')
 
-    # df_a1 = check_fcas_availability(cdata, df_fcas_observed, 'L5RE')
-    # df_a2 = check_fcas_availability_sample(nemde_directory, df_fcas_observed, 'L5RE', n=100)
+    # for i in ['L6SE', 'L60S', 'L5MI', 'R6SE', 'R60S', 'R5MI']:
+    #     df_a1 = check_fcas_availability(cdata, df_fcas_observed, i)
+    #     print(i, df_a1['abs_difference'].max())
 
-    di_year, di_month, di_day, di = 2019, 10, 22, 17
-    duid = 'HPRL1'
-    t_type = 'L5RE'
+    # for i in ['L5RE', 'L6SE', 'L60S', 'L5MI', 'R5RE', 'R6SE', 'R60S', 'R5MI']:
+    #     df_a2 = check_fcas_availability_sample(nemde_directory, df_fcas_observed, i, n=100)
+    #     print(i, df_a2['abs_difference'].max())
 
-    case_data_json = loaders.load_dispatch_interval_json(nemde_directory, di_year, di_month, di_day, di)
-    cdata = json.loads(case_data_json)
-    c1 = get_trader_fcas_availability(cdata, duid, t_type, '0')
+    df_a3 = check_fcas_availability_sample(nemde_directory, df_fcas_observed, 'L5MI', n=100)
+
+    # di_year, di_month, di_day, di = 2019, 10, 5, 149
+    # duid = 'HDWF2'
+    # t_type = 'L60S'
+    #
+    # case_data_json = loaders.load_dispatch_interval_json(nemde_directory, di_year, di_month, di_day, di)
+    # cdata = json.loads(case_data_json)
+    # c1 = get_trader_fcas_availability(cdata, duid, t_type, '1')
