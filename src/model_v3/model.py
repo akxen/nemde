@@ -4,9 +4,12 @@ import os
 import json
 import time
 
+import numpy as np
+import pandas as pd
 import pyomo.environ as pyo
 
 import utils.data
+import utils.lookup
 import utils.loaders
 
 
@@ -772,6 +775,9 @@ def define_aggregate_power_expressions(m):
             if r not in [m.P_INTERCONNECTOR_FROM_REGION[i], m.P_INTERCONNECTOR_TO_REGION[i]]:
                 continue
 
+            # Initial loss estimate over interconnector
+            loss = m.P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE[i]
+
             # MNSP losses applied to sending end - based on InitialMW
             if m.P_INTERCONNECTOR_MNSP_STATUS[i] == '1':
                 if m.P_INTERCONNECTOR_INITIAL_MW[i] >= 0:
@@ -783,17 +789,17 @@ def define_aggregate_power_expressions(m):
             if r == m.P_INTERCONNECTOR_FROM_REGION[i]:
                 # Loss applied to sending end if MNSP
                 if m.P_INTERCONNECTOR_MNSP_STATUS[i] == '1':
-                    region_interconnector_loss += m.V_LOSS[i] * mnsp_loss_share
+                    region_interconnector_loss += loss * mnsp_loss_share
                 else:
-                    region_interconnector_loss += m.V_LOSS[i] * m.P_INTERCONNECTOR_LOSS_SHARE[i]
+                    region_interconnector_loss += loss * m.P_INTERCONNECTOR_LOSS_SHARE[i]
 
             # Positive flow indicates import to ToRegion (take negative to get export from ToRegion)
             elif r == m.P_INTERCONNECTOR_TO_REGION[i]:
                 # Loss applied to sending end if MNSP
                 if m.P_INTERCONNECTOR_MNSP_STATUS[i] == '1':
-                    region_interconnector_loss += m.V_LOSS[i] * (1 - mnsp_loss_share)
+                    region_interconnector_loss += loss * (1 - mnsp_loss_share)
                 else:
-                    region_interconnector_loss += m.V_LOSS[i] * (1 - m.P_INTERCONNECTOR_LOSS_SHARE[i])
+                    region_interconnector_loss += loss * (1 - m.P_INTERCONNECTOR_LOSS_SHARE[i])
 
             else:
                 pass
@@ -803,30 +809,23 @@ def define_aggregate_power_expressions(m):
     # Region initial allocated losses
     m.E_REGION_INITIAL_ALLOCATED_LOSS = pyo.Expression(m.S_REGIONS, rule=region_initial_allocated_loss)
 
-    def get_solution_region_interconnector_loss(data, region_id, intervention) -> float:
-        """Get loss allocated to each region"""
-
-        # All interconnectors
-        interconnectors = get_interconnector_index(data)
+    def region_allocated_loss_rule(m, r):
+        """Interconnector loss allocated to given region"""
 
         # Allocated interconnector losses
         region_interconnector_loss = 0
-        for i in interconnectors:
-            from_region = lookup.get_interconnector_period_collection_attribute(data, i, '@FromRegion', str)
-            to_region = lookup.get_interconnector_period_collection_attribute(data, i, '@ToRegion', str)
-            mnsp_status = lookup.get_interconnector_period_collection_attribute(data, i, '@MNSP', str)
+        for i in m.S_INTERCONNECTORS:
+            from_region = m.P_INTERCONNECTOR_FROM_REGION[i]
+            to_region = m.P_INTERCONNECTOR_TO_REGION[i]
+            mnsp_status = m.P_INTERCONNECTOR_MNSP_STATUS[i]
 
-            if region_id not in [from_region, to_region]:
+            if r not in [from_region, to_region]:
                 continue
 
             # Interconnector flow from solution
-            flow = lookup.get_interconnector_solution_attribute(data, i, '@Flow', float, intervention)
-            loss = lookup.get_interconnector_solution_attribute(data, i, '@Losses', float, intervention)
-            loss_share = lookup.get_interconnector_loss_model_attribute(data, i, '@LossShare', float)
-            initial_mw = lookup.get_interconnector_collection_initial_condition_attribute(data, i, 'InitialMW', float)
-
-            # TODO: Using InitialMW seems best model for now - real NEMDE does 2 runs. Perhaps second run identifies flow
-            #  direction has changed and updates loss factor
+            loss = m.V_LOSS[i]
+            loss_share = m.P_INTERCONNECTOR_LOSS_SHARE[i]
+            initial_mw = m.P_INTERCONNECTOR_INITIAL_MW[i]
 
             # MNSP losses applied to sending end - based on InitialMW
             if mnsp_status == '1':
@@ -836,7 +835,7 @@ def define_aggregate_power_expressions(m):
                     mnsp_loss_share = 0
 
             # Positive flow indicates export from FromRegion
-            if region_id == from_region:
+            if r == from_region:
                 # Loss applied to sending end if MNSP
                 if mnsp_status == '1':
                     region_interconnector_loss += loss * mnsp_loss_share
@@ -844,7 +843,7 @@ def define_aggregate_power_expressions(m):
                     region_interconnector_loss += loss * loss_share
 
             # Positive flow indicates import to ToRegion (take negative to get export from ToRegion)
-            elif region_id == to_region:
+            elif r == to_region:
                 # Loss applied to sending end if MNSP
                 if mnsp_status == '1':
                     region_interconnector_loss += loss * (1 - mnsp_loss_share)
@@ -855,6 +854,9 @@ def define_aggregate_power_expressions(m):
                 pass
 
         return region_interconnector_loss
+
+    # Region allocated loss
+    m.E_REGION_ALLOCATED_LOSS = pyo.Expression(m.S_REGIONS, rule=region_allocated_loss_rule)
 
     def region_initial_mnsp_loss(m, r):
         """
@@ -939,7 +941,7 @@ def define_aggregate_power_expressions(m):
     # Region initial allocated MNSP losses
     m.E_REGION_INITIAL_MNSP_LOSS = pyo.Expression(m.S_REGIONS, rule=region_initial_mnsp_loss)
 
-    def region_mnsp_loss_estimate(m, r):
+    def region_mnsp_loss_rule(m, r):
         """
         Get estimate of MNSP loss allocated to given region
 
@@ -1028,7 +1030,7 @@ def define_aggregate_power_expressions(m):
         return total
 
     # Region MNSP loss estimate
-    m.E_REGION_MNSP_LOSS_ESTIMATE = pyo.Expression(m.S_REGIONS, rule=region_mnsp_loss_estimate)
+    m.E_REGION_MNSP_LOSS = pyo.Expression(m.S_REGIONS, rule=region_mnsp_loss_rule)
 
     def region_fixed_demand_rule(m, r):
         """Check region fixed demand calculation - demand at start of dispatch interval"""
@@ -1487,6 +1489,94 @@ def solve_model(m):
     return m, solve_status_1
 
 
+def get_intervention_status(data) -> str:
+    """Check if intervention pricing run occurred - trying to model physical run if intervention occurred"""
+
+    return '0' if utils.lookup.get_case_attribute(data, '@Intervention', str) == 'False' else '1'
+
+
+def check_region_fixed_demand(data, m, r):
+    """Check fixed demand calculation"""
+
+    # Get intervention flag corresponding to physical NEMDE run
+    intervention = get_intervention_status(data)
+
+    # Container for output
+    calculated = m.E_REGION_FIXED_DEMAND[r].expr()
+    observed = utils.lookup.get_region_solution_attribute(data, r, '@FixedDemand', float, intervention)
+
+    out = {
+        'calculated': calculated,
+        'observed': observed,
+        'difference': calculated - observed,
+        'abs_difference': abs(calculated - observed)
+    }
+
+    return out
+
+
+def check_region_fixed_demand_calculation_sample(data_dir, n=5):
+    """Check region fixed demand calculations for a random sample of dispatch intervals"""
+
+    # Seed random number generator to get reproducable results
+    np.random.seed(10)
+
+    # Population of dispatch intervals for a given month
+    population = [(i, j) for i in range(1, 30) for j in range(1, 289)]
+    population_map = {i: j for i, j in enumerate(population)}
+
+    # Random sample of dispatch intervals
+    sample_keys = np.random.choice(list(population_map.keys()), n, replace=False)
+    sample = [population_map[i] for i in sample_keys]
+
+    # Container for model output
+    out = {}
+
+    # Placeholder for max absolute difference observed
+    max_abs_difference = 0
+    max_abs_difference_interval = None
+
+    # Compute fixed demand for each interval
+    for i, (day, interval) in enumerate(sample):
+        print(f'({day}, {interval}) {i + 1}/{len(sample)}')
+
+        # Case data in json format
+        data_json = utils.loaders.load_dispatch_interval_json(data_dir, 2019, 10, day, interval)
+
+        # Get NEMDE model data as a Python dictionary
+        case_data = json.loads(data_json)
+
+        # Preprocessed case data
+        processed_data = utils.data.parse_case_data_json(data_json)
+
+        # Construct model
+        m = construct_model(processed_data)
+
+        # All regions
+        regions = utils.lookup.get_region_index(case_data)
+
+        for r in regions:
+            # Check difference between calculated region fixed demand and fixed demand from NEMDE solution
+            fixed_demand_info = check_region_fixed_demand(case_data, m, r)
+
+            # Add to dictionary
+            out[(day, interval, r)] = fixed_demand_info
+
+            if fixed_demand_info['abs_difference'] > max_abs_difference:
+                max_abs_difference = fixed_demand_info['abs_difference']
+                max_abs_difference_interval = (day, interval, r)
+
+        # Periodically print max absolute difference observed
+        if (i + 1) % 10 == 0:
+            print('Max absolute difference:', max_abs_difference_interval, max_abs_difference)
+
+    # Convert to DataFrame
+    df = pd.DataFrame(out).T
+    df = df.sort_values(by='abs_difference', ascending=False)
+
+    return df
+
+
 if __name__ == '__main__':
     # Directory containing case data
     data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
@@ -1500,7 +1590,18 @@ if __name__ == '__main__':
     cdata = json.loads(case_data_json)
 
     # Preprocessed case data
-    case_data = utils.data.parse_case_data_json(case_data_json)
+    model_data = utils.data.parse_case_data_json(case_data_json)
 
     # Construct model
-    model = construct_model(case_data)
+    model = construct_model(model_data)
+
+    # Check fixed demand
+    df_fixed_demand_check = check_region_fixed_demand_calculation_sample(data_directory, n=1000)
+
+    # (6, 288, 'SA1')
+
+    # # Case data in json format
+    # case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, 2019, 10, 24, 268)
+    #
+    # # Get NEMDE model data as a Python dictionary
+    # cdata = json.loads(case_data_json)

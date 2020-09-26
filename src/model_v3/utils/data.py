@@ -1070,7 +1070,8 @@ def get_case_solution(data) -> dict:
     """Get case solution"""
 
     # Keys that should be converted to type string. All other keys to be converted to type float.
-    str_keys = ['@SolverStatus', '@Terminal', '@InterventionStatus', '@SolverVersion', '@NPLStatus', '@OCD_Status']
+    str_keys = ['@SolverStatus', '@Terminal', '@InterventionStatus', '@SolverVersion', '@NPLStatus', '@OCD_Status',
+                '@CaseSubType']
 
     return {k: str(v) if k in str_keys else float(v)
             for k, v in data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('CaseSolution').items()}

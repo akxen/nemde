@@ -230,3 +230,16 @@ def get_trader_offer_index(data) -> list:
             out.append((i.get('@TraderID'), j.get('@TradeType')))
 
     return out
+
+
+def get_region_index(data) -> list:
+    """Get list of all regions"""
+
+    # All regions
+    regions = data.get('NEMSPDCaseFile').get('NemSpdInputs').get('RegionCollection').get('Region')
+
+    out = []
+    for i in regions:
+        out.append(i['@RegionID'])
+
+    return list(set(out))
