@@ -1249,8 +1249,7 @@ def define_region_constraints(m):
 
         return (m.E_REGION_GENERATION[r]
                 ==
-                m.E_REGION_DEMAND[r]
-                # + m.P_REGION_FIXED_DEMAND[r]  # TODO: Assuming fixed demand
+                + m.P_REGION_FIXED_DEMAND[r]  # TODO: Assuming fixed demand
                 + m.E_REGION_LOAD[r]
                 + m.E_REGION_NET_EXPORT_FLOW[r]
                 # + m.P_REGION_NET_EXPORT[r]  # TODO: Assuming fixed export for now - need to change back later
@@ -1596,12 +1595,7 @@ if __name__ == '__main__':
     model = construct_model(model_data)
 
     # Check fixed demand
-    df_fixed_demand_check = check_region_fixed_demand_calculation_sample(data_directory, n=1000)
+    # df_fixed_demand_check = check_region_fixed_demand_calculation_sample(data_directory, n=1000)
 
-    # (6, 288, 'SA1')
-
-    # # Case data in json format
-    # case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, 2019, 10, 24, 268)
-    #
-    # # Get NEMDE model data as a Python dictionary
-    # cdata = json.loads(case_data_json)
+    # with open('example.json', 'w') as f:
+    #     json.dump(cdata, f)

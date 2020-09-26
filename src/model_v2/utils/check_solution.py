@@ -624,6 +624,66 @@ def check_region_net_export_calculation(data, region_id, intervention) -> float:
     return interconnector_export + region_interconnector_loss + mnsp_loss - net_export
 
 
+def check_region_power_balance_calculation(data, region_id, intervention) -> float:
+    """
+    Check power balance for a given region
+
+    FixedDemand + Load + NetExport = DispatchedGeneration
+    """
+
+    # Fixed demand
+    fixed_demand = lookup.get_region_solution_attribute(data, region_id, '@FixedDemand', float, intervention)
+
+    # Dispatched load
+    load = lookup.get_region_solution_attribute(data, region_id, '@DispatchedLoad', float, intervention)
+
+    # Net export
+    net_export = lookup.get_region_solution_attribute(data, region_id, '@NetExport', float, intervention)
+
+    # Dispatched generation
+    generation = lookup.get_region_solution_attribute(data, region_id, '@DispatchedGeneration', float, intervention)
+
+    return fixed_demand + load + net_export - generation
+
+
+def check_region_dispatched_generation_calculation(data, region_id, intervention) -> float:
+    """Check region dispatched generation calculation"""
+
+    # All traders
+    traders = get_trader_index(data)
+
+    total = 0
+    for i in traders:
+        trader_region = lookup.get_trader_period_collection_attribute(data, i, '@RegionID', str)
+        trader_type = lookup.get_trader_collection_attribute(data, i, '@TraderType', str)
+        if (trader_region == region_id) and (trader_type == 'GENERATOR'):
+            total += lookup.get_trader_solution_attribute(data, i, '@EnergyTarget', float, intervention)
+
+    # Dispatched generation from region solution
+    generation = lookup.get_region_solution_attribute(data, region_id, '@DispatchedGeneration', float, intervention)
+
+    return total - generation
+
+
+def check_region_dispatched_load_calculation(data, region_id, intervention) -> float:
+    """Check region dispatched load calculation"""
+
+    # All traders
+    traders = get_trader_index(data)
+
+    total = 0
+    for i in traders:
+        trader_region = lookup.get_trader_period_collection_attribute(data, i, '@RegionID', str)
+        trader_type = lookup.get_trader_collection_attribute(data, i, '@TraderType', str)
+        if (trader_region == region_id) and (trader_type in ['LOAD', 'NORMALLY_ON_LOAD']):
+            total += lookup.get_trader_solution_attribute(data, i, '@EnergyTarget', float, intervention)
+
+    # Dispatched load from region solution
+    load = lookup.get_region_solution_attribute(data, region_id, '@DispatchedLoad', float, intervention)
+
+    return total - load
+
+
 def check_region_calculation_sample(data_dir, func, n=5):
     """Check region calculations for a random sample of dispatch intervals"""
 
@@ -728,9 +788,14 @@ if __name__ == '__main__':
     # c2, c2_df, c2_max = check_total_calculation_sample(data_directory, check_total_fixed_demand_calculation, n=1000)
 
     # Check values for each region
-    c3, c3_df, c3_max = check_region_calculation_sample(data_directory, check_region_net_export_calculation, n=1000)
-    c4, c4_df, c4_max = check_region_calculation_sample(data_directory, check_region_cleared_demand_calculation, n=1000)
-    c5, c5_df, c5_max = check_region_calculation_sample(data_directory, check_region_fixed_demand_calculation, n=1000)
+    # c3, c3_df, c3_max = check_region_calculation_sample(data_directory, check_region_net_export_calculation, n=1000)
+    # c4, c4_df, c4_max = check_region_calculation_sample(data_directory, check_region_cleared_demand_calculation, n=1000)
+    # c5, c5_df, c5_max = check_region_calculation_sample(data_directory, check_region_fixed_demand_calculation, n=1000)
+    # c6, c6_df, c6_max = check_region_calculation_sample(data_directory, check_region_power_balance_calculation, n=1000)
+    # c7, c7_df, c7_max = check_region_calculation_sample(data_directory, check_region_dispatched_generation_calculation,
+    #                                                     n=1000)
+    c8, c8_df, c8_max = check_region_calculation_sample(data_directory, check_region_dispatched_load_calculation,
+                                                        n=1000)
 
     # interval_index = list(set([i[:2] for i in c3_df.index.to_list()]))
     # c6 = get_values(data_directory, interval_index, lookup.get_interconnector_collection_initial_condition_attribute, 'T-V-MNSP1', 'InitialMW', float)
