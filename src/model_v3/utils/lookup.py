@@ -130,6 +130,25 @@ def get_trader_quantity_band_attribute(data, trader_id, trade_type, attribute, f
     raise LookupError('Attribute not found:', trader_id, trade_type, attribute)
 
 
+def get_trader_price_band_attribute(data, trader_id, trade_type, attribute, func):
+    """Get trader price band attribute"""
+
+    # All traders
+    # NEMSPDCaseFile.NemSpdInputs.TraderCollection.Trader[0].TradePriceStructureCollection.TradePriceStructure.TradeTypePriceStructureCollection.TradeTypePriceStructure.@TradeType
+    traders = data.get('NEMSPDCaseFile').get('NemSpdInputs').get('TraderCollection').get('Trader')
+
+    for i in traders:
+        if i['@TraderID'] == trader_id:
+            price_bands = (i.get('TradePriceStructureCollection').get('TradePriceStructure')
+                           .get('TradeTypePriceStructureCollection').get('TradeTypePriceStructure'))
+
+            for j in convert_to_list(price_bands):
+                if j['@TradeType'] == trade_type:
+                    return func(j[attribute])
+
+    raise LookupError('Attribute not found:', trader_id, trade_type, attribute)
+
+
 def get_trader_solution_attribute(data, trader_id, attribute, func, intervention='1'):
     """Get trader solution attribute"""
 
@@ -243,3 +262,9 @@ def get_region_index(data) -> list:
         out.append(i['@RegionID'])
 
     return list(set(out))
+
+
+def get_intervention_status(data) -> str:
+    """Check if intervention pricing run occurred - trying to model physical run if intervention occurred"""
+
+    return '0' if get_case_attribute(data, '@Intervention', str) == 'False' else '1'

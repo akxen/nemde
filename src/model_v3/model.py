@@ -11,6 +11,8 @@ import pyomo.environ as pyo
 import utils.data
 import utils.lookup
 import utils.loaders
+import utils.solution
+import utils.analysis
 
 
 def define_sets(m, data):
@@ -725,32 +727,25 @@ def define_constraint_violation_penalty_expressions(m):
 def define_aggregate_power_expressions(m):
     """Compute aggregate demand and generation in each NEM region"""
 
-    def region_generation_rule(m, r):
+    def region_dispatched_generation_rule(m, r):
         """Available energy offers in given region"""
 
         return sum(m.V_TRADER_TOTAL_OFFER[i, j] for i, j in m.S_TRADER_OFFERS
                    if (j == 'ENOF') and (m.P_TRADER_REGION[i] == r))
 
     # Total generation dispatched in a given region
-    m.E_REGION_GENERATION = pyo.Expression(m.S_REGIONS, rule=region_generation_rule)
+    m.E_REGION_DISPATCHED_GENERATION = pyo.Expression(m.S_REGIONS, rule=region_dispatched_generation_rule)
 
-    def region_scheduled_load_rule(m, r):
+    def region_dispatched_load_rule(m, r):
         """Available load offers in given region"""
 
         return sum(m.V_TRADER_TOTAL_OFFER[i, j] for i, j in m.S_TRADER_OFFERS
                    if (j == 'LDOF') and (m.P_TRADER_REGION[i] == r))
 
-    # Total scheduled load dispatched in a given region
-    m.E_REGION_SCHEDULED_LOAD = pyo.Expression(m.S_REGIONS, rule=region_scheduled_load_rule)
+    # Total dispatched load in a given region
+    m.E_REGION_DISPATCHED_LOAD = pyo.Expression(m.S_REGIONS, rule=region_dispatched_load_rule)
 
-    def region_interconnector_export_rule(m, r):
-        """Net export out of region over interconnectors"""
-        pass
-
-    # Net flow out of region
-    m.E_REGION_INTERCONNECTOR_EXPORT = pyo.Expression(m.S_REGIONS, rule=region_interconnector_export_rule)
-
-    def region_initial_scheduled_load(m, r):
+    def region_initial_dispatched_load(m, r):
         """Total initial scheduled load in a given region"""
 
         total = 0
@@ -762,7 +757,7 @@ def define_aggregate_power_expressions(m):
         return total
 
     # Region initial scheduled load
-    m.E_REGION_INITIAL_SCHEDULED_LOAD = pyo.Expression(m.S_REGIONS, rule=region_initial_scheduled_load)
+    m.E_REGION_INITIAL_SCHEDULED_LOAD = pyo.Expression(m.S_REGIONS, rule=region_initial_dispatched_load)
 
     def region_initial_allocated_loss(m, r):
         """Losses allocated to region due to interconnector flow"""
@@ -855,7 +850,7 @@ def define_aggregate_power_expressions(m):
 
         return region_interconnector_loss
 
-    # Region allocated loss
+    # Region allocated loss at end of dispatch interval
     m.E_REGION_ALLOCATED_LOSS = pyo.Expression(m.S_REGIONS, rule=region_allocated_loss_rule)
 
     def region_initial_mnsp_loss(m, r):
@@ -1029,7 +1024,7 @@ def define_aggregate_power_expressions(m):
 
         return total
 
-    # Region MNSP loss estimate
+    # Region MNSP loss at end of dispatch interval
     m.E_REGION_MNSP_LOSS = pyo.Expression(m.S_REGIONS, rule=region_mnsp_loss_rule)
 
     def region_fixed_demand_rule(m, r):
@@ -1046,7 +1041,7 @@ def define_aggregate_power_expressions(m):
 
         return demand
 
-    # Region fixed demand
+    # Region fixed demand at start of dispatch interval
     m.E_REGION_FIXED_DEMAND = pyo.Expression(m.S_REGIONS, rule=region_fixed_demand_rule)
 
     def region_cleared_demand_rule(m, r):
@@ -1055,14 +1050,57 @@ def define_aggregate_power_expressions(m):
         demand = (
                 m.E_REGION_FIXED_DEMAND[r]
                 + m.E_REGION_ALLOCATED_LOSS[r]
-                + m.E_REGION_SCHEDULED_LOAD[r]
+                + m.E_REGION_DISPATCHED_LOAD[r]
                 + m.E_REGION_MNSP_LOSS[r]
         )
 
         return demand
 
-    # Region cleared demand - used in power balance constraint
+    # Region cleared demand at end of dispatch interval
     m.E_REGION_CLEARED_DEMAND = pyo.Expression(m.S_REGIONS, rule=region_cleared_demand_rule)
+
+    def region_interconnector_export(m, r):
+        """Export from region - excludes MNSP and allocated interconnector losses"""
+
+        # Export out of region
+        interconnector_export = 0
+        for i in m.S_INTERCONNECTORS:
+            from_region = m.P_INTERCONNECTOR_FROM_REGION[i]
+            to_region = m.P_INTERCONNECTOR_TO_REGION[i]
+
+            if r not in [from_region, to_region]:
+                continue
+
+            # Interconnector flow from solution
+            flow = m.V_GC_INTERCONNECTOR[i]
+
+            # Positive flow indicates export from FromRegion
+            if r == from_region:
+                interconnector_export += flow
+
+            # Positive flow indicates import to ToRegion (take negative to get export from ToRegion)
+            elif r == to_region:
+                interconnector_export -= flow
+
+            else:
+                pass
+
+        return interconnector_export
+
+    # Net export out of region over interconnector - excludes allocated losses
+    m.E_REGION_INTERCONNECTOR_EXPORT = pyo.Expression(m.S_REGIONS, rule=region_interconnector_export)
+
+    def region_net_export_rule(m, r):
+        """
+        Net export out of region including allocated losses
+
+        NetExport = InterconnectorExport + RegionInterconnectorLoss + RegionMNSPLoss
+        """
+
+        return m.E_REGION_INTERCONNECTOR_EXPORT[r] + m.E_REGION_ALLOCATED_LOSS[r] + m.E_REGION_MNSP_LOSS[r]
+
+    # Region net export - includes MNSP and allocated interconnector losses
+    m.E_REGION_NET_EXPORT = pyo.Expression(m.S_REGIONS, rule=region_net_export_rule)
 
     return m
 
@@ -1245,14 +1283,16 @@ def define_region_constraints(m):
     """Define power balance constraint for each region, and constrain flows on interconnectors"""
 
     def power_balance_rule(m, r):
-        """Power balance for each region"""
+        """
+        Power balance for each region
 
-        return (m.E_REGION_GENERATION[r]
-                ==
-                + m.P_REGION_FIXED_DEMAND[r]  # TODO: Assuming fixed demand
-                + m.E_REGION_LOAD[r]
-                + m.E_REGION_NET_EXPORT_FLOW[r]
-                # + m.P_REGION_NET_EXPORT[r]  # TODO: Assuming fixed export for now - need to change back later
+        FixedDemand + DispatchedLoad + NetExport = DispatchedGeneration
+        """
+
+        return (m.E_REGION_FIXED_DEMAND[r]
+                + m.E_REGION_DISPATCHED_LOAD[r]
+                + m.E_REGION_NET_EXPORT[r]
+                == m.E_REGION_DISPATCHED_GENERATION[r]
                 )
 
     # Power balance in each region
@@ -1280,24 +1320,7 @@ def define_interconnector_constraints(m):
     # Forward power flow limit for interconnector
     m.C_INTERCONNECTOR_REVERSE_FLOW = pyo.Constraint(m.S_INTERCONNECTORS, rule=interconnector_reverse_flow_rule)
 
-    def from_node_connection_point_balance_rule(m, i):
-        """Power balance at from node connection point"""
-
-        return m.V_FLOW_FROM_CP[i] - (m.P_INTERCONNECTOR_LOSS_SHARE[i] * m.V_LOSS[i]) - m.V_GC_INTERCONNECTOR[i] == 0
-
-    # From node connection point power balance
-    m.C_FROM_NODE_CP_POWER_BALANCE = pyo.Constraint(m.S_INTERCONNECTORS, rule=from_node_connection_point_balance_rule)
-
-    def to_node_connection_point_balance_rule(m, i):
-        """Power balance at to node connection point"""
-
-        # Loss share applied to from node connection point
-        loss_share = 1 - m.P_INTERCONNECTOR_LOSS_SHARE[i]
-
-        return m.V_GC_INTERCONNECTOR[i] - (loss_share * m.V_LOSS[i]) - m.V_FLOW_TO_CP[i] == 0
-
-    # To node connection point power balance
-    m.C_TO_NODE_CP_POWER_BALANCE = pyo.Constraint(m.S_INTERCONNECTORS, rule=to_node_connection_point_balance_rule)
+    # TODO: not sure if MNSP connection points need to be modelled here or if NetExport expression captures relationship
 
     return m
 
@@ -1460,9 +1483,9 @@ def construct_model(data):
     m = define_parameters(m, data)
     m = define_variables(m)
     m = define_expressions(m, data)
-    # m = define_constraints(m)
-    # m = define_objective(m)
-    #
+    m = define_constraints(m)
+    m = define_objective(m)
+
     # # Add component allowing dual variables to be imported
     # m.dual = pyo.Suffix(direction=pyo.Suffix.IMPORT)
     print('Constructed model in:', time.time() - t0)
@@ -1488,17 +1511,24 @@ def solve_model(m):
     return m, solve_status_1
 
 
-def get_intervention_status(data) -> str:
-    """Check if intervention pricing run occurred - trying to model physical run if intervention occurred"""
+def fix_interconnector_flow_solution(m, data):
+    """Fix interconnector solution to observed values"""
 
-    return '0' if utils.lookup.get_case_attribute(data, '@Intervention', str) == 'False' else '1'
+    # Get intervention status
+    intervention = utils.lookup.get_intervention_status(data)
+
+    for i in m.S_GC_INTERCONNECTOR_VARS:
+        observed_flow = utils.lookup.get_interconnector_solution_attribute(data, i, '@Flow', float, intervention)
+        m.V_GC_INTERCONNECTOR[i].fix(observed_flow)
+
+    return m
 
 
 def check_region_fixed_demand(data, m, r):
     """Check fixed demand calculation"""
 
     # Get intervention flag corresponding to physical NEMDE run
-    intervention = get_intervention_status(data)
+    intervention = utils.lookup.get_intervention_status(data)
 
     # Container for output
     calculated = m.E_REGION_FIXED_DEMAND[r].expr()
@@ -1593,6 +1623,19 @@ if __name__ == '__main__':
 
     # Construct model
     model = construct_model(model_data)
+
+    # Fix variables (debugging)
+    model = fix_interconnector_flow_solution(model, cdata)
+
+    # Solve model
+    model, status = solve_model(model)
+
+    # Extract solution
+    solution = utils.solution.get_model_solution(model)
+
+    # Difference
+    trader_solution, df_trader_solution = utils.analysis.check_trader_solution(cdata, solution)
+    utils.analysis.plot_trader_solution_difference(cdata, solution)
 
     # Check fixed demand
     # df_fixed_demand_check = check_region_fixed_demand_calculation_sample(data_directory, n=1000)
