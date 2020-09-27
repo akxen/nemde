@@ -235,6 +235,19 @@ def get_interconnector_solution_attribute(data, interconnector_id, attribute, fu
     raise LookupError('Attribute not found:', interconnector_id, attribute, intervention)
 
 
+def get_generic_constraint_solution_attribute(data, constraint_id, attribute, func, intervention='1'):
+    """Get generic constraint solution attribute"""
+
+    # All constraints
+    constraints = data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('ConstraintSolution')
+
+    for i in constraints:
+        if (i['@ConstraintID'] == constraint_id) and (i['@Intervention'] == intervention):
+            return func(i[attribute])
+
+    raise LookupError('Attribute not found:', constraint_id, attribute, intervention)
+
+
 def get_trader_offer_index(data) -> list:
     """Get tuples describing all offers made by traders"""
 
@@ -262,6 +275,14 @@ def get_region_index(data) -> list:
         out.append(i['@RegionID'])
 
     return list(set(out))
+
+
+def get_generic_constraint_index(data) -> list:
+    """Get generic constraint index"""
+
+    return [i['@ConstraintID'] for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection')
+                                         .get('Period').get('GenericConstraintPeriodCollection')
+                                         .get('GenericConstraintPeriod'))]
 
 
 def get_intervention_status(data) -> str:

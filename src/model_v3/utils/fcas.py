@@ -10,9 +10,14 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-import lookup
-import loaders
-import data as data_handler
+try:
+    import lookup
+    import loaders
+    import data as data_handler
+except ModuleNotFoundError:
+    import utils.lookup as lookup
+    import utils.loaders as loaders
+    import utils.data as data_handler
 
 
 def get_trader_fcas_trapezium(data, trader_id, trade_type) -> dict:

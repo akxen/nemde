@@ -203,7 +203,7 @@ def get_interconnector_loss_model_attribute(data, interconnector_id, attribute, 
     raise Exception('Attribute not found:', interconnector_id, attribute)
 
 
-def get_interconnector_solution_attribute(data, interconnector_id, attribute, func, intervention='1'):
+def get_interconnector_solution_attribute(data, interconnector_id, attribute, func, intervention):
     """Get interconnector solution attribute"""
 
     # All interconnectors
@@ -214,6 +214,38 @@ def get_interconnector_solution_attribute(data, interconnector_id, attribute, fu
             return func(i[attribute])
 
     raise LookupError('Attribute not found:', interconnector_id, attribute, intervention)
+
+
+def get_generic_constraint_collection_attribute(data, constraint_id, attribute, func):
+    """Get generic constraint collection attribute. Intervention='False' or 'True'."""
+
+    # All generic constraints
+    constraints = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('GenericConstraintCollection')
+                       .get('GenericConstraint'))
+
+    # TODO: move this to a pre-processing step
+    # Check there are no duplicate constraint IDs when performing lookup
+    constraint_ids = [i['@ConstraintID'] for i in constraints]
+    assert len(constraint_ids) == len(set(constraint_ids)), 'Duplicate constraint IDs detected'
+
+    for i in constraints:
+        if i['@ConstraintID'] == constraint_id:
+            return func(i[attribute])
+
+    raise LookupError('Attribute not found:', constraint_id, attribute)
+
+
+def get_constraint_solution_attribute(data, constraint_id, attribute, func, intervention):
+    """Get constraint solution attribute"""
+
+    # All constraints
+    constraints = data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('ConstraintSolution')
+
+    for i in constraints:
+        if (i['@ConstraintID'] == constraint_id) and (i['@Intervention'] == intervention):
+            return func(i[attribute])
+
+    raise LookupError('Attribute not found:', constraint_id, attribute, intervention)
 
 
 def get_trader_offer_index(data) -> list:
@@ -230,3 +262,37 @@ def get_trader_offer_index(data) -> list:
             out.append((i.get('@TraderID'), j.get('@TradeType')))
 
     return out
+
+
+def get_generic_constraint_index(data, intervention) -> list:
+    """Get generic constraint index"""
+
+    # Constraints
+    constraints = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
+                   .get('GenericConstraintPeriodCollection').get('GenericConstraintPeriod'))
+
+    # Container for intervention status
+    out = []
+    for i in constraints:
+        if intervention == '1':
+            out.append(i['@ConstraintID'])
+
+        elif (intervention == '0') and (i['@Intervention'] == '0'):
+            out.append(i['@ConstraintID'])
+
+        else:
+            raise Exception('Unexpected intervention status:', intervention)
+
+    return out
+
+
+def get_intervention_status(data) -> str:
+    """Check if intervention pricing run occurred - trying to model physical run if intervention occurred"""
+
+    return '0' if get_case_attribute(data, '@Intervention', str) == 'False' else '1'
+
+
+def get_intervention_status_str(data) -> str:
+    """Check if intervention pricing run occurred - trying to model physical run if intervention occurred"""
+
+    return get_case_attribute(data, '@Intervention', str)

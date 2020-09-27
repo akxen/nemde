@@ -7,6 +7,7 @@ import json
 sys.path.append(os.path.join(os.path.dirname(__file__)))
 
 import fcas
+import lookup
 from loaders import load_dispatch_interval_json
 
 
@@ -82,40 +83,6 @@ def get_trader_fcas_available_offers_index(data) -> list:
 
     # All available FCAS offers
     return [i for i in offers if available[i]]
-
-
-# def get_trader_fcas_filtered_offers_index(data, trade_type) -> list:
-#     """All offers of a given type"""
-#
-#     # All available offers (energy and FCAS offers)
-#     offers = get_trader_offer_index(data)
-#
-#     return [(i, j) for (i, j) in offers if j == trade_type]
-
-
-# def get_trader_fcas_available_filtered_index(data, trade_type, must_contain) -> list:
-#     """Get all offers of a given type where the unit also has offers within must_contain"""
-#
-#     # All available offers (energy and FCAS offers)
-#     all_offers = get_trader_offer_index(data)
-#
-#     # Available FCAS offers
-#     fcas_offers = get_trader_fcas_available_offers_index(data)
-#
-#     # Container for output index
-#     out = []
-#
-#     for i, j in fcas_offers:
-#         # Check matching trade type
-#         if j == trade_type:
-#             # Check if given trader also has offer within must_contain
-#             for k in must_contain:
-#                 # Append if offer exists
-#                 if (i, k) in all_offers:
-#                     out.append((i, trade_type))
-#
-#     # TODO: Not sure if need to check for duplicates here. Trader shouldn't have ENOF and LDOF simultaneously
-#     return out
 
 
 def get_generic_constraint_index(data) -> list:
@@ -661,7 +628,7 @@ def get_interconnector_loss_model_breakpoints_y(data) -> dict:
     return values
 
 
-def get_interconnector_solution_attribute(data, attribute, func, intervention=0) -> dict:
+def get_interconnector_solution_attribute(data, attribute, func, intervention) -> dict:
     """
     Get interconnector solution attribute
 
@@ -676,8 +643,8 @@ def get_interconnector_solution_attribute(data, attribute, func, intervention=0)
     func : function
         Function used to parse attribute values e.g. convert to float or string
 
-    intervention : int (default=0)
-        Flag to indicate whether an intervention pricing period. 0=no intervention, 1=intervention.
+    intervention : str
+        Flag indicating inclusion of intervention constraints. 0=no intervention constraints, 1=includes intervention.
     """
 
     # All interconnectors
@@ -686,7 +653,7 @@ def get_interconnector_solution_attribute(data, attribute, func, intervention=0)
     # Container for extracted attribute values
     values = {}
     for i in interconnectors:
-        if i['@Intervention'] == f'{intervention}':
+        if i['@Intervention'] == intervention:
             values[i['@InterconnectorID']] = func(i[attribute])
 
     return values
@@ -857,7 +824,7 @@ def get_region_period_collection_attribute(data, attribute, func) -> dict:
                       .get('RegionPeriodCollection').get('RegionPeriod'))}
 
 
-def get_generic_constraint_rhs(data, intervention=0) -> dict:
+def get_generic_constraint_rhs(data, intervention) -> dict:
     """
     Get generic constraint right-hand-side term
 
@@ -866,15 +833,14 @@ def get_generic_constraint_rhs(data, intervention=0) -> dict:
     data : dict
         NEMDE case file dictionary
 
-    intervention : int (default=0)
-        Intervention flag - 0 -> no intervention, 1 -> intervention pricing period
+    intervention : str
+        Intervention flag - '0' -> no intervention constraints, '1' -> intervention constraints included
 
     Returns
     -------
     rhs : dict
         Dictionary with keys = ConstraintIDs, values = constraint RHS
     """
-    # TODO: can check if GenericConstraintCollection has RHS information
 
     # All constraints
     constraints = data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('ConstraintSolution')
@@ -883,7 +849,7 @@ def get_generic_constraint_rhs(data, intervention=0) -> dict:
     rhs = {}
     for i in constraints:
         # Check intervention flag
-        if i['@Intervention'] == f'{intervention}':
+        if i['@Intervention'] == intervention:
             rhs[i['@ConstraintID']] = float(i['@RHS'])
 
     return rhs
@@ -968,7 +934,7 @@ def get_case_attribute(data, attribute) -> float:
     return float(data.get('NEMSPDCaseFile').get('NemSpdInputs').get('Case')[attribute])
 
 
-def get_trader_solution(data) -> dict:
+def get_trader_solution(data, intervention) -> dict:
     """Get trader solution"""
 
     # All traders
@@ -981,13 +947,13 @@ def get_trader_solution(data) -> dict:
     solutions = {}
     for i in traders:
         # Parse values - only consider no intervention case
-        if i['@Intervention'] == '0':
+        if i['@Intervention'] == intervention:
             solutions[i['@TraderID']] = {k: str(v) if k in str_keys else float(v) for k, v in i.items()}
 
     return solutions
 
 
-def get_interconnector_solution(data) -> dict:
+def get_interconnector_solution(data, intervention) -> dict:
     """Get interconnector solution"""
 
     # All interconnectors
@@ -1000,13 +966,13 @@ def get_interconnector_solution(data) -> dict:
     solutions = {}
     for i in interconnectors:
         # Parse values - only consider no intervention case
-        if i['@Intervention'] == '0':
+        if i['@Intervention'] == intervention:
             solutions[i['@InterconnectorID']] = {k: str(v) if k in str_keys else float(v) for k, v in i.items()}
 
     return solutions
 
 
-def get_region_solution(data) -> dict:
+def get_region_solution(data, intervention) -> dict:
     """Get region solution"""
 
     # All regions
@@ -1019,37 +985,24 @@ def get_region_solution(data) -> dict:
     solutions = {}
     for i in regions:
         # Parse values - only consider no intervention case
-        if i['@Intervention'] == '0':
+        if i['@Intervention'] == intervention:
             solutions[i['@RegionID']] = {k: str(v) if k in str_keys else float(v) for k, v in i.items()}
 
     return solutions
 
 
-def get_region_solution_attribute(data, attribute, func) -> dict:
+def get_region_solution_attribute(data, attribute, func, intervention) -> dict:
     """Get given solution attribute for all regions"""
 
     # All regions
     regions = data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('RegionSolution')
 
-    return {i['@RegionID']: func(i[attribute]) for i in regions if i['@Intervention'] == '0'}
-
-    # # Keys that should be converted to type string. All other keys to be converted to type float.
-    # str_keys = ['@RegionID', '@PeriodID', '@Intervention']
-
-    # # Container for extracted region solutions
-    # solutions = {}
-    # for i in regions:
-    #     # Parse values - only consider no intervention case
-    #     if i['@Intervention'] == '0':
-    #         solutions[i['@RegionID']] = {k: str(v) if k in str_keys else float(v) for k, v in i.items()}
-    #
-    # return solutions
+    return {i['@RegionID']: func(i[attribute]) for i in regions if i['@Intervention'] == intervention}
 
 
-def get_constraint_solution(data) -> dict:
+def get_constraint_solution(data, intervention) -> dict:
     """Get constraint solution"""
 
-    # NEMSPDCaseFile.NemSpdOutputs.ConstraintSolution[0].@PeriodID
     # All constraints
     constraints = data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('ConstraintSolution')
 
@@ -1060,7 +1013,7 @@ def get_constraint_solution(data) -> dict:
     solutions = {}
     for i in constraints:
         # Parse values - only consider no intervention case
-        if i['@Intervention'] == '0':
+        if i['@Intervention'] == intervention:
             solutions[i['@ConstraintID']] = {k: str(v) if k in str_keys else float(v) for k, v in i.items()}
 
     return solutions
@@ -1077,7 +1030,7 @@ def get_case_solution(data) -> dict:
             for k, v in data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('CaseSolution').items()}
 
 
-def get_period_solution(data, intervention='1') -> dict:
+def get_period_solution(data, intervention) -> dict:
     """Get period solution"""
 
     # Keys that should be converted to type string. All other keys to be converted to type float.
@@ -1105,6 +1058,9 @@ def parse_case_data_json(data) -> dict:
 
     # Convert to dictionary
     data_dict = json.loads(data)
+
+    # Get intervention flag status
+    intervention = lookup.get_intervention_status(data_dict)
 
     case_data = {
         'S_REGIONS': get_region_index(data_dict),
@@ -1160,9 +1116,7 @@ def parse_case_data_json(data) -> dict:
         'P_REGION_INITIAL_DEMAND': get_region_initial_condition_attribute(data_dict, 'InitialDemand', float),
         'P_REGION_ADE': get_region_initial_condition_attribute(data_dict, 'ADE', float),
         'P_REGION_DF': get_region_period_collection_attribute(data_dict, '@DF', float),
-        'P_REGION_FIXED_DEMAND': get_region_solution_attribute(data_dict, '@FixedDemand', float),
-        'P_REGION_NET_EXPORT': get_region_solution_attribute(data_dict, '@NetExport', float),
-        'P_GC_RHS': get_generic_constraint_rhs(data_dict),
+        'P_GC_RHS': get_generic_constraint_rhs(data_dict, intervention),
         'P_GC_TYPE': get_generic_constraint_collection_attribute(data_dict, '@Type', str),
         'P_CVF_GC': get_generic_constraint_collection_attribute(data_dict, '@ViolationPrice', float),
         'P_CVF_VOLL': get_case_attribute(data_dict, '@VoLL'),
@@ -1185,12 +1139,12 @@ def parse_case_data_json(data) -> dict:
             'FCAS_AVAILABILITY_STATUS': get_trader_fcas_availability_status(data_dict)
         },
         'solution': {
-            'traders': get_trader_solution(data_dict),
-            'interconnectors': get_interconnector_solution(data_dict),
-            'regions': get_region_solution(data_dict),
-            'constraints': get_constraint_solution(data_dict),
+            'traders': get_trader_solution(data_dict, intervention),
+            'interconnectors': get_interconnector_solution(data_dict, intervention),
+            'regions': get_region_solution(data_dict, intervention),
+            'constraints': get_constraint_solution(data_dict, intervention),
             'case': get_case_solution(data_dict),
-            'period': get_period_solution(data_dict),
+            'period': get_period_solution(data_dict, intervention),
         }
     }
 

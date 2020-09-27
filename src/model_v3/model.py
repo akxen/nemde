@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 import pyomo.environ as pyo
 
+import utils.fcas
 import utils.data
 import utils.lookup
 import utils.loaders
@@ -295,33 +296,9 @@ def define_variables(m):
     m.V_CV_TRADER_FCAS_AS_PROFILE_2 = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
     m.V_CV_TRADER_FCAS_AS_PROFILE_3 = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
 
-    # FCAS joint ramping constraint violation pyo.Variables
-    m.V_CV_TRADER_FCAS_JOINT_RAMPING_RAISE_GENERATOR = pyo.Var(m.S_TRADERS, within=pyo.NonNegativeReals)
-    m.V_CV_TRADER_FCAS_JOINT_RAMPING_LOWER_GENERATOR = pyo.Var(m.S_TRADERS, within=pyo.NonNegativeReals)
-    m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RAISE_GENERATOR_LHS = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
-    m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RAISE_GENERATOR_RHS = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
-    m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LOWER_GENERATOR_LHS = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
-    m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LOWER_GENERATOR_RHS = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
-    m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_GENERATOR_RHS = pyo.Var(m.S_TRADERS, within=pyo.NonNegativeReals)
-    m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_GENERATOR_LHS = pyo.Var(m.S_TRADERS, within=pyo.NonNegativeReals)
-    m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_GENERATOR_LHS = pyo.Var(m.S_TRADERS, within=pyo.NonNegativeReals)
-    m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_GENERATOR_RHS = pyo.Var(m.S_TRADERS, within=pyo.NonNegativeReals)
-
-    # FCAS joint ramping constraint violation variables - loads
-    m.V_CV_TRADER_FCAS_JOINT_RAMPING_RAISE_LOAD = pyo.Var(m.S_TRADERS, within=pyo.NonNegativeReals)
-    m.V_CV_TRADER_FCAS_JOINT_RAMPING_LOWER_LOAD = pyo.Var(m.S_TRADERS, within=pyo.NonNegativeReals)
-    m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RAISE_LOAD_LHS = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
-    m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RAISE_LOAD_RHS = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
-    m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LOWER_LOAD_LHS = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
-    m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LOWER_LOAD_RHS = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
-    m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_LOAD_LHS = pyo.Var(m.S_TRADERS, within=pyo.NonNegativeReals)
-    m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_LOAD_RHS = pyo.Var(m.S_TRADERS, within=pyo.NonNegativeReals)
-    m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_LOAD_RHS = pyo.Var(m.S_TRADERS, within=pyo.NonNegativeReals)
-    m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_LOAD_LHS = pyo.Var(m.S_TRADERS, within=pyo.NonNegativeReals)
-
-    # FCAS joint capacity constraint violation pyo.Variables
-    m.V_CV_TRADER_FCAS_JOINT_CAPACITY_UP = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
-    m.V_CV_TRADER_FCAS_JOINT_CAPACITY_DOWN = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
+    # FCAS constraint violation
+    m.V_CV_TRADER_FCAS_GENERATOR_JOINT_RAMPING_UP = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
+    m.V_CV_TRADER_FCAS_GENERATOR_JOINT_RAMPING_DOWN = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
 
     # Interconnector forward and reverse flow constraint violation
     m.V_CV_INTERCONNECTOR_FORWARD = pyo.Var(m.S_INTERCONNECTORS, within=pyo.NonNegativeReals)
@@ -452,204 +429,23 @@ def define_constraint_violation_penalty_expressions(m):
     # Penalty factor for ramp down rate violation
     m.E_CV_TRADER_RAMP_DOWN_PENALTY = pyo.Expression(m.S_TRADERS, rule=trader_ramp_down_penalty_rule)
 
-    def trader_fcas_trapezium_penalty_rule(m, i, j):
-        """Penalty for violating FCAS trapezium bounds"""
+    def trader_fcas_generator_joint_ramping_up_rule(m, i, j):
+        """Penalty for violating FCAS constraint - generator joint ramping up"""
 
-        return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_TRAPEZIUM[i, j]
+        return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_GENERATOR_JOINT_RAMPING_UP[i, j]
 
-    # FCAS trapezium violation penalty
-    m.E_CV_TRADER_FCAS_TRAPEZIUM_PENALTY = pyo.Expression(m.S_TRADER_OFFERS, rule=trader_fcas_trapezium_penalty_rule)
+    # Penalty factor for generator FCAS joint ramping up constraint
+    m.E_CV_TRADER_FCAS_JOINT_RAMPING_UP = pyo.Expression(m.S_TRADER_OFFERS,
+                                                         rule=trader_fcas_generator_joint_ramping_up_rule)
 
-    def trader_total_trapezium_penalty_rule(m, i, j):
-        """Total penalty for violating FCAS trapezium bounds"""
+    def trader_fcas_generator_joint_ramping_down_rule(m, i, j):
+        """Penalty for violating FCAS constraint - generator joint ramping down"""
 
-        return m.P_CVF_AS_PROFILE_PRICE * (m.V_CV_TRADER_FCAS_AS_PROFILE_1[i, j]
-                                           + m.V_CV_TRADER_FCAS_AS_PROFILE_2[i, j]
-                                           + m.V_CV_TRADER_FCAS_AS_PROFILE_3[i, j])
+        return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_GENERATOR_JOINT_RAMPING_DOWN[i, j]
 
-    # FCAS trapezium penalty
-    m.E_CV_TRADER_TOTAL_TRAPEZIUM_PENALTY = pyo.Expression(m.S_TRADER_OFFERS, rule=trader_total_trapezium_penalty_rule)
-
-    def trader_joint_ramping_raise_generator_penalty_rule(m, i):
-        """Penalty for FCAS joint capacity constraint up violation"""
-
-        return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_RAMPING_RAISE_GENERATOR[i]
-
-    # FCAS joint ramping constraint raise violation penalty
-    m.E_CV_TRADER_JOINT_RAMPING_RAISE_GENERATOR_PENALTY = pyo.Expression(
-        m.S_TRADERS, rule=trader_joint_ramping_raise_generator_penalty_rule)
-
-    def trader_joint_ramping_lower_generator_penalty_rule(m, i):
-        """Penalty for FCAS joint ramping constraint down violation"""
-
-        return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_RAMPING_LOWER_GENERATOR[i]
-
-    # FCAS joint ramping constraint lower violation penalty
-    m.E_CV_TRADER_JOINT_RAMPING_LOWER_GENERATOR_PENALTY = pyo.Expression(
-        m.S_TRADERS, rule=trader_joint_ramping_lower_generator_penalty_rule)
-
-    def trader_joint_capacity_raise_generator_penalty_rhs_rule(m, i, j):
-        """Penalty for FCAS joint capacity constraint raise violation"""
-
-        return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RAISE_GENERATOR_RHS[i, j]
-
-    # FCAS joint capacity constraint raise violation penalty
-    m.E_CV_TRADER_JOINT_CAPACITY_RAISE_GENERATOR_RHS_PENALTY = pyo.Expression(
-        m.S_TRADER_OFFERS, rule=trader_joint_capacity_raise_generator_penalty_rhs_rule)
-
-    def trader_joint_capacity_raise_generator_penalty_lhs_rule(m, i, j):
-        """Penalty for FCAS joint capacity constraint raise violation"""
-
-        return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RAISE_GENERATOR_LHS[i, j]
-
-    # FCAS joint capacity constraint raise violation penalty
-    m.E_CV_TRADER_JOINT_CAPACITY_RAISE_GENERATOR_LHS_PENALTY = pyo.Expression(
-        m.S_TRADER_OFFERS, rule=trader_joint_capacity_raise_generator_penalty_lhs_rule)
-
-    def trader_joint_capacity_lower_generator_penalty_rhs_rule(m, i, j):
-        """Penalty for FCAS joint capacity constraint lower violation"""
-
-        return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LOWER_GENERATOR_RHS[i, j]
-
-    # FCAS joint capacity constraint lower violation penalty
-    m.E_CV_TRADER_JOINT_CAPACITY_LOWER_GENERATOR_RHS_PENALTY = pyo.Expression(
-        m.S_TRADER_OFFERS, rule=trader_joint_capacity_lower_generator_penalty_rhs_rule)
-
-    def trader_joint_capacity_lower_generator_penalty_lhs_rule(m, i, j):
-        """Penalty for FCAS joint capacity constraint lower violation"""
-
-        return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LOWER_GENERATOR_LHS[i, j]
-
-    # FCAS joint capacity constraint lower violation penalty
-    m.E_CV_TRADER_JOINT_CAPACITY_LOWER_GENERATOR_LHS_PENALTY = pyo.Expression(
-        m.S_TRADER_OFFERS, rule=trader_joint_capacity_lower_generator_penalty_lhs_rule)
-
-    def trader_fcas_energy_regulating_raise_generator_rhs_penalty_rule(m, i):
-        """Penalty for FCAS joint capacity constraint up violation"""
-
-        return m.P_CVF_AS_ENABLEMENT_MAX_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_GENERATOR_RHS[i]
-
-    # FCAS joint capacity constraint raise violation penalty - upper slope
-    m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_GENERATOR_RHS_PENALTY = pyo.Expression(
-        m.S_TRADERS, rule=trader_fcas_energy_regulating_raise_generator_rhs_penalty_rule)
-
-    def trader_fcas_energy_regulating_raise_generator_lhs_penalty_rule(m, i):
-        """Penalty for FCAS joint capacity constraint up violation"""
-
-        return m.P_CVF_AS_ENABLEMENT_MAX_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_GENERATOR_LHS[i]
-
-    # FCAS joint capacity constraint raise violation penalty - lower slope
-    m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_GENERATOR_LHS_PENALTY = pyo.Expression(
-        m.S_TRADERS, rule=trader_fcas_energy_regulating_raise_generator_lhs_penalty_rule)
-
-    def trader_fcas_energy_regulating_lower_generator_lhs_penalty_rule(m, i):
-        """Penalty for FCAS joint capacity constraint down violation"""
-
-        return m.P_CVF_AS_ENABLEMENT_MIN_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_GENERATOR_LHS[i]
-
-    # FCAS joint capacity constraint lower violation penalty - lower slope
-    m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_GENERATOR_LHS_PENALTY = pyo.Expression(
-        m.S_TRADERS, rule=trader_fcas_energy_regulating_lower_generator_lhs_penalty_rule)
-
-    def trader_fcas_energy_regulating_lower_generator_rhs_penalty_rule(m, i):
-        """Penalty for FCAS joint capacity constraint down violation"""
-
-        return m.P_CVF_AS_ENABLEMENT_MIN_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_GENERATOR_RHS[i]
-
-    # FCAS joint capacity constraint lower violation penalty - upper slope
-    m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_GENERATOR_RHS_PENALTY = pyo.Expression(
-        m.S_TRADERS, rule=trader_fcas_energy_regulating_lower_generator_rhs_penalty_rule)
-
-    def trader_joint_ramping_raise_load_penalty_rule(m, i):
-        """Penalty for FCAS joint capacity constraint up violation"""
-
-        return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_RAMPING_RAISE_LOAD[i]
-
-    # FCAS joint ramping constraint raise violation penalty
-    m.E_CV_TRADER_JOINT_RAMPING_RAISE_LOAD_PENALTY = pyo.Expression(
-        m.S_TRADERS, rule=trader_joint_ramping_raise_load_penalty_rule)
-
-    def trader_joint_ramping_lower_load_penalty_rule(m, i):
-        """Penalty for FCAS joint ramping constraint down violation"""
-
-        # TODO: check if this is correct constraint violation penalty
-        return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_RAMPING_LOWER_LOAD[i]
-
-    # FCAS joint ramping constraint lower violation penalty
-    m.E_CV_TRADER_JOINT_RAMPING_LOWER_LOAD_PENALTY = pyo.Expression(
-        m.S_TRADERS, rule=trader_joint_ramping_lower_load_penalty_rule)
-
-    def trader_joint_capacity_raise_load_lhs_penalty_rule(m, i, j):
-        """Penalty for FCAS joint capacity constraint raise violation"""
-
-        return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RAISE_LOAD_LHS[i, j]
-
-    # FCAS joint capacity constraint raise violation penalty
-    m.E_CV_TRADER_JOINT_CAPACITY_RAISE_LOAD_LHS_PENALTY = pyo.Expression(
-        m.S_TRADER_OFFERS, rule=trader_joint_capacity_raise_load_lhs_penalty_rule)
-
-    def trader_joint_capacity_raise_load_rhs_penalty_rule(m, i, j):
-        """Penalty for FCAS joint capacity constraint raise violation"""
-
-        return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RAISE_LOAD_RHS[i, j]
-
-    # FCAS joint capacity constraint raise violation penalty
-    m.E_CV_TRADER_JOINT_CAPACITY_RAISE_LOAD_RHS_PENALTY = pyo.Expression(
-        m.S_TRADER_OFFERS, rule=trader_joint_capacity_raise_load_rhs_penalty_rule)
-
-    def trader_joint_capacity_lower_load_lhs_penalty_rule(m, i, j):
-        """Penalty for FCAS joint capacity constraint lower violation"""
-
-        return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LOWER_LOAD_LHS[i, j]
-
-    # FCAS joint capacity constraint lower violation penalty
-    m.E_CV_TRADER_JOINT_CAPACITY_LOWER_LOAD_LHS_PENALTY = pyo.Expression(
-        m.S_TRADER_OFFERS, rule=trader_joint_capacity_lower_load_lhs_penalty_rule)
-
-    def trader_joint_capacity_lower_load_rhs_penalty_rule(m, i, j):
-        """Penalty for FCAS joint capacity constraint lower violation"""
-
-        return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LOWER_LOAD_RHS[i, j]
-
-    # FCAS joint capacity constraint lower violation penalty
-    m.E_CV_TRADER_JOINT_CAPACITY_LOWER_LOAD_RHS_PENALTY = pyo.Expression(
-        m.S_TRADER_OFFERS, rule=trader_joint_capacity_lower_load_rhs_penalty_rule)
-
-    def trader_fcas_energy_regulating_raise_load_lhs_penalty_rule(m, i):
-        """Penalty for FCAS joint capacity constraint up violation"""
-
-        return m.P_CVF_AS_ENABLEMENT_MAX_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_LOAD_LHS[i]
-
-    # FCAS joint capacity constraint raise violation penalty - lower slope
-    m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_LOAD_LHS_PENALTY = pyo.Expression(
-        m.S_TRADERS, rule=trader_fcas_energy_regulating_raise_load_lhs_penalty_rule)
-
-    def trader_fcas_energy_regulating_raise_load_rhs_penalty_rule(m, i):
-        """Penalty for FCAS joint capacity constraint up violation"""
-
-        return m.P_CVF_AS_ENABLEMENT_MAX_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_LOAD_RHS[i]
-
-    # FCAS joint capacity constraint raise violation penalty - upper slope
-    m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_LOAD_RHS_PENALTY = pyo.Expression(
-        m.S_TRADERS, rule=trader_fcas_energy_regulating_raise_load_rhs_penalty_rule)
-
-    def trader_fcas_energy_regulating_lower_load_rhs_penalty_rule(m, i):
-        """Penalty for FCAS joint capacity constraint up violation"""
-
-        return m.P_CVF_AS_ENABLEMENT_MAX_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_LOAD_RHS[i]
-
-    # FCAS joint capacity constraint raise violation penalty
-    m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_LOAD_RHS_PENALTY = pyo.Expression(
-        m.S_TRADERS, rule=trader_fcas_energy_regulating_lower_load_rhs_penalty_rule)
-
-    def trader_fcas_energy_regulating_lower_load_lhs_penalty_rule(m, i):
-        """Penalty for FCAS joint capacity constraint up violation"""
-
-        return m.P_CVF_AS_ENABLEMENT_MAX_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_LOAD_LHS[i]
-
-    # FCAS joint capacity constraint raise violation penalty
-    m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_LOAD_LHS_PENALTY = pyo.Expression(
-        m.S_TRADERS, rule=trader_fcas_energy_regulating_lower_load_lhs_penalty_rule)
+    # Penalty factor for generator FCAS joint ramping up constraint
+    m.E_CV_TRADER_FCAS_JOINT_RAMPING_DOWN = pyo.Expression(m.S_TRADER_OFFERS,
+                                                           rule=trader_fcas_generator_joint_ramping_down_rule)
 
     def mnsp_offer_penalty_rule(m, i, j, k):
         """Penalty for band amount exceeding band bid amount"""
@@ -694,27 +490,8 @@ def define_constraint_violation_penalty_expressions(m):
              + sum(m.E_CV_TRADER_CAPACITY_PENALTY[i] for i in m.S_TRADER_OFFERS)
              + sum(m.E_CV_TRADER_RAMP_UP_PENALTY[i] for i in m.S_TRADERS)
              + sum(m.E_CV_TRADER_RAMP_DOWN_PENALTY[i] for i in m.S_TRADERS)
-             + sum(m.E_CV_TRADER_JOINT_RAMPING_RAISE_GENERATOR_PENALTY[i] for i in m.S_TRADERS)
-             + sum(m.E_CV_TRADER_JOINT_RAMPING_LOWER_GENERATOR_PENALTY[i] for i in m.S_TRADERS)
-             + sum(m.E_CV_TRADER_JOINT_CAPACITY_RAISE_GENERATOR_RHS_PENALTY[i] for i in m.S_TRADER_OFFERS)
-             + sum(m.E_CV_TRADER_JOINT_CAPACITY_RAISE_GENERATOR_LHS_PENALTY[i] for i in m.S_TRADER_OFFERS)
-             + sum(m.E_CV_TRADER_JOINT_CAPACITY_LOWER_GENERATOR_RHS_PENALTY[i] for i in m.S_TRADER_OFFERS)
-             + sum(m.E_CV_TRADER_JOINT_CAPACITY_LOWER_GENERATOR_LHS_PENALTY[i] for i in m.S_TRADER_OFFERS)
-             + sum(m.E_CV_TRADER_FCAS_TRAPEZIUM_PENALTY[i] for i in m.S_TRADER_OFFERS)
-             + sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_GENERATOR_RHS_PENALTY[i] for i in m.S_TRADERS)
-             + sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_GENERATOR_LHS_PENALTY[i] for i in m.S_TRADERS)
-             + sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_GENERATOR_LHS_PENALTY[i] for i in m.S_TRADERS)
-             + sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_GENERATOR_RHS_PENALTY[i] for i in m.S_TRADERS)
-             + sum(m.E_CV_TRADER_JOINT_RAMPING_RAISE_LOAD_PENALTY[i] for i in m.S_TRADERS)
-             + sum(m.E_CV_TRADER_JOINT_RAMPING_LOWER_LOAD_PENALTY[i] for i in m.S_TRADERS)
-             + sum(m.E_CV_TRADER_JOINT_CAPACITY_RAISE_LOAD_LHS_PENALTY[i] for i in m.S_TRADER_OFFERS)
-             + sum(m.E_CV_TRADER_JOINT_CAPACITY_RAISE_LOAD_RHS_PENALTY[i] for i in m.S_TRADER_OFFERS)
-             + sum(m.E_CV_TRADER_JOINT_CAPACITY_LOWER_LOAD_LHS_PENALTY[i] for i in m.S_TRADER_OFFERS)
-             + sum(m.E_CV_TRADER_JOINT_CAPACITY_LOWER_LOAD_RHS_PENALTY[i] for i in m.S_TRADER_OFFERS)
-             + sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_LOAD_LHS_PENALTY[i] for i in m.S_TRADERS)
-             + sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RAISE_LOAD_RHS_PENALTY[i] for i in m.S_TRADERS)
-             + sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_LOAD_RHS_PENALTY[i] for i in m.S_TRADERS)
-             + sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LOWER_LOAD_LHS_PENALTY[i] for i in m.S_TRADERS)
+             + sum(m.E_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, j] for i, j in m.S_TRADER_OFFERS)
+             + sum(m.E_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, j] for i, j in m.S_TRADER_OFFERS)
              + sum(m.E_CV_MNSP_OFFER_PENALTY[i, j, k] for i, j in m.S_MNSP_OFFERS for k in m.S_BANDS)
              + sum(m.E_CV_MNSP_CAPACITY_PENALTY[i] for i in m.S_MNSP_OFFERS)
              + sum(m.E_CV_INTERCONNECTOR_FORWARD_PENALTY[i] for i in m.S_INTERCONNECTORS)
@@ -1325,8 +1102,192 @@ def define_interconnector_constraints(m):
     return m
 
 
-def define_fcas_constraints(m):
+def define_fcas_constraints(m, data):
     """Define FCAS constraints"""
+
+    def generator_joint_ramping_up_rule(m, i, j):
+        """Generator joint ramp up constraints"""
+
+        # Only consider raise regulation FCAS
+        if j != 'R5RE':
+            return pyo.Constraint.Skip
+
+        # Raise regulation FCAS is unavailable
+        elif not m.P_TRADER_FCAS_AVAILABILITY_STATUS[i, j]:
+            return pyo.Constraint.Skip
+
+        # SCADA ramp rate must be greater than 0
+        elif m.P_TRADER_SCADA_RAMP_UP_RATE[i] <= 0:
+            return pyo.Constraint.Skip
+
+        # Must have an energy offer
+        elif (i, 'ENOF') not in m.S_TRADER_OFFERS:
+            return pyo.Constraint.Skip
+
+        else:
+            return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + m.V_TRADER_TOTAL_OFFER[i, 'R5RE']
+                    <= m.P_TRADER_INITIAL_MW[i] + (m.P_TRADER_SCADA_RAMP_UP_RATE[i] / 12)
+                    + m.V_CV_TRADER_FCAS_GENERATOR_JOINT_RAMPING_UP[i, j])
+
+    # Generator joint ramp up constraint
+    m.C_FCAS_GENERATOR_JOINT_RAMPING_UP = pyo.Constraint(m.S_TRADER_OFFERS, rule=generator_joint_ramping_up_rule)
+
+    def generator_joint_ramping_down_rule(m, i, j):
+        """Generator joint ramp down constraints"""
+
+        # Only consider raise regulation FCAS
+        if j != 'L5RE':
+            return pyo.Constraint.Skip
+
+        # Raise regulation FCAS is unavailable
+        elif not m.P_TRADER_FCAS_AVAILABILITY_STATUS[i, j]:
+            return pyo.Constraint.Skip
+
+        # SCADA ramp rate must be greater than 0
+        elif m.P_TRADER_SCADA_RAMP_UP_RATE[i] <= 0:
+            return pyo.Constraint.Skip
+
+        # Must have an energy offer
+        elif (i, 'ENOF') not in m.S_TRADER_OFFERS:
+            return pyo.Constraint.Skip
+
+        else:
+            return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] - m.V_TRADER_TOTAL_OFFER[i, 'L5RE']
+                    + m.V_CV_TRADER_FCAS_GENERATOR_JOINT_RAMPING_DOWN[i, j]
+                    >= m.P_TRADER_INITIAL_MW[i] - (m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] / 12))
+
+    # Generator joint ramp down constraint
+    m.C_FCAS_GENERATOR_JOINT_RAMPING_DOWN = pyo.Constraint(m.S_TRADER_OFFERS, rule=generator_joint_ramping_down_rule)
+
+    def generator_joint_capacity_rhs_rule(m, i, j):
+        """Joint capacity constraint - RHS of FCAS trapezium"""
+
+        # Only consider contingency FCAS
+        if j not in ['R6SE', 'R60S', 'R5MI', 'L6SE', 'L60S', 'L5MI']:
+            return pyo.Constraint.Skip
+
+        # Raise regulation FCAS is unavailable
+        elif not m.P_TRADER_FCAS_AVAILABILITY_STATUS[i, j]:
+            return pyo.Constraint.Skip
+
+        # Must have an energy offer
+        elif (i, 'ENOF') not in m.S_TRADER_OFFERS:
+            return pyo.Constraint.Skip
+
+        elif (i, 'R5RE') in m.S_TRADER_OFFERS:
+            usc = utils.fcas.get_upper_slope_coefficient(data, i, j)
+            return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + (usc * m.V_TRADER_TOTAL_OFFER[i, j])
+                    + m.V_TRADER_TOTAL_OFFER[i, 'R5RE'] <= m.P_TRADER_FCAS_ENABLEMENT_MAX[i, j])
+
+        else:
+            usc = utils.fcas.get_upper_slope_coefficient(data, i, j)
+            return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + (usc * m.V_TRADER_TOTAL_OFFER[i, j])
+                    <= m.P_TRADER_FCAS_ENABLEMENT_MAX[i, j])
+
+    # Joint capacity constraint - generator
+    m.C_FCAS_GENERATOR_CONTINGENCY_RHS = pyo.Constraint(m.S_TRADER_OFFERS, rule=generator_joint_capacity_rhs_rule)
+
+    def generator_joint_capacity_lhs_rule(m, i, j):
+        """Joint capacity raise constraint - LHS of FCAS trapezium"""
+
+        # Only consider contingency FCAS
+        if j not in ['R6SE', 'R60S', 'R5MI', 'L6SE', 'L60S', 'L5MI']:
+            return pyo.Constraint.Skip
+
+        # Raise regulation FCAS is unavailable
+        elif not m.P_TRADER_FCAS_AVAILABILITY_STATUS[i, j]:
+            return pyo.Constraint.Skip
+
+        # Must have an energy offer
+        elif (i, 'ENOF') not in m.S_TRADER_OFFERS:
+            return pyo.Constraint.Skip
+
+        elif (i, 'L5RE') in m.S_TRADER_OFFERS:
+            lsc = utils.fcas.get_lower_slope_coefficient(data, i, j)
+            return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] - (lsc * m.V_TRADER_TOTAL_OFFER[i, j])
+                    - m.V_TRADER_TOTAL_OFFER[i, 'L5RE'] >= m.P_TRADER_FCAS_ENABLEMENT_MIN[i, j])
+
+        else:
+            lsc = utils.fcas.get_lower_slope_coefficient(data, i, j)
+            return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] - (lsc * m.V_TRADER_TOTAL_OFFER[i, j])
+                    >= m.P_TRADER_FCAS_ENABLEMENT_MIN[i, j])
+
+    # Joint capacity constraint - generator
+    m.C_FCAS_GENERATOR_CONTINGENCY_LHS = pyo.Constraint(m.S_TRADER_OFFERS, rule=generator_joint_capacity_lhs_rule)
+
+    def generator_joint_energy_regulating_rhs_rule(m, i, j):
+        """Joint energy and regulating FCAS constraint - RHS of trapezium"""
+
+        # Only consider regulation raise service
+        if j not in ['R5RE', 'L5RE']:
+            return pyo.Constraint.Skip
+
+        # Trader must have an energy offer
+        elif (i, 'ENOF') not in m.S_TRADER_OFFERS:
+            return pyo.Constraint.Skip
+
+        # Regulating FCAS must be available
+        elif not m.P_TRADER_FCAS_AVAILABILITY_STATUS[i, j]:
+            return pyo.Constraint.Skip
+
+        else:
+            usc = utils.fcas.get_upper_slope_coefficient(data, i, j)
+            return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + (usc * m.V_TRADER_TOTAL_OFFER[i, j])
+                    <= m.P_TRADER_FCAS_ENABLEMENT_MAX[i, j])
+
+    # Energy and regulating FCAS constraint - RHS of trapezium
+    m.C_FCAS_GENERATOR_JOINT_ENERGY_REGULATING_RHS = pyo.Constraint(m.S_TRADER_OFFERS,
+                                                                    rule=generator_joint_energy_regulating_rhs_rule)
+
+    def generator_joint_energy_regulating_lhs_rule(m, i, j):
+        """Joint energy and regulating FCAS constraint - LHS of trapezium"""
+
+        # Only consider regulation raise service
+        if j not in ['R5RE', 'L5RE']:
+            return pyo.Constraint.Skip
+
+        # Trader must have an energy offer
+        elif (i, 'ENOF') not in m.S_TRADER_OFFERS:
+            return pyo.Constraint.Skip
+
+        # Regulating FCAS must be available
+        elif not m.P_TRADER_FCAS_AVAILABILITY_STATUS[i, j]:
+            return pyo.Constraint.Skip
+
+        else:
+            lsc = utils.fcas.get_lower_slope_coefficient(data, i, j)
+            return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] - (lsc * m.V_TRADER_TOTAL_OFFER[i, j])
+                    >= m.P_TRADER_FCAS_ENABLEMENT_MIN[i, j])
+
+    # Energy and regulating FCAS constraint - LHS of trapezium
+    m.C_FCAS_GENERATOR_JOINT_ENERGY_REGULATING_LHS = pyo.Constraint(m.S_TRADER_OFFERS,
+                                                                    rule=generator_joint_energy_regulating_lhs_rule)
+
+    def generator_fcas_max_available_rule(m, i, j):
+        """Effective max available"""
+
+        # Only consider contingency FCAS
+        if j not in ['R6SE', 'R60S', 'R5MI', 'L6SE', 'L60S', 'L5MI']:
+            return pyo.Constraint.Skip
+
+        # Fix to zero if FCAS service is unavailable
+        elif not m.P_TRADER_FCAS_AVAILABILITY_STATUS[i, j]:
+            return m.V_TRADER_TOTAL_OFFER[i, j] == 0
+
+        elif j == 'R5RE':
+            effective_max_avail = min([(m.P_TRADER_SCADA_RAMP_UP_RATE[i] / 12), m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]])
+            return m.V_TRADER_TOTAL_OFFER[i, j] <= effective_max_avail
+
+        elif j == 'L5RE':
+            effective_max_avail = min([(m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] / 12), m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]])
+            return m.V_TRADER_TOTAL_OFFER[i, j] <= effective_max_avail
+
+        else:
+            return m.V_TRADER_TOTAL_OFFER[i, j] <= m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]
+
+    # Effective max available FCAS
+    m.C_FCAS_GENERATOR_MAX_AVAILABLE = pyo.Constraint(m.S_TRADER_OFFERS, rule=generator_fcas_max_available_rule)
+
     return m
 
 
@@ -1421,7 +1382,7 @@ def define_loss_model_constraints(m):
     return m
 
 
-def define_constraints(m):
+def define_constraints(m, case_data):
     """Define model constraints"""
 
     t0 = time.time()
@@ -1448,7 +1409,7 @@ def define_constraints(m):
     print('Defined interconnector constraints:', time.time() - t0)
 
     # Construct FCAS constraints
-    m = define_fcas_constraints(m)
+    m = define_fcas_constraints(m, case_data)
     print('Defined FCAS constraints:', time.time() - t0)
 
     # SOS2 interconnector loss model constraints
@@ -1471,7 +1432,7 @@ def define_objective(m):
     return m
 
 
-def construct_model(data):
+def construct_model(data, case_data):
     """Create model object"""
 
     # Initialise model
@@ -1483,7 +1444,7 @@ def construct_model(data):
     m = define_parameters(m, data)
     m = define_variables(m)
     m = define_expressions(m, data)
-    m = define_constraints(m)
+    m = define_constraints(m, case_data)
     m = define_objective(m)
 
     # # Add component allowing dual variables to be imported
@@ -1504,7 +1465,7 @@ def solve_model(m):
     t0 = time.time()
 
     print('Starting MILP solve:', time.time() - t0)
-    solve_status_1 = opt.solve(m, tee=False, options=solver_options, keepfiles=False)
+    solve_status_1 = opt.solve(m, tee=True, options=solver_options, keepfiles=False)
     print('Finished MILP solve:', time.time() - t0)
     print('Objective value - 1:', m.OBJECTIVE.expr())
 
@@ -1524,15 +1485,29 @@ def fix_interconnector_flow_solution(m, data):
     return m
 
 
-def check_region_fixed_demand(data, m, r):
+def fix_energy_solution(m, data):
+    """Fix FCAS solution"""
+
+    # Intervention status
+    intervention = utils.lookup.get_intervention_status(data)
+
+    for i, j in m.S_TRADER_OFFERS:
+        if j in ['ENOF', 'LDOF']:
+            energy_target = utils.lookup.get_trader_solution_attribute(data, i, '@EnergyTarget', float, intervention)
+            m.V_TRADER_TOTAL_OFFER[(i, j)].fix(energy_target)
+
+    return m
+
+
+def check_region_fixed_demand(data, m, region_id):
     """Check fixed demand calculation"""
 
     # Get intervention flag corresponding to physical NEMDE run
     intervention = utils.lookup.get_intervention_status(data)
 
     # Container for output
-    calculated = m.E_REGION_FIXED_DEMAND[r].expr()
-    observed = utils.lookup.get_region_solution_attribute(data, r, '@FixedDemand', float, intervention)
+    calculated = m.E_REGION_FIXED_DEMAND[region_id].expr()
+    observed = utils.lookup.get_region_solution_attribute(data, region_id, '@FixedDemand', float, intervention)
 
     out = {
         'calculated': calculated,
@@ -1606,6 +1581,88 @@ def check_region_fixed_demand_calculation_sample(data_dir, n=5):
     return df
 
 
+def check_generic_constraint_rhs(data, m, constraint_id):
+    """Check generic constraint RHS"""
+
+    # Get intervention flag corresponding to physical NEMDE run
+    intervention = utils.lookup.get_intervention_status(data)
+
+    # Container for output
+    calculated = m.P_GC_RHS[constraint_id]
+    observed = utils.lookup.get_generic_constraint_solution_attribute(data, constraint_id, '@RHS', float, intervention)
+
+    out = {
+        'calculated': calculated,
+        'observed': observed,
+        'difference': calculated - observed,
+        'abs_difference': abs(calculated - observed)
+    }
+
+    return out
+
+
+def check_generic_constraint_rhs_sample(data_dir, n=5):
+    """Check generic constraint RHS for a random sample of dispatch intervals"""
+
+    # Seed random number generator to get reproducable results
+    np.random.seed(10)
+
+    # Population of dispatch intervals for a given month
+    population = [(i, j) for i in range(1, 30) for j in range(1, 289)]
+    population_map = {i: j for i, j in enumerate(population)}
+
+    # Random sample of dispatch intervals
+    sample_keys = np.random.choice(list(population_map.keys()), n, replace=False)
+    sample = [population_map[i] for i in sample_keys]
+
+    # Container for model output
+    out = {}
+
+    # Placeholder for max absolute difference observed
+    max_abs_difference = 0
+    max_abs_difference_interval = None
+
+    # Compute fixed demand for each interval
+    for i, (day, interval) in enumerate(sample):
+        print(f'({day}, {interval}) {i + 1}/{len(sample)}')
+
+        # Case data in json format
+        data_json = utils.loaders.load_dispatch_interval_json(data_dir, 2019, 10, day, interval)
+
+        # Get NEMDE model data as a Python dictionary
+        case_data = json.loads(data_json)
+
+        # Preprocessed case data
+        processed_data = utils.data.parse_case_data_json(data_json)
+
+        # Construct model
+        m = construct_model(processed_data)
+
+        # All constraints
+        constraints = utils.lookup.get_generic_constraint_index(case_data)
+
+        for j in constraints:
+            # Check difference
+            info = check_generic_constraint_rhs(case_data, m, j)
+
+            # Add to dictionary
+            out[(j, day, interval)] = info
+
+            if info['abs_difference'] > max_abs_difference:
+                max_abs_difference = info['abs_difference']
+                max_abs_difference_interval = (j, day, interval)
+
+        # Periodically print max absolute difference observed
+        if (i + 1) % 10 == 0:
+            print('Max absolute difference:', max_abs_difference_interval, max_abs_difference)
+
+    # Convert to DataFrame
+    df = pd.DataFrame(out).T
+    df = df.sort_values(by='abs_difference', ascending=False)
+
+    return df
+
+
 if __name__ == '__main__':
     # Directory containing case data
     data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
@@ -1622,10 +1679,15 @@ if __name__ == '__main__':
     model_data = utils.data.parse_case_data_json(case_data_json)
 
     # Construct model
-    model = construct_model(model_data)
+    model = construct_model(model_data, cdata)
+
+    # Perform model checks
+    # df_fixed_demand_check = check_region_fixed_demand_calculation_sample(data_directory, n=1000)
+    # df_rhs = check_generic_constraint_rhs_sample(data_directory, n=1000)
 
     # Fix variables (debugging)
-    model = fix_interconnector_flow_solution(model, cdata)
+    # model = fix_interconnector_flow_solution(model, cdata)
+    # model = fix_energy_solution(model, cdata)
 
     # Solve model
     model, status = solve_model(model)
@@ -1637,8 +1699,16 @@ if __name__ == '__main__':
     trader_solution, df_trader_solution = utils.analysis.check_trader_solution(cdata, solution)
     utils.analysis.plot_trader_solution_difference(cdata, solution)
 
-    # Check fixed demand
-    # df_fixed_demand_check = check_region_fixed_demand_calculation_sample(data_directory, n=1000)
+    # # Case data in json format
+    # case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, 2019, 10, 19, 131)
+    #
+    # # Get NEMDE model data as a Python dictionary
+    # cdata = json.loads(case_data_json)
 
     # with open('example.json', 'w') as f:
     #     json.dump(cdata, f)
+
+    # sum(model.E_REGION_DISPATCHED_GENERATION[r].expr() for r in model.S_REGIONS)
+    #
+    # sum(utils.lookup.get_region_solution_attribute(cdata, r, '@DispatchedGeneration', float, '0') for r in
+    #     utils.lookup.get_region_index(cdata))

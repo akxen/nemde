@@ -70,12 +70,6 @@ def get_mnsp_index(data) -> list:
     return out
 
 
-def get_intervention_status(data) -> str:
-    """Check if intervention pricing run occurred - trying to model physical run if intervention occurred"""
-
-    return '0' if lookup.get_case_attribute(data, '@Intervention', str) == 'False' else '1'
-
-
 def get_initial_region_interconnector_loss(data, region_id) -> float:
     """Get initial loss allocated to each region"""
 
@@ -684,6 +678,139 @@ def check_region_dispatched_load_calculation(data, region_id, intervention) -> f
     return total - load
 
 
+def check_unique_generic_constraint_id(data):
+    """Check if generic constraint IDs are unique"""
+
+    # Generic constraints
+    constraints = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('GenericConstraintCollection')
+                   .get('GenericConstraint'))
+
+    # All constraint IDs
+    constraint_ids = [i['@ConstraintID'] for i in constraints]
+
+    n_constraints = len(constraint_ids)
+    n_unique_constraints = len(set(constraint_ids))
+    print(n_constraints, n_unique_constraints)
+
+    assert n_constraints == n_unique_constraints
+
+
+def check_unique_generic_constraint_id_sample(data_dir, func, n=5):
+    """Check generic constraint IDs are unique for a random sample of dispatch intervals"""
+
+    print('Checking:', func.__name__)
+
+    # Seed random number generator to get reproducable results
+    np.random.seed(10)
+
+    # Population of dispatch intervals for a given month
+    population = [(i, j) for i in range(1, 30) for j in range(1, 289)]
+    population_map = {i: j for i, j in enumerate(population)}
+
+    # Random sample of dispatch intervals
+    sample_keys = np.random.choice(list(population_map.keys()), n, replace=False)
+    sample = [population_map[i] for i in sample_keys]
+
+    # Compute fixed demand for each interval
+    for i, (day, interval) in enumerate(sample):
+        print(f'({day}, {interval}): {i + 1}/{len(sample)}')
+
+        # Case data in json format
+        data_json = loaders.load_dispatch_interval_json(data_dir, 2019, 10, day, interval)
+
+        # Get NEMDE model data as a Python dictionary
+        case_data = json.loads(data_json)
+
+        # Check generic constraint IDs are unique
+        check_unique_generic_constraint_id(case_data)
+
+
+def check_generic_constraint_rhs_calculation(data, constraint_id, intervention) -> float:
+    """Check generic constraint RHS calculation"""
+
+    # Generic constraints
+    constraints = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('GenericConstraintCollection')
+                   .get('GenericConstraint'))
+
+    for i in constraints:
+        if i['@ConstraintID'] == constraint_id:
+            # NEMDE input
+            nemde_input = lookup.get_generic_constraint_collection_attribute(data, i['@ConstraintID'], '@RHS', float)
+
+            # Solution
+            solution = lookup.get_constraint_solution_attribute(data, constraint_id, '@RHS', float, intervention)
+
+            return nemde_input - solution
+
+    raise Exception('Unable to find constraint:', constraint_id, intervention)
+
+
+def check_generic_constraint_calculation_sample(data_dir, func, n=5):
+    """Check generic constraint RHS sample"""
+
+    print('Checking:', func.__name__)
+
+    # Seed random number generator to get reproducable results
+    np.random.seed(10)
+
+    # Population of dispatch intervals for a given month
+    population = [(i, j) for i in range(1, 30) for j in range(1, 289)]
+    population_map = {i: j for i, j in enumerate(population)}
+
+    # Random sample of dispatch intervals
+    sample_keys = np.random.choice(list(population_map.keys()), n, replace=False)
+    sample = [population_map[i] for i in sample_keys]
+
+    # Container for model output
+    out = {}
+
+    # Placeholder for max absolute difference observed
+    max_abs_difference = 0
+    max_abs_difference_interval = None
+
+    # Compute fixed demand for each interval
+    for i, (day, interval) in enumerate(sample):
+        print(f'({day}, {interval}): {i + 1}/{len(sample)}')
+
+        # Case data in json format
+        data_json = loaders.load_dispatch_interval_json(data_dir, 2019, 10, day, interval)
+
+        # Get NEMDE model data as a Python dictionary
+        case_data = json.loads(data_json)
+
+        # Intervention status - '1' if intervention occurred, '0' if no intervention
+        intervention = lookup.get_intervention_status(case_data)
+
+        # Generic constraint index
+        constraints = lookup.get_generic_constraint_index(case_data, intervention)
+
+        # Check net export calculation for each region
+        for j in constraints:
+
+            # Check difference between calculated region fixed demand and fixed demand from NEMDE solution
+            difference = func(case_data, j, intervention)
+
+            # Add date to keys
+            out[(day, interval, j)] = {'difference': difference, 'abs_difference': abs(difference)}
+
+            if abs(difference) > max_abs_difference:
+                max_abs_difference = abs(difference)
+                max_abs_difference_interval = (day, interval, j)
+
+        # Periodically print max absolute difference observed
+        if (i + 1) % 10 == 0:
+            print('Max absolute difference:', max_abs_difference_interval, max_abs_difference)
+
+    # Convert to DataFrame
+    df = pd.DataFrame(out).T
+    df = df.sort_values(by='abs_difference', ascending=False)
+
+    # Max absolute discrepancy
+    max_abs_difference = df['abs_difference'].max()
+
+    return out, df, max_abs_difference
+
+
 def check_region_calculation_sample(data_dir, func, n=5):
     """Check region calculations for a random sample of dispatch intervals"""
 
@@ -724,7 +851,7 @@ def check_region_calculation_sample(data_dir, func, n=5):
         for j in regions:
 
             # Intervention status - '1' if intervention occurred, '0' if no intervention
-            intervention = get_intervention_status(case_data)
+            intervention = lookup.get_intervention_status(case_data)
 
             # Check difference between calculated region fixed demand and fixed demand from NEMDE solution
             difference = func(case_data, j, intervention)
@@ -770,7 +897,6 @@ def get_values(data_dir, index, func, *args):
     return out
 
 
-
 if __name__ == '__main__':
     # Directory containing case data
     data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
@@ -778,7 +904,7 @@ if __name__ == '__main__':
                                   'NEMDE', 'zipped')
 
     # Case data in json format
-    case_data_json = loaders.load_dispatch_interval_json(data_directory, 2019, 10, 13, 11)
+    case_data_json = loaders.load_dispatch_interval_json(data_directory, 2019, 10, 10, 10)
 
     # Get NEMDE model data as a Python dictionary
     cdata = json.loads(case_data_json)
@@ -794,8 +920,11 @@ if __name__ == '__main__':
     # c6, c6_df, c6_max = check_region_calculation_sample(data_directory, check_region_power_balance_calculation, n=1000)
     # c7, c7_df, c7_max = check_region_calculation_sample(data_directory, check_region_dispatched_generation_calculation,
     #                                                     n=1000)
-    c8, c8_df, c8_max = check_region_calculation_sample(data_directory, check_region_dispatched_load_calculation,
-                                                        n=1000)
+    # c8, c8_df, c8_max = check_region_calculation_sample(data_directory, check_region_dispatched_load_calculation,
+    #                                                     n=1000)
+    c9, c9_df, c9_max = check_generic_constraint_calculation_sample(data_directory,
+                                                                    check_generic_constraint_rhs_calculation, n=1)
+    # check_unique_generic_constraint_id_sample(data_directory, check_unique_generic_constraint_id, n=1000)
 
     # interval_index = list(set([i[:2] for i in c3_df.index.to_list()]))
     # c6 = get_values(data_directory, interval_index, lookup.get_interconnector_collection_initial_condition_attribute, 'T-V-MNSP1', 'InitialMW', float)
@@ -806,3 +935,4 @@ if __name__ == '__main__':
     #
     # c3_df = c3_df.rename_axis(['day', 'interval', 'region'])
     # c3_df.join(c6_df).join(c7_df)
+    'F_S+NIL_HPR_G+L_LREG'
