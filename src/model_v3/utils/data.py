@@ -85,6 +85,16 @@ def get_trader_fcas_available_offers_index(data) -> list:
     return [i for i in offers if available[i]]
 
 
+def get_trader_fast_start_index(data) -> list:
+    """Get fast start units"""
+
+    # All traders
+    traders = data.get('NEMSPDCaseFile').get('NemSpdInputs').get('TraderCollection').get('Trader')
+
+    # Fast start unit IDs
+    return [i['@TraderID'] for i in traders if i.get('@FastStart') == '1']
+
+
 def get_generic_constraint_index(data) -> list:
     """Get generic constraint index"""
 
@@ -353,6 +363,18 @@ def get_trader_fcas_availability_status(data) -> dict:
             fcas_status[(trader_id, trade_type)] = fcas.get_trader_fcas_availability_status(data, trader_id, trade_type)
 
     return fcas_status
+
+
+def get_trader_fast_start_attribute(data, attribute, func) -> dict:
+    """Get trader fast start attribute"""
+
+    # All traders
+    traders = data.get('NEMSPDCaseFile').get('NemSpdInputs').get('TraderCollection').get('Trader')
+
+    # Fast start traders
+    fast_start_traders = get_trader_fast_start_index(data)
+
+    return {i['@TraderID']: func(i[attribute]) for i in traders if i['@TraderID'] in fast_start_traders}
 
 
 def get_interconnector_collection_attribute(data, attribute, func) -> dict:
@@ -1069,6 +1091,7 @@ def parse_case_data_json(data) -> dict:
         'S_TRADER_OFFERS': get_trader_offer_index(data_dict),
         'S_TRADER_ENERGY_OFFERS': get_trader_energy_offer_index(data_dict),
         'S_TRADER_FCAS_OFFERS': get_trader_fcas_offer_index(data_dict),
+        'S_TRADER_FAST_START': get_trader_fast_start_index(data_dict),
         'S_GENERIC_CONSTRAINTS': get_generic_constraint_index(data_dict),
         'S_GC_TRADER_VARS': get_generic_constraint_trader_variable_index(data_dict),
         'S_GC_INTERCONNECTOR_VARS': get_generic_constraint_interconnector_variable_index(data_dict),
@@ -1093,6 +1116,13 @@ def parse_case_data_json(data) -> dict:
         'P_TRADER_TYPE': get_trader_collection_attribute(data_dict, '@TraderType', str),
         'P_TRADER_SCADA_RAMP_UP_RATE': get_trader_initial_condition_attribute(data_dict, 'SCADARampUpRate', float),
         'P_TRADER_SCADA_RAMP_DOWN_RATE': get_trader_initial_condition_attribute(data_dict, 'SCADARampDnRate', float),
+        'P_TRADER_MIN_LOADING_MW': get_trader_fast_start_attribute(data_dict, '@MinLoadingMW', float),
+        'P_TRADER_CURRENT_MODE': get_trader_fast_start_attribute(data_dict, '@CurrentMode', str),
+        'P_TRADER_CURRENT_MODE_TIME': get_trader_fast_start_attribute(data_dict, '@CurrentModeTime', float),
+        'P_TRADER_T1': get_trader_fast_start_attribute(data_dict, '@T1', float),
+        'P_TRADER_T2': get_trader_fast_start_attribute(data_dict, '@T2', float),
+        'P_TRADER_T3': get_trader_fast_start_attribute(data_dict, '@T3', float),
+        'P_TRADER_T4': get_trader_fast_start_attribute(data_dict, '@T4', float),
         'P_INTERCONNECTOR_INITIAL_MW': get_interconnector_collection_attribute(data_dict, 'InitialMW', float),
         'P_INTERCONNECTOR_TO_REGION': get_interconnector_period_collection_attribute(data_dict, '@ToRegion', str),
         'P_INTERCONNECTOR_FROM_REGION': get_interconnector_period_collection_attribute(data_dict, '@FromRegion', str),
@@ -1133,6 +1163,7 @@ def parse_case_data_json(data) -> dict:
         'P_CVF_AS_ENABLEMENT_MIN_PRICE': get_case_attribute(data_dict, '@ASEnablementMinPrice'),
         'P_CVF_AS_ENABLEMENT_MAX_PRICE': get_case_attribute(data_dict, '@ASEnablementMaxPrice'),
         'P_CVF_INTERCONNECTOR_PRICE': get_case_attribute(data_dict, '@InterconnectorPrice'),
+        'P_CVF_FAST_START_PRICE': get_case_attribute(data_dict, '@FastStartPrice'),
         'preprocessed': {
             'GC_LHS_TERMS': get_generic_constraint_lhs_terms(data_dict),
             'FCAS_TRAPEZIUM': get_trader_fcas_trapezium(data_dict),

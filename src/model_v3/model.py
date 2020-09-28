@@ -37,6 +37,9 @@ def define_sets(m, data):
     # Trader energy offers
     m.S_TRADER_ENERGY_OFFERS = pyo.Set(initialize=data['S_TRADER_ENERGY_OFFERS'])
 
+    # Trader fast start units TODO: check if '@FastStart'='0' should also be included when constructing set
+    m.S_TRADER_FAST_START = pyo.Set(initialize=data['S_TRADER_FAST_START'])
+
     # Generic constraints
     m.S_GENERIC_CONSTRAINTS = pyo.Set(initialize=data['S_GENERIC_CONSTRAINTS'])
 
@@ -138,6 +141,15 @@ def define_parameters(m, data):
 
     # Trader type
     m.P_TRADER_TYPE = pyo.Param(m.S_TRADERS, initialize=data['P_TRADER_TYPE'])
+
+    # Trader fast start parameters
+    m.P_TRADER_MIN_LOADING_MW = pyo.Param(m.S_TRADER_FAST_START, initialize=data['P_TRADER_MIN_LOADING_MW'])
+    m.P_TRADER_CURRENT_MODE = pyo.Param(m.S_TRADER_FAST_START, initialize=data['P_TRADER_CURRENT_MODE'])
+    m.P_TRADER_CURRENT_MODE_TIME = pyo.Param(m.S_TRADER_FAST_START, initialize=data['P_TRADER_CURRENT_MODE_TIME'])
+    m.P_TRADER_T1 = pyo.Param(m.S_TRADER_FAST_START, initialize=data['P_TRADER_T1'])
+    m.P_TRADER_T2 = pyo.Param(m.S_TRADER_FAST_START, initialize=data['P_TRADER_T2'])
+    m.P_TRADER_T3 = pyo.Param(m.S_TRADER_FAST_START, initialize=data['P_TRADER_T3'])
+    m.P_TRADER_T4 = pyo.Param(m.S_TRADER_FAST_START, initialize=data['P_TRADER_T4'])
 
     # Trader SCADA ramp up and down rates
     m.P_TRADER_SCADA_RAMP_UP_RATE = pyo.Param(m.S_TRADERS, initialize=data['P_TRADER_SCADA_RAMP_UP_RATE'])
@@ -250,6 +262,9 @@ def define_parameters(m, data):
     # Interconnector power flow violation price
     m.P_CVF_INTERCONNECTOR_PRICE = pyo.Param(initialize=data['P_CVF_INTERCONNECTOR_PRICE'])
 
+    # Trader fast start inflexibility constraint violation price
+    m.P_CVF_FAST_START_PRICE = pyo.Param(initialize=data['P_CVF_FAST_START_PRICE'])
+
     return m
 
 
@@ -304,6 +319,11 @@ def define_variables(m):
     m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RHS = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
     m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LHS = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
     m.V_CV_TRADER_FCAS_MAX_AVAILABLE = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
+
+    # Inflexibility profile violation
+    m.V_CV_TRADER_INFLEXIBILITY_PROFILE = pyo.Var(m.S_TRADER_FAST_START, within=pyo.NonNegativeReals)
+    m.V_CV_TRADER_INFLEXIBILITY_PROFILE_RHS = pyo.Var(m.S_TRADER_FAST_START, within=pyo.NonNegativeReals)
+    m.V_CV_TRADER_INFLEXIBILITY_PROFILE_LHS = pyo.Var(m.S_TRADER_FAST_START, within=pyo.NonNegativeReals)
 
     # Interconnector forward and reverse flow constraint violation
     m.V_CV_INTERCONNECTOR_FORWARD = pyo.Var(m.S_INTERCONNECTORS, within=pyo.NonNegativeReals)
@@ -484,6 +504,32 @@ def define_constraint_violation_penalty_expressions(m):
     m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LHS = pyo.Expression(m.S_TRADER_OFFERS,
                                                               rule=trader_fcas_energy_regulating_lhs_rule)
 
+    def trader_inflexibility_profile_rule(m, i):
+        """Inflexibility profile penalty"""
+
+        return m.P_CVF_FAST_START_PRICE * m.V_CV_TRADER_INFLEXIBILITY_PROFILE[i]
+
+    # Trader inflexibility price
+    m.E_CV_TRADER_INFLEXIBILITY_PROFILE = pyo.Expression(m.S_TRADER_FAST_START, rule=trader_inflexibility_profile_rule)
+
+    def trader_inflexibility_profile_lhs_rule(m, i):
+        """Inflexibility profile penalty - LHS"""
+
+        return m.P_CVF_FAST_START_PRICE * m.V_CV_TRADER_INFLEXIBILITY_PROFILE_LHS[i]
+
+    # Trader inflexibility price
+    m.E_CV_TRADER_INFLEXIBILITY_PROFILE_LHS = pyo.Expression(m.S_TRADER_FAST_START,
+                                                             rule=trader_inflexibility_profile_lhs_rule)
+
+    def trader_inflexibility_profile_rhs_rule(m, i):
+        """Inflexibility profile penalty - RHS"""
+
+        return m.P_CVF_FAST_START_PRICE * m.V_CV_TRADER_INFLEXIBILITY_PROFILE_RHS[i]
+
+    # Trader inflexibility price
+    m.E_CV_TRADER_INFLEXIBILITY_PROFILE_RHS = pyo.Expression(m.S_TRADER_FAST_START,
+                                                             rule=trader_inflexibility_profile_rhs_rule)
+
     def trader_fcas_max_available_rule(m, i, j):
         """Max available violation for FCAS offer"""
 
@@ -542,6 +588,9 @@ def define_constraint_violation_penalty_expressions(m):
              + sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RHS[i, j] for i, j in m.S_TRADER_OFFERS)
              + sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LHS[i, j] for i, j in m.S_TRADER_OFFERS)
              + sum(m.E_CV_TRADER_FCAS_MAX_AVAILABLE[i, j] for i, j in m.S_TRADER_OFFERS)
+             + sum(m.E_CV_TRADER_INFLEXIBILITY_PROFILE[i] for i in m.S_TRADER_FAST_START)
+             + sum(m.E_CV_TRADER_INFLEXIBILITY_PROFILE_LHS[i] for i in m.S_TRADER_FAST_START)
+             + sum(m.E_CV_TRADER_INFLEXIBILITY_PROFILE_RHS[i] for i in m.S_TRADER_FAST_START)
              + sum(m.E_CV_MNSP_OFFER_PENALTY[i, j, k] for i, j in m.S_MNSP_OFFERS for k in m.S_BANDS)
              + sum(m.E_CV_MNSP_CAPACITY_PENALTY[i] for i in m.S_MNSP_OFFERS)
              + sum(m.E_CV_INTERCONNECTOR_FORWARD_PENALTY[i] for i in m.S_INTERCONNECTORS)
@@ -1749,6 +1798,31 @@ def define_loss_model_constraints(m):
     return m
 
 
+def define_fast_start_unit_inflexibility_constraints(m):
+    """Fast start unit inflexibility profile constraints"""
+
+    def profile_constraint_rule(m, i):
+        """Energy profile constraint"""
+
+        if m.P_TRADER_TYPE[i] == 'GENERATOR':
+            energy_offer = 'ENOF'
+        elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
+            energy_offer = 'LDOF'
+        else:
+            raise Exception('Unexpected energy offer:', i)
+
+        if (m.P_TRADER_CURRENT_MODE[i] == '0') or (m.P_TRADER_CURRENT_MODE[i] == '1'):
+            return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_LHS[i]
+                    == 0 + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_RHS[i])
+        else:
+            return pyo.Constraint.Skip
+
+    # Profile constraint
+    m.C_TRADER_INFLEXIBILITY_PROFILE = pyo.Constraint(m.S_TRADER_FAST_START, rule=profile_constraint_rule)
+
+    return m
+
+
 def define_constraints(m, case_data):
     """Define model constraints"""
 
@@ -1782,6 +1856,9 @@ def define_constraints(m, case_data):
     # SOS2 interconnector loss model constraints
     m = define_loss_model_constraints(m)
     print('Defined loss model constraints:', time.time() - t0)
+
+    # Fast start unit inflexibility profile
+    m = define_fast_start_unit_inflexibility_constraints(m)
 
     return m
 
@@ -2249,5 +2326,3 @@ if __name__ == '__main__':
     #
     # sum(utils.lookup.get_region_solution_attribute(cdata, r, '@DispatchedGeneration', float, '0') for r in
     #     utils.lookup.get_region_index(cdata))
-
-    utils.fcas.get_trader_fcas_availability(cdata, 'GANNBL1', 'R5RE', '0')
