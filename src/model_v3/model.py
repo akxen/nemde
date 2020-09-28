@@ -1811,9 +1811,31 @@ def define_fast_start_unit_inflexibility_constraints(m):
         else:
             raise Exception('Unexpected energy offer:', i)
 
+        # Unit is synchronising - output = 0
         if (m.P_TRADER_CURRENT_MODE[i] == '0') or (m.P_TRADER_CURRENT_MODE[i] == '1'):
             return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_LHS[i]
                     == 0 + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_RHS[i])
+
+        # Unit ramping to min loading - energy output fixed to profile
+        elif m.P_TRADER_CURRENT_MODE[i] == '2':
+            slope = m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T2
+            startup_profile = slope * m.P_TRADER_CURRENT_MODE_TIME[i]
+            return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_LHS[i]
+                    == startup_profile + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_RHS[i])
+
+        # Output lower bounded by MinLoadingMW
+        elif m.P_TRADER_CURRENT_MODE[i] == '3':
+            return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] + m.V_CV_TRADER_INFLEXIBILITY_PROFILE[i]
+                    >= m.P_TRADER_MIN_LOADING_MW[i])
+
+        # Output still lower bounded by inflexibility profile
+        elif (m.P_TRADER_CURRENT_MODE[i] == '4') and (m.P_TRADER_CURRENT_MODE_TIME[i] < m.P_TRADER_T4[i]):
+            slope = - m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T4[i]
+            max_output = (slope * m.P_TRADER_CURRENT_MODE_TIME[i]) + m.P_TRADER_MIN_LOADING_MW[i]
+
+            return m.V_TRADER_TOTAL_OFFER[i, energy_offer] + m.V_CV_TRADER_INFLEXIBILITY_PROFILE[i] >= max_output
+
+        # Unit operating normally - output not constrained by inflexibility profile
         else:
             return pyo.Constraint.Skip
 
@@ -1902,7 +1924,7 @@ def solve_model(m):
     """Solve model"""
 
     # Setup solver
-    solver_options = {}  # 'MIPGap': 0.0005,
+    solver_options = {}
     opt = pyo.SolverFactory('cplex', solver_io='lp')
 
     # Solve model
