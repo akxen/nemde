@@ -248,6 +248,12 @@ def get_generic_constraint_solution_attribute(data, constraint_id, attribute, fu
     raise LookupError('Attribute not found:', constraint_id, attribute, intervention)
 
 
+def get_period_solution_attribute(data, attribute, func):
+    """Get period solution attribute"""
+
+    return func(data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('PeriodSolution')[attribute])
+
+
 def get_trader_offer_index(data) -> list:
     """Get tuples describing all offers made by traders"""
 
