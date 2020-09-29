@@ -40,6 +40,9 @@ def define_sets(m, data):
     # Trader fast start units TODO: check if '@FastStart'='0' should also be included when constructing set
     m.S_TRADER_FAST_START = pyo.Set(initialize=data['S_TRADER_FAST_START'])
 
+    # Price tied bands
+    m.S_TRADER_PRICE_TIED = pyo.Set(initialize=data['S_TRADER_PRICE_TIED'])
+
     # Generic constraints
     m.S_GENERIC_CONSTRAINTS = pyo.Set(initialize=data['S_GENERIC_CONSTRAINTS'])
 
@@ -265,6 +268,9 @@ def define_parameters(m, data):
     # Trader fast start inflexibility constraint violation price
     m.P_CVF_FAST_START_PRICE = pyo.Param(initialize=data['P_CVF_FAST_START_PRICE'])
 
+    # Tie-break price
+    m.P_TIE_BREAK_PRICE = pyo.Param(initialize=data['P_TIE_BREAK_PRICE'])
+
     return m
 
 
@@ -337,6 +343,10 @@ def define_variables(m):
     # Flow between region and interconnector connection points
     m.V_FLOW_FROM_CP = pyo.Var(m.S_INTERCONNECTORS)
     m.V_FLOW_TO_CP = pyo.Var(m.S_INTERCONNECTORS)
+
+    # Trader tie-break slack variables
+    m.V_TRADER_SLACK_1 = pyo.Var(m.S_TRADER_PRICE_TIED, within=pyo.NonNegativeReals)
+    m.V_TRADER_SLACK_2 = pyo.Var(m.S_TRADER_PRICE_TIED, within=pyo.NonNegativeReals)
 
     return m
 
@@ -1046,6 +1056,18 @@ def define_fcas_expressions(m):
     return m
 
 
+def define_tie_breaking_expressions(m):
+    """Tie-breaking expressions"""
+
+    # Tie break cost TODO: Note that tie-break price of 1e-5 gives better results than 1e-6.
+    m.E_TRADER_TIE_BREAK_COST = pyo.Expression(
+        # expr=sum(m.P_TIE_BREAK_PRICE * (m.V_TRADER_SLACK_1[i] + m.V_TRADER_SLACK_2[i]) for i in m.S_TRADER_PRICE_TIED)
+        expr=sum(1e-5 * (m.V_TRADER_SLACK_1[i] + m.V_TRADER_SLACK_2[i]) for i in m.S_TRADER_PRICE_TIED)
+    )
+
+    return m
+
+
 def define_expressions(m, data):
     """Define model expressions"""
 
@@ -1063,6 +1085,9 @@ def define_expressions(m, data):
 
     # FCAS expressions
     m = define_fcas_expressions(m)
+
+    # Tie-breaking expressions
+    m = define_tie_breaking_expressions(m)
 
     return m
 
@@ -1845,6 +1870,28 @@ def define_fast_start_unit_inflexibility_constraints(m):
     return m
 
 
+def define_tie_breaking_constraints(m):
+    """Define tie-breaking constraints"""
+
+
+
+
+    def generator_tie_breaking_rule(m, i, j, k, q, r, s):
+        """Generator tie-breaking rule for price-tied energy offers"""
+
+        if (m.P_TRADER_QUANTITY_BAND[i, j, k] == 0) or (m.P_TRADER_QUANTITY_BAND[q, r, s] == 0):
+            return pyo.Constraint.Skip
+
+        return ((m.V_TRADER_OFFER[i, j, k] / m.P_TRADER_QUANTITY_BAND[i, j, k])
+                - (m.V_TRADER_OFFER[q, r, s] / m.P_TRADER_QUANTITY_BAND[q, r, s])
+                == m.V_TRADER_SLACK_1[i, j, k, q, r, s] - m.V_TRADER_SLACK_2[i, j, k, q, r, s])
+
+    # Generator tie-breaking rule
+    m.C_TRADER_TIE_BREAK = pyo.Constraint(m.S_TRADER_PRICE_TIED, rule=generator_tie_breaking_rule)
+
+    return m
+
+
 def define_constraints(m, case_data):
     """Define model constraints"""
 
@@ -1882,6 +1929,9 @@ def define_constraints(m, case_data):
     # Fast start unit inflexibility profile
     m = define_fast_start_unit_inflexibility_constraints(m)
 
+    # Tie-breaking constraints
+    m = define_tie_breaking_constraints(m)
+
     return m
 
 
@@ -1892,6 +1942,7 @@ def define_objective(m):
     m.OBJECTIVE = pyo.Objective(expr=sum(m.E_TRADER_COST_FUNCTION[t] for t in m.S_TRADER_OFFERS)
                                      + sum(m.E_MNSP_COST_FUNCTION[t] for t in m.S_MNSP_OFFERS)
                                      + m.E_CV_TOTAL_PENALTY
+                                     + m.E_TRADER_TIE_BREAK_COST
                                 ,
                                 sense=pyo.minimize)
 
@@ -1924,8 +1975,8 @@ def solve_model(m):
     """Solve model"""
 
     # Setup solver
-    solver_options = {}
-    opt = pyo.SolverFactory('cplex', solver_io='lp')
+    solver_options = {'mip tolerances mipgap': 1e-9}
+    opt = pyo.SolverFactory('cplex', solver_io='mps')
 
     # Solve model
     t0 = time.time()
@@ -2336,15 +2387,10 @@ if __name__ == '__main__':
     get_solution_report(cdata, model)
 
     # # Case data in json format
-    # case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, 2019, 10, 19, 131)
+    # case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, 2019, 10, 10, 10)
     #
     # # Get NEMDE model data as a Python dictionary
     # cdata = json.loads(case_data_json)
-
-    # with open('example.json', 'w') as f:
-    #     json.dump(cdata, f)
-
-    # sum(model.E_REGION_DISPATCHED_GENERATION[r].expr() for r in model.S_REGIONS)
     #
-    # sum(utils.lookup.get_region_solution_attribute(cdata, r, '@DispatchedGeneration', float, '0') for r in
-    #     utils.lookup.get_region_index(cdata))
+    # # with open('example.json', 'w') as f:
+    # #     json.dump(cdata, f)

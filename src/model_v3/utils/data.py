@@ -1063,6 +1063,58 @@ def get_period_solution(data, intervention) -> dict:
             for k, v in i.items() if i['@Intervention'] == intervention}
 
 
+def reorder_tuple(input_tuple) -> tuple:
+    """Sort tuples alphabetically"""
+
+    if input_tuple[0][0] > input_tuple[1][0]:
+        return tuple((input_tuple[1], input_tuple[0]))
+    else:
+        return tuple((input_tuple[0], input_tuple[1]))
+
+
+def get_price_tied_bands(data):
+    """Get price-tied generators"""
+
+    # Price and quantity bands
+    price_bands = get_trader_price_bands(data)
+    quantity_bands = get_trader_quantity_bands(data)
+
+    # Generator energy offer price bands
+    filtered_price_bands = {k: v for k, v in price_bands.items() if k[1] == 'ENOF'}
+
+    # Trader region
+    trader_region = get_trader_period_attribute(data, '@RegionID', str)
+
+    # Container for price tied bands
+    price_tied = []
+
+    # For each price band
+    for i, j in filtered_price_bands.items():
+        # Compare it to every other price band
+        for m, n in filtered_price_bands.items():
+            # Price bands must be in same region (also ignore the input trader - will of course match)
+            if (m == i) or (trader_region[i[0]] != trader_region[m[0]]):
+                continue
+
+            # Check if price difference less than threshold - append to container if so
+            if abs(j - n) < 1e-6:
+                if (quantity_bands[m[0], m[1], m[2]] != 0) and (quantity_bands[i[0], i[1], i[2]] != 0):
+                    price_tied.append((i, m))
+            # # Can break early if price > input price band - monotonically increase prices
+            # elif n > j:
+            #     break
+
+    # Re-order tuples, get unique price-tied combinations, and sort alphabetically
+    price_tied_reordered = [reorder_tuple(i) for i in price_tied]
+    price_tied_unique = list(set(price_tied_reordered))
+    price_tied_unique.sort()
+
+    # Flatten to produce one tuple for a given pair of price-tied generators
+    price_tied_flattened = [(i[0][0], i[0][1], i[0][2], i[1][0], i[1][1], i[1][2]) for i in price_tied_unique]
+
+    return price_tied_flattened
+
+
 def parse_case_data_json(data) -> dict:
     """
     Parse json data
@@ -1092,6 +1144,7 @@ def parse_case_data_json(data) -> dict:
         'S_TRADER_ENERGY_OFFERS': get_trader_energy_offer_index(data_dict),
         'S_TRADER_FCAS_OFFERS': get_trader_fcas_offer_index(data_dict),
         'S_TRADER_FAST_START': get_trader_fast_start_index(data_dict),
+        'S_TRADER_PRICE_TIED': get_price_tied_bands(data_dict),
         'S_GENERIC_CONSTRAINTS': get_generic_constraint_index(data_dict),
         'S_GC_TRADER_VARS': get_generic_constraint_trader_variable_index(data_dict),
         'S_GC_INTERCONNECTOR_VARS': get_generic_constraint_interconnector_variable_index(data_dict),
@@ -1164,6 +1217,7 @@ def parse_case_data_json(data) -> dict:
         'P_CVF_AS_ENABLEMENT_MAX_PRICE': get_case_attribute(data_dict, '@ASEnablementMaxPrice'),
         'P_CVF_INTERCONNECTOR_PRICE': get_case_attribute(data_dict, '@InterconnectorPrice'),
         'P_CVF_FAST_START_PRICE': get_case_attribute(data_dict, '@FastStartPrice'),
+        'P_TIE_BREAK_PRICE': get_case_attribute(data_dict, '@TieBreakPrice'),
         'preprocessed': {
             'GC_LHS_TERMS': get_generic_constraint_lhs_terms(data_dict),
             'FCAS_TRAPEZIUM': get_trader_fcas_trapezium(data_dict),
