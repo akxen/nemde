@@ -340,10 +340,6 @@ def define_variables(m):
     m.V_LOSS_LAMBDA = pyo.Var(m.S_INTERCONNECTOR_LOSS_MODEL_BREAKPOINTS, within=pyo.NonNegativeReals)
     m.V_LOSS_Y = pyo.Var(m.S_INTERCONNECTOR_LOSS_MODEL_INTERVALS, within=pyo.Binary)
 
-    # Flow between region and interconnector connection points
-    m.V_FLOW_FROM_CP = pyo.Var(m.S_INTERCONNECTORS)
-    m.V_FLOW_TO_CP = pyo.Var(m.S_INTERCONNECTORS)
-
     # Trader tie-break slack variables
     m.V_TRADER_SLACK_1 = pyo.Var(m.S_TRADER_PRICE_TIED, within=pyo.NonNegativeReals)
     m.V_TRADER_SLACK_2 = pyo.Var(m.S_TRADER_PRICE_TIED, within=pyo.NonNegativeReals)
@@ -1258,11 +1254,10 @@ def define_region_constraints(m):
         FixedDemand + DispatchedLoad + NetExport = DispatchedGeneration
         """
 
-        return (m.E_REGION_FIXED_DEMAND[r]
+        return (m.E_REGION_DISPATCHED_GENERATION[r]
+                == m.E_REGION_FIXED_DEMAND[r]
                 + m.E_REGION_DISPATCHED_LOAD[r]
-                + m.E_REGION_NET_EXPORT[r]
-                == m.E_REGION_DISPATCHED_GENERATION[r]
-                )
+                + m.E_REGION_NET_EXPORT[r])
 
     # Power balance in each region
     m.C_POWER_BALANCE = pyo.Constraint(m.S_REGIONS, rule=power_balance_rule)
@@ -1964,29 +1959,11 @@ def construct_model(data, case_data):
     m = define_constraints(m, case_data)
     m = define_objective(m)
 
-    # # Add component allowing dual variables to be imported
-    # m.dual = pyo.Suffix(direction=pyo.Suffix.IMPORT)
+    # Add component allowing dual variables to be imported
+    m.dual = pyo.Suffix(direction=pyo.Suffix.IMPORT)
     print('Constructed model in:', time.time() - t0)
 
     return m
-
-
-def solve_model(m):
-    """Solve model"""
-
-    # Setup solver
-    solver_options = {'mip tolerances mipgap': 1e-9}
-    opt = pyo.SolverFactory('cplex', solver_io='mps')
-
-    # Solve model
-    t0 = time.time()
-
-    print('Starting MILP solve:', time.time() - t0)
-    solve_status_1 = opt.solve(m, tee=True, options=solver_options, keepfiles=False)
-    print('Finished MILP solve:', time.time() - t0)
-    print('Objective value - 1:', m.OBJECTIVE.expr())
-
-    return m, solve_status_1
 
 
 def fix_interconnector_flow_solution(m, data):
@@ -2012,6 +1989,39 @@ def fix_energy_solution(m, data):
         if j in ['ENOF', 'LDOF']:
             energy_target = utils.lookup.get_trader_solution_attribute(data, i, '@EnergyTarget', float, intervention)
             m.V_TRADER_TOTAL_OFFER[(i, j)].fix(energy_target)
+
+    return m
+
+
+def fix_binary_variables(m):
+    """Fix all binary variables"""
+
+    for i in m.S_INTERCONNECTOR_LOSS_MODEL_INTERVALS:
+        m.V_LOSS_Y[i].fix()
+
+    return m
+
+
+def solve_model(m):
+    """Solve model"""
+
+    # Setup solver
+    solver_options = {'mip tolerances mipgap': 1e-9}
+    opt = pyo.SolverFactory('cplex', solver_io='mps')
+
+    # Solve model
+    t0 = time.time()
+
+    print('Starting MILP solve:', time.time() - t0)
+    solve_status_1 = opt.solve(m, tee=True, options=solver_options, keepfiles=False)
+    print('Finished MILP solve:', time.time() - t0)
+    print('Objective value - 1:', m.OBJECTIVE.expr())
+
+    # Fix binary variables
+    m = fix_binary_variables(m)
+    solve_status_2 = opt.solve(m, tee=True, options=solver_options, keepfiles=False)
+    print('Finished MILP solve:', time.time() - t0)
+    print('Objective value - 2:', m.OBJECTIVE.expr())
 
     return m
 
@@ -2374,7 +2384,7 @@ if __name__ == '__main__':
     # model = fix_energy_solution(model, cdata)
 
     # Solve model
-    model, status = solve_model(model)
+    model = solve_model(model)
 
     # Extract solution
     solution = utils.solution.get_model_solution(model)
