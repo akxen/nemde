@@ -627,7 +627,7 @@ def define_aggregate_power_expressions(m):
     # Total dispatched load in a given region
     m.E_REGION_DISPATCHED_LOAD = pyo.Expression(m.S_REGIONS, rule=region_dispatched_load_rule)
 
-    def region_initial_dispatched_load(m, r):
+    def region_initial_scheduled_load(m, r):
         """Total initial scheduled load in a given region"""
 
         total = 0
@@ -639,7 +639,7 @@ def define_aggregate_power_expressions(m):
         return total
 
     # Region initial scheduled load
-    m.E_REGION_INITIAL_SCHEDULED_LOAD = pyo.Expression(m.S_REGIONS, rule=region_initial_dispatched_load)
+    m.E_REGION_INITIAL_SCHEDULED_LOAD = pyo.Expression(m.S_REGIONS, rule=region_initial_scheduled_load)
 
     def region_initial_allocated_loss(m, r):
         """Losses allocated to region due to interconnector flow"""
@@ -1253,7 +1253,7 @@ def define_region_constraints(m):
 
         FixedDemand + DispatchedLoad + NetExport = DispatchedGeneration
         """
-
+        # TODO: check if a penalty factor needs to be applied here - probably not because captured by other expressions
         return (m.E_REGION_DISPATCHED_GENERATION[r]
                 == m.E_REGION_FIXED_DEMAND[r]
                 + m.E_REGION_DISPATCHED_LOAD[r]
@@ -1283,8 +1283,6 @@ def define_interconnector_constraints(m):
 
     # Forward power flow limit for interconnector
     m.C_INTERCONNECTOR_REVERSE_FLOW = pyo.Constraint(m.S_INTERCONNECTORS, rule=interconnector_reverse_flow_rule)
-
-    # TODO: not sure if MNSP connection points need to be modelled here or if NetExport expression captures relationship
 
     return m
 
@@ -1339,7 +1337,7 @@ def define_fcas_constraints(m, data):
             return pyo.Constraint.Skip
 
         # SCADA ramp rate must be greater than 0
-        elif m.P_TRADER_SCADA_RAMP_UP_RATE[i] <= 0:
+        elif m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] <= 0:
             return pyo.Constraint.Skip
 
         # Must have an energy offer
