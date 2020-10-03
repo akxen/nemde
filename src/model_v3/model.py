@@ -1771,6 +1771,8 @@ def define_loss_model_constraints(m):
         end = max(segment_id for interconnector_id, segment_id in m.S_INTERCONNECTOR_LOSS_MODEL_BREAKPOINTS
                   if interconnector_id == i)
 
+        # TODO: not sure if j >= 2 or j >= 1 because S_INTERCONNECTOR_LOSS_MODEL_BREAKPOINTS starts from 0. Similarly,
+        # not sure if (j <= end - 1) is correct
         if (j >= 2) and (j <= end - 1):
             return (sum(m.V_LOSS_Y[i, z] for z in range(j + 1, end))
                     <= sum(m.V_LOSS_LAMBDA[i, z] for z in range(j + 1, end + 1)))
@@ -1787,6 +1789,8 @@ def define_loss_model_constraints(m):
         end = max(segment_id for interconnector_id, segment_id in m.S_INTERCONNECTOR_LOSS_MODEL_BREAKPOINTS
                   if interconnector_id == i)
 
+        # TODO: not sure if j >= 2 or j >= 1 because S_INTERCONNECTOR_LOSS_MODEL_BREAKPOINTS starts from 0. Similarly,
+        # not sure if (j <= end - 1) is correct
         if (j >= 2) and (j <= end - 1):
             return (sum(m.V_LOSS_LAMBDA[i, z] for z in range(j + 1, end + 1))
                     <= sum(m.V_LOSS_Y[i, z] for z in range(j, end)))
@@ -1865,9 +1869,6 @@ def define_fast_start_unit_inflexibility_constraints(m):
 
 def define_tie_breaking_constraints(m):
     """Define tie-breaking constraints"""
-
-
-
 
     def generator_tie_breaking_rule(m, i, j, k, q, r, s):
         """Generator tie-breaking rule for price-tied energy offers"""
