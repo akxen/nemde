@@ -44,7 +44,7 @@ Australia's National Electricity Market (NEM) is dispatched via the National Ele
 \subsubsection{Units}
 Unit bid cost:
 \begin{equation}
-	UnitCost = \sum\limits_{(i,j,k) \in B} K_{ij} p_{ijk} q_{ijk}
+	UnitCost = \sum\limits_{(i,j,k) \in TraderQuantityBands} K_{ij} PriceBand_{ijk} QuantityBand_{ijk}
 \end{equation}
 
 where:
@@ -57,7 +57,7 @@ $K_{ij}=
 
 MNSP bid cost:
 \begin{equation}
-MNSPCost =\sum\limits_{(i,j,k) \in C} p_{ijk} q_{ijk}
+MNSPCost =\sum\limits_{(i,j,k) \in MNSPQuantityBands} PriceBand_{ijk} QuantityBand_{ijk}
 \end{equation}
 
 \subsubsection{Regions}
@@ -146,7 +146,10 @@ $FlowDirectionFactor_{ri}=
 
 Initial MNSP loss allocated to region:
 \begin{equation}
-	MNSPInitialLoss_{r} = \sum\limits_{i \in MNSPs} RegionLossFactor_{ri} (InitialMW_{i} + MNSPLossShare_{ri} InitialLoss_{i}) FlowDirectionFactor_{ri}
+\begin{split}
+& MNSPInitialLoss_{r} = \\
+& \sum\limits_{i \in MNSPs} RegionLossFactor_{ri} (InitialMW_{i} + MNSPLossShare_{ri} InitialLoss_{i}) FlowDirectionFactor_{ri}
+\end{split}
 \end{equation}
 
 MNSP loss allocated to region:
@@ -155,12 +158,12 @@ MNSPLoss_{r} = \sum\limits_{i \in MNSPs} RegionLossFactor_{ri} (Flow_{i} + MNSPL
 \end{equation}
 
 Region fixed demand:
-
 \begin{equation}
-	FixedDemand_{r} = RegionInitialDemand_{r} + RegionADE_{r} + RegionDF_{r} - RegionInitialScheduledLoad_{r} - RegionInitialAllocatedLoss_{r} - RegionInitialMNSPLoss_{r} 
+\begin{split}
+FixedDemand_{r} = & RegionInitialDemand_{r}  + RegionADE_{r} + RegionDF_{r} - RegionInitialScheduledLoad_{r} \\
+& - RegionInitialAllocatedLoss_{r} - RegionInitialMNSPLoss_{r} 
+\end{split}
 \end{equation}
-
-Region cleared demand:
 
 %        demand = (
 %m.E_REGION_FIXED_DEMAND[r]
@@ -168,12 +171,15 @@ Region cleared demand:
 %+ m.E_REGION_DISPATCHED_LOAD[r]
 %+ m.E_REGION_MNSP_LOSS[r]
 
+Region cleared demand:
 \begin{equation}
-	ClearedDemand_{r} = RegionFixedDemand_{r} + RegionaAllocatedLoss_{r} + RegionDispatchedLoad_{r} + RegionMNSPLoss_{r}
+\begin{split}
+ClearedDemand_{r} = & RegionFixedDemand_{r} + RegionaAllocatedLoss_{r} + RegionDispatchedLoad_{r} \\
+& + RegionMNSPLoss_{r}\\
+\end{split}
 \end{equation}
 
 Interconnector export:
-
 \begin{equation}
 	RegionInterconnectorExport_{r} = \sum\limits_{i \in Interconnectors} FlowDirectionFactor_{ri} Flow_{i}
 \end{equation}
@@ -189,52 +195,62 @@ Net export:
 
 Trader total offer:
 \begin{equation}
-	\hat{q} = \sum\limits_{i = 1}^{10} q_{ijk}
+TraderTotalOffer_{ij} = \sum\limits_{i = 1}^{10} QuantityBand_{ijk} \quad \forall i,j \in TraderOffers
 \end{equation}
 
-Trader quantity band limit
-
+Trader quantity band limit:
 \begin{equation}
-	q_{ijk} \leq \bar{q}_{ijk} + v_{ijk}^{1}
+QuantityBand_{ijk} \leq \overline{QuantityBand}_{ijk} + QuantityBandDeficit_{ijk} \quad \forall i,j,k \in QuantityBandOffers
 \end{equation}
 
 Total offer constrained by MaxAvail:
-
 \begin{equation}
-\hat{q} \leq UIGF_{ij} + v_{ij}^{2} \quad \forall i \in SemiScheduled \cap j \in {ENOF} 
+TraderTotalOffer_{ij} \leq UIGF_{ij} + MaxAvailDeficit_{ij} \quad \forall i,j \in SemiScheduledOffers \cap ENOFOffers
 \end{equation}
 
 \begin{equation}
-	\hat{q} \leq MaxAvail_{ij} + v_{ij}^{2} \quad \forall i, j \in TraderOffers \setminus  i \in SemiScheduledUnit \cap j \in {ENOF} 
+\begin{split}
+TraderTotalOffer_{ij} \leq & MaxAvail_{ij} + MaxAvailDeficit_{ij} \\
+& \forall i, j \in TraderOffers \setminus SemiScheduledOffers \cap ENOFOffers
+\end{split}
 \end{equation}
 
 % return m.V_TRADER_TOTAL_OFFER[i, j] - initial_mw <= (ramp_limit / 12) + m.V_CV_TRADER_RAMP_UP[i]
 
 Trader ramp-up constraint:
 \begin{equation}
-\hat{q}_{ij} - TraderInitialMW_{i} \leq (OfferRampUpRate_{ij} / 12) + v^{6}_{ij} \quad \forall i,j \in TraderEnergyOffers
+\begin{split}
+TraderTotalOffer_{ij} - TraderInitialMW_{i} \leq & (OfferRampUpRate_{ij} / 12) + RampUpDeficit_{ij} \\
+& \forall i,j \in TraderEnergyOffers
+\end{split}
 \end{equation}
 
 % return m.V_TRADER_TOTAL_OFFER[i, j] - initial_mw + m.V_CV_TRADER_RAMP_DOWN[i] >= - (ramp_limit / 12)
 
 Trader ramp-down constraint:
 \begin{equation}
-\hat{q}_{ij} - TraderInitialMW_{i} + v^{7}_{ij} \geq - (OfferRampDownRate_{ij} / 12) \quad \forall i,j \in TraderEnergyOffers
+\begin{split}
+TraderTotalOffer_{ij} - TraderInitialMW_{i} + RampDownDeficit_{ij} \geq & - (OfferRampDownRate_{ij} / 12) \\
+& \forall i,j \in TraderEnergyOffers
+\end{split}
 \end{equation}
 
 MNSP total offer:
 \begin{equation}
-\hat{q}^{m}_{ij} = \sum\limits_{i = 1}^{10} q^{m}_{ijk}
+MNSPTotalOffer_{ij} = \sum\limits_{i = 1}^{10} MNSPBandAvail_{ijk}
 \end{equation}
 
 MNSP band offer:
 \begin{equation}
-q^{m}_{ijk} \leq \bar{q}^{m}_{ijk} + v_{ijk}^{3} \quad \forall i,j \in MNSPOffers
+\begin{split}
+MNSPQuantityBand_{ijk} \leq & \overline{MNSPQuantityBand}_{ijk} + MNSPQuantityBandDeficit_{ijk} \\
+& \forall i,j \in MNSPQuantityBands
+\end{split}
 \end{equation}
 
 MNSP constrained by MaxAvail:
 \begin{equation}
-\hat{q}^{m}_{ij} \leq MaxAvail_{ij} + v_{ij}^{4} \quad \forall i,j \in MNSPOffers 
+MNSPTotalOffer_{ij} \leq MaxAvail_{ij} + MNSPTotalOfferDeficit_{ij} \quad \forall i,j \in MNSPOffers 
 \end{equation}
 
 \subsubsection{Generic constraints}
@@ -257,21 +273,25 @@ Power balance constraint:
 %+ m.E_REGION_NET_EXPORT[r])
 
 \begin{equation}
-	RegionDispatchGeneration_{r} = RegionFixedDemand_{r} + RegionDispatchedLoad_{r} + RegionNetExport_{r} \quad \forall r \in Regions
+\begin{split}
+RegionDispatchGeneration_{r} = RegionFixedDemand_{r} + RegionDispatchedLoad_{r} + & RegionNetExport_{r} \\
+& \forall r \in Regions
+\end{split}
 \end{equation}
 
 \subsubsection{Interconnector}
 Forward flow:
 % return m.V_GC_INTERCONNECTOR[i] <= m.P_INTERCONNECTOR_UPPER_LIMIT[i] + m.V_CV_INTERCONNECTOR_FORWARD[i]
 \begin{equation}
-	b_{i} \leq \overline{B}_{i} + v^{5}_{i} \quad \forall i \in Interconnectors
+Flow_{i} \leq \overline{Flow}_{i} + ForwardFlowDeficit_{i} \quad \forall i \in Interconnectors
 \end{equation}
 
 Reverse flow:
 \begin{equation}
-b_{i} + v^{6}_{i} \geq - \overline{B}_{i} \quad \forall i \in Interconnectors
+Flow_{i} + ReverseFlowDeficit_{i} \geq - \underline{Flow}_{i} \quad \forall i \in Interconnectors
 \end{equation}
 
+(add ramp rate constraint)
 
 \subsubsection{FCAS}
 % # Only consider generators
@@ -299,9 +319,15 @@ b_{i} + v^{6}_{i} \geq - \overline{B}_{i} \quad \forall i \in Interconnectors
 %<= m.P_TRADER_INITIAL_MW[i] + (m.P_TRADER_SCADA_RAMP_UP_RATE[i] / 12)
 %+ m.V_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, j])
 
-Generator joint ramping-up constraint:
+Generator joint ramping raise regulation:
 \begin{equation}
-	\hat{q}_{i,ENOF} + \hat{q}_{i,R5RE}  \leq TraderInitialMW_{i} + (SCADARampUpRate_{i} / 12) + v^{8}_{ij} \quad \forall i,j \in FCASR5REOffers \cap FCASAvailableOffers \cap SCADARampUpRateDefined \cap EnergyOfferDefined \cap GeneratorOffers
+\begin{split}
+TraderTotalOffer_{i,ENOF} + TraderTotalOffer_{i,R5RE} \leq & TraderInitialMW_{i} + (SCADARampUpRate_{i} / 12)\\ 
+& + GeneratorJointRampingUpDeficit_{ij} \\
+& \forall i,j \in FCASR5REOffers \cap FCASAvailableOffers\\
+& \cap SCADARampUpRateDefined\\
+& \cap EnergyOfferDefined \cap GeneratorOffers\\
+\end{split}
 \end{equation}
 
 %        # Only consider generators
@@ -329,8 +355,15 @@ Generator joint ramping-up constraint:
 %+ m.V_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, j]
 %>= m.P_TRADER_INITIAL_MW[i] - (m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] / 12))
 
+Generator joint ramping lower regulation:
 \begin{equation}
-\hat{q}_{i,ENOF} - \hat{q}_{i,L5RE} + v^{9}_{ij} \geq TraderInitialMW_{i} - (SCADARampDownRate_{i} / 12)  \quad \forall i,j \in FCASR5REOffers \cap FCASAvailableOffers \cap SCADARampUpRateDefined \cap EnergyOfferDefined \cap GeneratorOffers
+\begin{split}
+TraderTotalOffer_{i,ENOF} - TraderTotalOffer_{i,L5RE} & + GeneratorJointRampingDownDeficit_{ij}\\
+& \geq TraderInitialMW_{i} - (SCADARampDownRate_{i} / 12) \\
+& \forall i,j \in FCASR5REOffers \cap FCASAvailableOffers \\
+& \cap SCADARampUpRateDefined \cap EnergyOfferDefined\\
+& \cap GeneratorOffers
+\end{split}
 \end{equation}
 
 %        # Only consider generators
@@ -365,11 +398,21 @@ Generator joint ramping-up constraint:
 Generator joint  capacity constraint (RHS):
 
 \begin{equation}
-\hat{q}_{i,ENOF} + UpperSlopeCoefficient_{ij} \hat{q}_{ij} + \hat{q}_{i,R5RE} \leq EffectiveEnablementMax_{ij} + v^{10}_{ij} \quad i,j \in GeneratorOffers \cap ContingencyFCASOffers \cap HasCorrespondingEnergyOffer \cap FCASAvailable \cap HasR5REOffer
+\begin{split}
+TraderTotalOffer_{i,ENOF} & + UpperSlopeCoefficient_{ij} TraderTotalOffer_{ij} + TraderTotalOffer_{i,R5RE}\\
+& \leq EffectiveEnablementMax_{ij} + GeneratorJointCapacityConstraintRHSDeficit_{ij}\\
+& \forall i,j \in GeneratorOffers \cap ContingencyFCASOffers\\
+& \cap HasCorrespondingEnergyOffer \cap FCASAvailable \cap HasR5REOffer
+\end{split}
 \end{equation}
 
 \begin{equation}
-\hat{q}_{i,ENOF} + UpperSlopeCoefficient_{ij} \hat{q}_{ij} \leq EffectiveEnablementMax_{ij} + v^{10}_{ij} \quad i,j \in GeneratorOffers \cap ContingencyFCASOffers \cap HasCorrespondingEnergyOffer \cap FCASAvailable \cap HasR5REOffer
+\begin{split}
+TraderTotalOffer_{i,ENOF} & + UpperSlopeCoefficient_{ij} TraderTotalOffer_{ij}\\
+& \leq EffectiveEnablementMax_{ij} + GeneratorJointCapacityConstraintRHSDeficit_{ij}\\
+& \forall i,j \in GeneratorOffers \cap ContingencyFCASOffers \\
+& \cap HasCorrespondingEnergyOffer \cap FCASAvailable \cap NoR5REOffer
+\end{split}
 \end{equation}
 
 %       # Only consider generators
@@ -401,13 +444,22 @@ Generator joint  capacity constraint (RHS):
 %>= m.P_TRADER_FCAS_ENABLEMENT_MIN[i, j])
 
 Generator joint  capacity constraint (LHS):
-
 \begin{equation}
-\hat{q}_{i,ENOF} - LowerSlopeCoefficient_{ij} \hat{q}_{ij} - \hat{q}_{i,L5RE} + v^{11}_{ij} \geq EffectiveEnablementMin_{ij}  \quad i,j \in GeneratorOffers \cap ContingencyFCASOffers \cap HasCorrespondingEnergyOffer \cap FCASAvailable \cap HasL5REOffer
+\begin{split}
+TraderTotalOffer_{i,ENOF} & - LowerSlopeCoefficient_{ij} TraderTotalOffer_{ij} - TraderTotalOffer_{i,L5RE}\\
+& + GeneratorJointCapacityConstraintLHSDeficit_{ij} \geq EffectiveEnablementMin_{ij} \\
+& \forall i,j \in GeneratorOffers \cap ContingencyFCASOffers \\
+& \cap HasCorrespondingEnergyOffer \cap FCASAvailable \cap HasL5REOffer
+\end{split}
 \end{equation}
 
 \begin{equation}
-\hat{q}_{i,ENOF} - LowerSlopeCoefficient_{ij} \hat{q}_{ij} + v^{11}_{ij} \geq EffectiveEnablementMin_{ij}  \quad i,j \in GeneratorOffers \cap ContingencyFCASOffers \cap HasCorrespondingEnergyOffer \cap FCASAvailable \cap NoL5REOffer
+\begin{split}
+TraderTotalOffer_{i,ENOF} & - LowerSlopeCoefficient_{ij} TraderTotalOffer_{ij}\\
+& + GeneratorJointCapacityConstraintLHSDeficit_{ij} \geq EffectiveEnablementMin_{ij} \\
+& \forall i,j \in GeneratorOffers \cap ContingencyFCASOffers \\
+& \cap HasCorrespondingEnergyOffer \cap FCASAvailable \cap NoL5REOffer
+\end{split}
 \end{equation}
 
 %        # Only consider generators
@@ -433,7 +485,12 @@ Generator joint  capacity constraint (LHS):
 
 Joint energy and regulating FCAS constraint (RHS):
 \begin{equation}
-\hat{q}_{i,ENOF} + UpperSlopeCoefficient_{ij} \hat{q}_{ij} \leq EffectiveEnablementMax_{ij} + v_{ij}^{12} \quad \forall i,j \in GeneratorOffers \cap RegulatingFCASOffers \cap HasEnergyOffer \cap FCASAvailable
+\begin{split}
+TraderTotalOffer_{i,ENOF} & + UpperSlopeCoefficient_{ij} TraderTotalOffer_{ij} \\
+& \leq EffectiveEnablementMax_{ij} + GeneratorJointEnergyRegulatingRHSFCASDeficit_{ij} \\
+& \forall i,j \in GeneratorOffers \cap RegulatingFCASOffers \cap HasEnergyOffer \\
+& \cap FCASAvailable
+\end{split}
 \end{equation}
 
 %        # Only consider generators
@@ -460,7 +517,12 @@ Joint energy and regulating FCAS constraint (RHS):
 
 Joint energy and regulating FCAS constraint (LHS):
 \begin{equation}
-\hat{q}_{i,ENOF} - LowerSlopeCoefficient_{ij} \hat{q}_{ij} + v_{ij}^{13} \geq EffectiveEnablementMin_{ij}  \quad \forall i,j \in GeneratorOffers \cap RegulatingFCASOffers \cap HasEnergyOffer \cap FCASAvailable
+\begin{split}
+TraderTotalOffer_{i,ENOF} & - LowerSlopeCoefficient_{ij} TraderTotalOffer_{ij} \\
+& + GeneratorJointEnergyRegulatingLHSFCASDeficit_{ij} \geq EffectiveEnablementMin_{ij} \\
+& \forall i,j \in GeneratorOffers \cap RegulatingFCASOffers \cap HasEnergyOffer \\
+& \cap FCASAvailable \\
+\end{split}
 \end{equation}
 
 %        # Only consider generators
@@ -489,7 +551,7 @@ Joint energy and regulating FCAS constraint (LHS):
 
 Generator max FCAS available:
 \begin{equation}
-	\hat{q}_{ij} \leq EffectiveMaxAvailable_{ij} + v_{ij}^{14} \quad \forall i,j \in GeneratorOffers \cap FCASOffers
+TraderTotalOffer_{ij} \leq EffectiveMaxAvailable_{ij} + MaxAvailDeficit_{ij} \quad \forall i,j \in GeneratorOffers \cap FCASOffers
 \end{equation}
 
 %        # Only consider loads
@@ -519,7 +581,12 @@ Generator max FCAS available:
 
 Load joint ramping raise regulation:
 \begin{equation}
-	\hat{q}_{ij} - \hat{q}_{i,R5RE} + v_{ij}^{15} \geq TraderInitialMW_{ij} - (TraderSCADARampDownRate_{i} / 12) \quad \forall i,j \in LoadOffers \cap R5REOffers \cap FCASAvailable \cap HasSCADARampDownRate \cap HasEnergyOffer
+\begin{split}
+TraderTotalOffer_{ij} & - TraderTotalOffer_{i,R5RE} + LoadJointRampingRaiseDeficit_{ij} \\
+& \geq TraderInitialMW_{ij} - (TraderSCADARampDownRate_{i} / 12) \\
+& \forall i,j \in LoadOffers \cap R5REOffers \cap FCASAvailable \\
+& \cap HasSCADARampDownRate \cap HasEnergyOffer
+\end{split}
 \end{equation}
 
 %        # Only consider loads
@@ -549,7 +616,12 @@ Load joint ramping raise regulation:
 
 Load joint ramping lower regulation:
 \begin{equation}
-\hat{q}_{i,LDOF} + \hat{q}_{i,L5RE} \leq TraderInitialMW_{i} + (TraderSCADARampUpRate_{i} / 12) + v_{ij}^{15} \quad \forall i,j \in LoadOffers \cap L5REOffers \cap FCASAvailable \cap HasSCADARampUpRate \cap HasEnergyOffer
+\begin{split}
+TraderTotalOffer_{i,LDOF} & + TraderTotalOffer_{i,L5RE} \leq TraderInitialMW_{i} \\
+& + (TraderSCADARampUpRate_{i} / 12) + LoadJointRampingLowerDeficit_{ij} \\
+& \forall i,j \in LoadOffers \cap L5REOffers \cap FCASAvailable \\
+& \cap HasSCADARampUpRate \cap HasEnergyOffer
+\end{split}
 \end{equation}
 
 %        # Only consider loads
@@ -581,11 +653,21 @@ Load joint ramping lower regulation:
 
 Load joint capacity (RHS):
 \begin{equation}
-\hat{q}_{i,LDOF} + UpperSlopeCoefficient_{ij} \hat{q}_{ij} + \hat{q}_{i,L5RE} \leq EffectiveEnablementMax_{ij} + v_{ij}^{16} \quad \forall i,j \in LoadOffers \cap ContingencyFCASOffers \cap FCASAvailable \cap HasEnergyOffer \cap HasL5REOffer
+\begin{split}
+TraderTotalOffer_{i,LDOF} & + UpperSlopeCoefficient_{ij} TraderTotalOffer_{ij} + TraderTotalOffer_{i,L5RE} \\
+& \leq EffectiveEnablementMax_{ij} + LoadJointCapacityConstraintRHSDeficit_{ij} \\
+& \forall i,j \in LoadOffers \cap ContingencyFCASOffers \cap FCASAvailable \\
+& \cap HasEnergyOffer \cap HasL5REOffer
+\end{split}
 \end{equation}
 
 \begin{equation}
-\hat{q}_{i,LDOF} + UpperSlopeCoefficient_{ij} \hat{q}_{ij} \leq EffectiveEnablementMax_{ij} + v_{ij}^{16} \quad \forall i,j \in LoadOffers \cap ContingencyFCASOffers \cap FCASAvailable \cap HasEnergyOffer \cap NoL5REOffer
+\begin{split}
+TraderTotalOffer_{i,LDOF} & + UpperSlopeCoefficient_{ij} TraderTotalOffer_{ij} \\
+& \leq EffectiveEnablementMax_{ij} + LoadJointCapacityConstraintRHSDeficit_{ij} \\
+& \forall i,j \in LoadOffers \cap ContingencyFCASOffers \cap FCASAvailable \\
+& \cap HasEnergyOffer \cap NoL5REOffer
+\end{split}
 \end{equation}
 
 %        # Only consider loads
@@ -618,11 +700,21 @@ Load joint capacity (RHS):
 
 Load joint capacity (LHS):
 \begin{equation}
-\hat{q}_{i,LDOF} - LowerSlopeCoefficient_{ij} \hat{q}_{ij} - \hat{q}_{i,R5RE} + v_{ij}^{17} \geq EnablementMin_{ij} \quad \forall i,j \in LoadOffers \cap ContingencyFCASOffers \cap FCASAvailable \cap HasEnergyOffer \cap HasR5REOffer
+\begin{split}
+TraderTotalOffer_{i,LDOF} & - LowerSlopeCoefficient_{ij} TraderTotalOffer_{ij} - TraderTotalOffer_{i,R5RE} \\
+& + LoadJointCapacityConstraintLHSDeficit_{ij} \geq EnablementMin_{ij} \\
+& \forall i,j \in LoadOffers \cap ContingencyFCASOffers \cap FCASAvailable \\
+& \cap HasEnergyOffer \cap HasR5REOffer
+\end{split}
 \end{equation}
 
 \begin{equation}
-\hat{q}_{i,LDOF} - LowerSlopeCoefficient_{ij} \hat{q}_{ij} + v_{ij}^{17} \geq EnablementMin_{ij} \quad \forall i,j \in LoadOffers \cap ContingencyFCASOffers \cap FCASAvailable \cap HasEnergyOffer \cap NoR5REOffer
+\begin{split}
+TraderTotalOffer_{i,LDOF} & - LowerSlopeCoefficient_{ij} TraderTotalOffer_{ij} \\
+& + LoadJointCapacityConstraintLHSDeficit_{ij} \geq EnablementMin_{ij} \\
+& \forall i,j \in LoadOffers \cap ContingencyFCASOffers \cap FCASAvailable \\
+& \cap HasEnergyOffer \cap NoR5REOffer
+\end{split}
 \end{equation}
 
 %        # Only consider loads
@@ -648,7 +740,12 @@ Load joint capacity (LHS):
 
 Load joint energy regulating FCAS constraint (RHS):
 \begin{equation}
-	\hat{q}_{i,LDOF} + UpperSlopeCoefficient_{ij} \hat{q}_{ij} \leq EffectiveEnablementMax_{ij} + v_{ij}^{18} \quad \forall i,j \in LoadOffers \cap RegulatingFCASOffers \cap HasEnergyOffer \cap FCASAvailable
+\begin{split}
+TraderTotalOffer_{i,LDOF} & + UpperSlopeCoefficient_{ij} TraderTotalOffer_{ij} \\
+& \leq EffectiveEnablementMax_{ij} + LoadJointRegulatingEnergyRHSDeficit_{ij} \\
+& \forall i,j \in LoadOffers \cap RegulatingFCASOffers \cap HasEnergyOffer \\
+& \cap FCASAvailable
+\end{split}
 \end{equation}
 
 %        # Only consider loads
@@ -675,7 +772,12 @@ Load joint energy regulating FCAS constraint (RHS):
 
 Load joint energy regulating FCAS constraint (LHS):
 \begin{equation}
-\hat{q}_{i,LDOF} - LowerSlopeCoefficient_{ij} \hat{q}_{ij} + v_{ij}^{19} \geq EffectiveEnablementMin_{ij}  \quad \forall i,j \in LoadOffers \cap RegulatingFCASOffers \cap HasEnergyOffer \cap FCASAvailable
+\begin{split}
+TraderTotalOffer_{i,LDOF} & - LowerSlopeCoefficient_{ij} TraderTotalOffer_{ij} \\
+& + LoadJointRegulatingEnergyLHSDeficit_{ij} \geq EffectiveEnablementMin_{ij} \\
+& \forall i,j \in LoadOffers \cap RegulatingFCASOffers \cap HasEnergyOffer \\
+& \cap FCASAvailable
+\end{split}
 \end{equation}
 
 %        # Only consider loads
@@ -707,7 +809,7 @@ Load joint energy regulating FCAS constraint (LHS):
 
 Load max FCAS available:
 \begin{equation}
-	\hat{q}_{ij} \leq EffectiveMaxAvail_{ij} + v_{ij}^{20} \quad \forall i,j \in LoadOffers \cap FCASOffers
+TraderTotalOffer_{ij} \leq EffectiveMaxAvail_{ij} + MaxAvailDeficit_{ij} \quad \forall i,j \in LoadOffers \cap FCASOffers
 \end{equation}
 
 \subsubsection{Loss model}
@@ -833,22 +935,35 @@ SOS2 condition 7:
 
 Output fixed to 0 when unit unavailable / synchronising:
 \begin{equation}
-	\hat{q}_{i,EnergyOffer} + v_{ij}^{21} = 0 + v_{ij}^{22} \quad \forall i,j \in EnergyOffers \cap TraderCurrentMode0 \cup TraderCurrentMode1
+\begin{split}
+TraderTotalOffer_{i,EnergyOffer} & + InflexibilityProfileLHSDeficit_{ij} = 0 + InflexibilityProfileRHSDeficit_{ij} \\
+& \forall i,j \in EnergyOffers \cap TraderCurrentMode0 \cup TraderCurrentMode1
+\end{split}
 \end{equation}
 
 Output fixed to startup profile when ramping to min-loading:
 \begin{equation}
-\hat{q}_{i,EnergyOffer} + v_{ij}^{23} = StartupProfile + v_{ij}^{24} \quad \forall i,j \in EnergyOffers \cap TraderCurrentMode2
+\begin{split}
+TraderTotalOffer_{i,EnergyOffer} & + InflexibilityProfileLHSDeficit_{ij} = StartupProfile \\
+& + InflexibilityProfileRHSDeficit_{ij} \\
+& \forall i,j \in EnergyOffers \cap TraderCurrentMode2
+\end{split}
 \end{equation}
 
 Output lower bound is min loading when in mode 3:
 \begin{equation}
-\hat{q}_{i,EnergyOffer} + v_{ij}^{24} \geq MinLoading_{i} \quad \forall i,j \in EnergyOffers \cap TraderCurrentMode3
+\begin{split}
+TraderTotalOffer_{i,EnergyOffer} & + InflexibilityProfileDeficit_{ij} \geq MinLoading_{i} \\
+& \quad \forall i,j \in EnergyOffers \cap TraderCurrentMode3
+\end{split}
 \end{equation}
 
 Output lower bound is inflexibility profile when in mode 4:
 \begin{equation}
-\hat{q}_{i,EnergyOffer} + v_{ij}^{25} \geq InflexibilityProfile_{i} \quad \forall i,j \in EnergyOffers \cap TraderCurrentMode4 \cap InModel4
+\begin{split}
+TraderTotalOffer_{i,EnergyOffer} & + InflexibilityProfileDeficit_{ij} \geq InflexibilityProfile_{i} \\
+& \quad \forall i,j \in EnergyOffers \cap TraderCurrentMode4 \cap InModel4
+\end{split}
 \end{equation}
 
 \subsubsection{Tie-breaking constraints}
