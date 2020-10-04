@@ -522,7 +522,7 @@ def check_total_calculation_sample(data_dir, func, n=5):
         case_data = json.loads(data_json)
 
         # Intervention status - '1' if intervention occurred, '0' if no intervention
-        intervention = get_intervention_status(case_data)
+        intervention = lookup.get_intervention_status(case_data)
 
         # Check difference between total cleared demand and total generation
         difference = func(case_data, intervention)
@@ -779,7 +779,8 @@ def check_generic_constraint_calculation_sample(data_dir, func, n=5):
         case_data = json.loads(data_json)
 
         # Intervention status - '1' if intervention occurred, '0' if no intervention
-        intervention = lookup.get_intervention_status(case_data)
+        # intervention = lookup.get_intervention_status(case_data)
+        intervention = '0'
 
         # Generic constraint index
         constraints = lookup.get_generic_constraint_index(case_data, intervention)
@@ -897,6 +898,88 @@ def get_values(data_dir, index, func, *args):
     return out
 
 
+def check_trader_what_if_initial_mw(data, trader_id) -> float:
+    """Check difference between WhatIfInitialMW and InitialMW"""
+
+    initial_mw = lookup.get_trader_collection_initial_condition_attribute(data, trader_id, 'InitialMW', float)
+    what_if = lookup.get_trader_collection_initial_condition_attribute(data, trader_id, 'WhatIfInitialMW', float)
+
+    return initial_mw - what_if
+
+
+def check_trader_what_if_initial_mw_sample(data_dir, n=5):
+    """Check difference between WhatIfInitialMW and InitialMW for a random selection of dispatch intervals"""
+
+    print('Checking difference between WhatIfInitialMW and InitialMW')
+
+    # Seed random number generator to get reproducable results
+    np.random.seed(10)
+
+    # Population of dispatch intervals for a given month
+    population = [(i, j) for i in range(1, 30) for j in range(1, 289)]
+    population_map = {i: j for i, j in enumerate(population)}
+
+    # Random sample of dispatch intervals
+    sample_keys = np.random.choice(list(population_map.keys()), n, replace=False)
+    sample = [population_map[i] for i in sample_keys]
+
+    # Container for model output
+    out = {}
+
+    # Placeholder for max absolute difference observed
+    max_abs_difference = 0
+    max_abs_difference_interval = None
+
+    # Compute fixed demand for each interval
+    for i, (day, interval) in enumerate(sample):
+        print(f'{i + 1}/{len(sample)}')
+
+        # Case data in json format
+        data_json = loaders.load_dispatch_interval_json(data_dir, 2019, 10, day, interval)
+
+        # Get NEMDE model data as a Python dictionary
+        case_data = json.loads(data_json)
+
+        # All regions
+        traders = get_trader_index(case_data)
+
+        # Check net export calculation for each region
+        for j in traders:
+
+            # Intervention status - 'True' if intervention occurred, 'False' if no intervention
+            intervention = lookup.get_case_attribute(case_data, '@Intervention', str)
+
+            # Only consider cases where no intervention
+            if intervention != 'False':
+                continue
+
+            # Check difference between calculated region fixed demand and fixed demand from NEMDE solution
+            difference = check_trader_what_if_initial_mw(case_data, j)
+
+            # Add date to keys
+            initial_mw = {(day, interval, j): {'difference': difference, 'abs_difference': abs(difference)}}
+
+            if abs(difference) > max_abs_difference:
+                max_abs_difference = abs(difference)
+                max_abs_difference_interval = (day, interval, j)
+
+            # Append to main container
+            out = {**out, **initial_mw}
+
+        # Periodically print max absolute difference observed
+        if (i + 1) % 10 == 0:
+            print('Max absolute difference:', max_abs_difference_interval, max_abs_difference)
+
+    # Convert to DataFrame
+    df = pd.DataFrame(out).T
+    df = df.sort_values(by='abs_difference', ascending=False)
+
+    # Max absolute discrepancy
+    max_abs_difference = df['abs_difference'].max()
+
+    return out, df, max_abs_difference
+
+
 if __name__ == '__main__':
     # Directory containing case data
     data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
@@ -922,8 +1005,8 @@ if __name__ == '__main__':
     #                                                     n=1000)
     # c8, c8_df, c8_max = check_region_calculation_sample(data_directory, check_region_dispatched_load_calculation,
     #                                                     n=1000)
-    # c9, c9_df, c9_max = check_generic_constraint_calculation_sample(data_directory,
-    #                                                                 check_generic_constraint_rhs_calculation, n=1)
+    c9, c9_df, c9_max = check_generic_constraint_calculation_sample(data_directory,
+                                                                    check_generic_constraint_rhs_calculation, n=1)
     # check_unique_generic_constraint_id_sample(data_directory, check_unique_generic_constraint_id, n=1000)
 
     # interval_index = list(set([i[:2] for i in c3_df.index.to_list()]))
@@ -935,4 +1018,5 @@ if __name__ == '__main__':
     #
     # c3_df = c3_df.rename_axis(['day', 'interval', 'region'])
     # c3_df.join(c6_df).join(c7_df)
-    c10 = check_region_net_export_calculation(cdata, 'VIC1', '0')
+    # c10 = check_region_net_export_calculation(cdata, 'VIC1', '0')
+    # c11, c11_df, c11_max = check_trader_what_if_initial_mw_sample(data_directory, n=1000)
