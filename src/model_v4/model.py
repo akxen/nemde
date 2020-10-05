@@ -2771,57 +2771,57 @@ if __name__ == '__main__':
                                   os.path.pardir, os.path.pardir, 'nemweb', 'Reports', 'Data_Archive', 'NEMDE',
                                   'zipped')
 
-    # sample_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, 'data')
-    # tmp_directory = os.path.join(os.path.dirname(__file__), 'tmp')
-    #
-    # # Case data in json format
-    # di_day, di_interval = 6, 123
-    # case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, 2019, 10, di_day, di_interval)
-    # save_case_json(data_directory, 2019, 10, di_day, di_interval)
-    #
-    # # Get NEMDE model data as a Python dictionary
-    # cdata = json.loads(case_data_json)
-    #
-    # # Preprocessed case data
-    # intervention_status = utils.lookup.get_intervention_status(cdata, 'physical')
-    # # intervention_status = '0'
-    # model_data = utils.data.parse_case_data_json(case_data_json, intervention_status)
-    #
-    # # Construct model
-    # model = construct_model(model_data, cdata)
-    #
-    # # Perform model checks
-    # # df_fixed_demand_check = check_region_fixed_demand_calculation_sample(data_directory, n=1000)
-    # # df_rhs = check_generic_constraint_rhs_sample(data_directory, n=1000)
-    #
-    # # Fix variables (debugging)
-    # # model = fix_interconnector_flow_solution(model, cdata, intervention_status)
-    # # model = fix_trader_solution(model, cdata, intervention_status, ['ENOF', 'LDOF'])
-    # # model = fix_trader_solution(model, cdata, intervention_status, ['R5RE', 'L5RE'])
-    #
-    # # Solve model
-    # model = solve_model(model)
-    #
-    # # Extract solution
-    # solution = utils.solution.get_model_solution(model)
-    #
-    # # Difference
-    # trader_solution, df_trader_solution = utils.analysis.check_trader_solution(cdata, solution, intervention_status)
-    # di_case_id = f'201910{di_day:02}{di_interval:03}'
-    # df_trader_fcas_solution = check_fcas_solution(di_case_id, sample_directory, tmp_directory)
-    # utils.analysis.plot_trader_solution_difference(cdata, solution, intervention_status)
-    #
-    # # Get solution report
-    # get_solution_report(cdata, model, intervention_status)
+    sample_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, 'data')
+    tmp_directory = os.path.join(os.path.dirname(__file__), 'tmp')
 
-    # Check model for a random selection of dispatch intervals
-    model_output = check_model(data_directory, n=20)
+    # Case data in json format
+    di_day, di_interval = 25, 254
+    case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, 2019, 10, di_day, di_interval)
+    save_case_json(data_directory, 2019, 10, di_day, di_interval)
 
-    df_fixed_demand_output = model_output['fixed_demand']
-    df_net_export_output = model_output['net_export']
-    df_energy_price_output = model_output['energy_price']
-    df_dispatched_generation_output = model_output['dispatched_generation']
-    df_dispatched_load_output = model_output['dispatched_load']
-    df_interconnector_flow_output = model_output['interconnector_flow']
-    df_interconnector_losses_output = model_output['interconnector_losses']
-    df_trader_output_output = model_output['trader_output']
+    # Get NEMDE model data as a Python dictionary
+    cdata = json.loads(case_data_json)
+
+    # Preprocessed case data
+    intervention_status = utils.lookup.get_intervention_status(cdata, 'physical')
+    # intervention_status = '0'
+    model_data = utils.data.parse_case_data_json(case_data_json, intervention_status)
+
+    # Construct model
+    model = construct_model(model_data, cdata)
+
+    # Perform model checks
+    # df_fixed_demand_check = check_region_fixed_demand_calculation_sample(data_directory, n=1000)
+    # df_rhs = check_generic_constraint_rhs_sample(data_directory, n=1000)
+
+    # Fix variables (debugging)
+    # model = fix_interconnector_flow_solution(model, cdata, intervention_status)
+    # model = fix_trader_solution(model, cdata, intervention_status, ['ENOF', 'LDOF'])
+    # model = fix_trader_solution(model, cdata, intervention_status, ['R5RE', 'L5RE'])
+
+    # Solve model
+    model = solve_model(model)
+
+    # Extract solution
+    solution = utils.solution.get_model_solution(model)
+
+    # Difference
+    trader_solution, df_trader_solution = utils.analysis.check_trader_solution(cdata, solution, intervention_status)
+    di_case_id = f'201910{di_day:02}{di_interval:03}'
+    df_trader_fcas_solution = check_fcas_solution(di_case_id, sample_directory, tmp_directory)
+    utils.analysis.plot_trader_solution_difference(cdata, solution, intervention_status)
+
+    # Get solution report
+    get_solution_report(cdata, model, intervention_status)
+
+    # # Check model for a random selection of dispatch intervals
+    # model_output = check_model(data_directory, n=20)
+    #
+    # df_fixed_demand_output = model_output['fixed_demand']
+    # df_net_export_output = model_output['net_export']
+    # df_energy_price_output = model_output['energy_price']
+    # df_dispatched_generation_output = model_output['dispatched_generation']
+    # df_dispatched_load_output = model_output['dispatched_load']
+    # df_interconnector_flow_output = model_output['interconnector_flow']
+    # df_interconnector_losses_output = model_output['interconnector_losses']
+    # df_trader_output_output = model_output['trader_output']
