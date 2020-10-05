@@ -38,8 +38,14 @@ def get_region_solution(m) -> dict:
     # Container for output
     out = {}
     for r in m.S_REGIONS:
+        # Extract energy price - use default value of -9999 if none available
+        try:
+            energy_price = m.dual[m.C_POWER_BALANCE[r]]
+        except KeyError:
+            energy_price = -9999
+
         out[r] = {
-            'EnergyPrice': m.dual[m.C_POWER_BALANCE[r]],
+            'EnergyPrice': energy_price,
             'FixedDemand': m.E_REGION_FIXED_DEMAND[r].expr(),
         }
 

@@ -4,6 +4,7 @@ import os
 import json
 import time
 import pickle
+import zipfile
 
 import numpy as np
 import pandas as pd
@@ -1240,7 +1241,10 @@ def define_unit_constraints(m):
             return pyo.Constraint.Skip
 
         # Ramp rate
-        ramp_limit = m.P_TRADER_PERIOD_RAMP_UP_RATE[(i, j)]
+        if i in m.P_TRADER_SCADA_RAMP_UP_RATE.keys():
+            ramp_limit = min([m.P_TRADER_SCADA_RAMP_UP_RATE[i], m.P_TRADER_PERIOD_RAMP_UP_RATE[(i, j)]])
+        else:
+            ramp_limit = m.P_TRADER_PERIOD_RAMP_UP_RATE[(i, j)]
 
         # Initial MW
         initial_mw = m.P_TRADER_INITIAL_MW[i]
@@ -1258,7 +1262,10 @@ def define_unit_constraints(m):
             return pyo.Constraint.Skip
 
         # Ramp rate
-        ramp_limit = m.P_TRADER_PERIOD_RAMP_DOWN_RATE[(i, j)]
+        if i in m.P_TRADER_SCADA_RAMP_DOWN_RATE.keys():
+            ramp_limit = min([m.P_TRADER_SCADA_RAMP_DOWN_RATE[i], m.P_TRADER_PERIOD_RAMP_DOWN_RATE[(i, j)]])
+        else:
+            ramp_limit = m.P_TRADER_PERIOD_RAMP_DOWN_RATE[(i, j)]
 
         # Initial MW
         initial_mw = m.P_TRADER_INITIAL_MW[i]
@@ -1547,7 +1554,8 @@ def define_fcas_constraints(m, data):
             if i not in m.P_TRADER_SCADA_RAMP_UP_RATE.keys():
                 effective_max_avail = m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]
             else:
-                effective_max_avail = min([(m.P_TRADER_SCADA_RAMP_UP_RATE[i] / 12), m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]])
+                effective_max_avail = min(
+                    [(m.P_TRADER_SCADA_RAMP_UP_RATE[i] / 12), m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]])
             return m.V_TRADER_TOTAL_OFFER[i, j] <= effective_max_avail + m.V_CV_TRADER_FCAS_MAX_AVAILABLE[i, j]
 
         elif j == 'L5RE':
@@ -1555,7 +1563,8 @@ def define_fcas_constraints(m, data):
             if i not in m.P_TRADER_SCADA_RAMP_DOWN_RATE.keys():
                 effective_max_avail = m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]
             else:
-                effective_max_avail = min([(m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] / 12), m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]])
+                effective_max_avail = min(
+                    [(m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] / 12), m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]])
             return m.V_TRADER_TOTAL_OFFER[i, j] <= effective_max_avail + m.V_CV_TRADER_FCAS_MAX_AVAILABLE[i, j]
 
         else:
@@ -1771,7 +1780,8 @@ def define_fcas_constraints(m, data):
             if i not in m.P_TRADER_SCADA_RAMP_DOWN_RATE.keys():
                 effective_max_avail = m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]
             else:
-                effective_max_avail = min([(m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] / 12), m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]])
+                effective_max_avail = min(
+                    [(m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] / 12), m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]])
             return m.V_TRADER_TOTAL_OFFER[i, j] <= effective_max_avail + m.V_CV_TRADER_FCAS_MAX_AVAILABLE[i, j]
 
         elif j == 'L5RE':
@@ -1779,7 +1789,8 @@ def define_fcas_constraints(m, data):
             if i not in m.P_TRADER_SCADA_RAMP_UP_RATE.keys():
                 effective_max_avail = m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]
             else:
-                effective_max_avail = min([(m.P_TRADER_SCADA_RAMP_UP_RATE[i] / 12), m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]])
+                effective_max_avail = min(
+                    [(m.P_TRADER_SCADA_RAMP_UP_RATE[i] / 12), m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]])
             return m.V_TRADER_TOTAL_OFFER[i, j] <= effective_max_avail + m.V_CV_TRADER_FCAS_MAX_AVAILABLE[i, j]
 
         else:
@@ -1890,6 +1901,66 @@ def define_loss_model_constraints(m):
 def define_fast_start_unit_inflexibility_constraints(m):
     """Fast start unit inflexibility profile constraints"""
 
+    def get_inflexibility_profile_base_time(mode, mode_time, t1, t2, t3):
+        """Get number of minutes from start of inflexibility profile"""
+
+        if mode == '0':
+            return mode_time
+        elif mode == '1':
+            return mode_time
+        elif mode == '2':
+            return t1 + mode_time
+        elif mode == '3':
+            return t1 + t2 + mode_time
+        elif mode == '4':
+            return t1 + t2 + t3 + mode_time
+        else:
+            raise Exception('Unhandled case:', mode, mode_time, t1, t2, t3)
+
+    def get_inflexibility_profile_effective_mode_and_time(mode, mode_time, t1, t2, t3, t4):
+        """Get effective mode and time at end of dispatch interval"""
+
+        # Time at end of dispatch interval - offsetting by 5 minutes to correspond to end of dispatch interval
+        minutes = get_inflexibility_profile_base_time(mode, mode_time + 5, t1, t2, t3)
+
+        # Time interval endpoints
+        t1_end = t1
+        t2_end = t1 + t2
+        t3_end = t1 + t2 + t3
+        t4_end = t1 + t2 + t3 + t4
+
+        # Get effective mode
+        if mode == '0':
+            effective_mode = '0'
+        elif minutes <= t1_end:
+            effective_mode = '1'
+        elif (minutes > t1_end) and (minutes <= t2_end):
+            effective_mode = '2'
+        elif (minutes > t2_end) and (minutes <= t3_end):
+            effective_mode = '3'
+        elif (minutes > t3_end) and (minutes <= t4_end):
+            effective_mode = '4'
+        elif minutes > t4_end:
+            effective_mode = '4'
+        else:
+            raise Exception('Unhandled case:', minutes, t1_end, t2_end, t3_end, t4_end)
+
+        # Get effective time based on effective mode and time interval endpoints
+        if effective_mode == '0':
+            effective_time = mode_time
+        elif effective_mode == '1':
+            effective_time = minutes
+        elif effective_mode == '2':
+            effective_time = minutes - t1_end
+        elif effective_mode == '3':
+            effective_time = minutes - t2_end
+        elif effective_mode == '4':
+            effective_time = minutes - t3_end
+        else:
+            raise Exception('Unhandled case:', effective_mode)
+
+        return effective_mode, effective_time
+
     def profile_constraint_rule(m, i):
         """Energy profile constraint"""
 
@@ -1900,27 +1971,39 @@ def define_fast_start_unit_inflexibility_constraints(m):
         else:
             raise Exception('Unexpected energy offer:', i)
 
+        # Get effective mode and time at end of dispatch interval
+        effective_mode, effective_time = get_inflexibility_profile_effective_mode_and_time(
+            m.P_TRADER_CURRENT_MODE[i],
+            m.P_TRADER_CURRENT_MODE_TIME[i],
+            m.P_TRADER_T1[i],
+            m.P_TRADER_T2[i],
+            m.P_TRADER_T3[i],
+            m.P_TRADER_T4[i])
+
+        # effective_mode = m.P_TRADER_CURRENT_MODE[i]
+        # effective_time = m.P_TRADER_CURRENT_MODE_TIME[i]
+
         # Unit is synchronising - output = 0
-        if (m.P_TRADER_CURRENT_MODE[i] == '0') or (m.P_TRADER_CURRENT_MODE[i] == '1'):
+        if (effective_mode == '0') or (effective_mode == '1'):
             return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_LHS[i]
                     == 0 + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_RHS[i])
 
         # Unit ramping to min loading - energy output fixed to profile
-        elif m.P_TRADER_CURRENT_MODE[i] == '2':
-            slope = m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T2
-            startup_profile = slope * m.P_TRADER_CURRENT_MODE_TIME[i]
+        elif effective_mode == '2':
+            slope = m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T2[i]
+            startup_profile = slope * effective_time
             return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_LHS[i]
                     == startup_profile + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_RHS[i])
 
         # Output lower bounded by MinLoadingMW
-        elif m.P_TRADER_CURRENT_MODE[i] == '3':
+        elif effective_mode == '3':
             return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] + m.V_CV_TRADER_INFLEXIBILITY_PROFILE[i]
                     >= m.P_TRADER_MIN_LOADING_MW[i])
 
         # Output still lower bounded by inflexibility profile
-        elif (m.P_TRADER_CURRENT_MODE[i] == '4') and (m.P_TRADER_CURRENT_MODE_TIME[i] < m.P_TRADER_T4[i]):
+        elif (effective_mode == '4') and (effective_time < m.P_TRADER_T4[i]):
             slope = - m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T4[i]
-            max_output = (slope * m.P_TRADER_CURRENT_MODE_TIME[i]) + m.P_TRADER_MIN_LOADING_MW[i]
+            max_output = (slope * effective_time) + m.P_TRADER_MIN_LOADING_MW[i]
 
             return m.V_TRADER_TOTAL_OFFER[i, energy_offer] + m.V_CV_TRADER_INFLEXIBILITY_PROFILE[i] >= max_output
 
@@ -2048,13 +2131,33 @@ def fix_interconnector_flow_solution(m, data, intervention):
     return m
 
 
-def fix_energy_solution(m, data, intervention):
+def unfix_interconnector_flow_solution(m):
+    """Fix interconnector solution to observed values"""
+
+    for i in m.S_GC_INTERCONNECTOR_VARS:
+        m.V_GC_INTERCONNECTOR[i].unfix()
+
+    return m
+
+
+def fix_trader_solution(m, data, intervention, offers=None):
     """Fix FCAS solution"""
 
+    # Map between NEMDE output keys and keys used in solution dictionary
+    key_map = {'ENOF': '@EnergyTarget', 'LDOF': '@EnergyTarget',
+               'R6SE': '@R6Target', 'R60S': '@R60Target', 'R5MI': '@R5Target', 'R5RE': '@R5RegTarget',
+               'L6SE': '@L6Target', 'L60S': '@L60Target', 'L5MI': '@L5Target', 'L5RE': '@L5RegTarget'}
+
+    # Use all offers by default
+    if offers is None:
+        trader_offers = ['ENOF', 'LDOF', 'R6SE', 'R60S', 'R5MI', 'R5RE', 'L6SE', 'L60S', 'L5MI', 'L5RE']
+    else:
+        trader_offers = offers
+
     for i, j in m.S_TRADER_OFFERS:
-        if j in ['ENOF', 'LDOF']:
-            energy_target = utils.lookup.get_trader_solution_attribute(data, i, '@EnergyTarget', float, intervention)
-            m.V_TRADER_TOTAL_OFFER[(i, j)].fix(energy_target)
+        if j in trader_offers:
+            target = utils.lookup.get_trader_solution_attribute(data, i, key_map[j], float, intervention)
+            m.V_TRADER_TOTAL_OFFER[(i, j)].fix(target)
 
     return m
 
@@ -2072,7 +2175,8 @@ def solve_model(m):
     """Solve model"""
 
     # Setup solver
-    solver_options = {'mip tolerances mipgap': 1e-9}
+    solver_options = {'mip tolerances mipgap': 1e-10}
+    # solver_options = {}
     opt = pyo.SolverFactory('cplex', solver_io='mps')
 
     # Solve model
@@ -2083,11 +2187,15 @@ def solve_model(m):
     print('Finished MILP solve:', time.time() - t0)
     print('Objective value - 1:', m.OBJECTIVE.expr())
 
-    # Fix binary variables
-    m = fix_binary_variables(m)
-    solve_status_2 = opt.solve(m, tee=True, options=solver_options, keepfiles=False)
-    print('Finished MILP solve:', time.time() - t0)
-    print('Objective value - 2:', m.OBJECTIVE.expr())
+    # # Fix binary variables
+    # m = fix_binary_variables(m)
+    #
+    # # Unfix interconnector solution
+    # # m = unfix_interconnector_flow_solution(m)
+    #
+    # solve_status_2 = opt.solve(m, tee=True, options=solver_options, keepfiles=False)
+    # print('Finished MILP solve:', time.time() - t0)
+    # print('Objective value - 2:', m.OBJECTIVE.expr())
 
     return m
 
@@ -2251,8 +2359,13 @@ def check_trader_output(data, m, trader_id, trade_type, intervention):
 def check_region_price(data, m, region_id, intervention):
     """Check region energy price (exclude FCAS for now)"""
 
-    # Calculated and observed values
-    calculated = m.dual[m.C_POWER_BALANCE[region_id]]
+    # Extract energy price - use default value of -9999 if none available
+    try:
+        calculated = m.dual[m.C_POWER_BALANCE[region_id]]
+    except KeyError:
+        calculated = -9999
+
+    # Observed energy price
     observed = utils.lookup.get_region_solution_attribute(data, region_id, '@EnergyPrice', float, intervention)
 
     out = {
@@ -2589,16 +2702,82 @@ def save_case_json(data_dir, year, month, day, interval):
         json.dump(data, f)
 
 
+def get_observed_fcas_availability(data_dir, tmp_dir):
+    """Get FCAS availability reported in MMS"""
+
+    with zipfile.ZipFile(os.path.join(data_dir, 'PUBLIC_DVD_DISPATCHLOAD_201910010000.zip')) as z1:
+        with z1.open('PUBLIC_DVD_DISPATCHLOAD_201910010000.CSV') as z2:
+            df = pd.read_csv(z2, skiprows=1).iloc[:-1]
+
+    # Convert intervention flag and dispatch interval to string
+    df['INTERVENTION'] = df['INTERVENTION'].astype(int).astype('str')
+    df['DISPATCHINTERVAL'] = df['DISPATCHINTERVAL'].astype(int).astype('str')
+
+    #  Convert to datetime
+    df['SETTLEMENTDATE'] = pd.to_datetime(df['SETTLEMENTDATE'])
+
+    # Set index
+    df = df.set_index(['DISPATCHINTERVAL', 'DUID', 'INTERVENTION'])
+    df = df.sort_index()
+
+    # Save to
+    df.to_pickle(os.path.join(tmp_dir, 'fcas_availability.pickle'))
+
+    return df
+
+
+def check_fcas_solution(case_id, sample_dir, tmp_dir, use_cache=True):
+    """Check FCAS solution and compare availability with observed availability"""
+
+    # Load observed FCAS data
+    if use_cache:
+        observed_fcas = pd.read_pickle(os.path.join(tmp_dir, 'fcas_availability.pickle'))
+    else:
+        observed_fcas = get_observed_fcas_availability(sample_dir, tmp_dir)
+
+    # Column map
+    column_map = {
+        'RAISEREGAVAILABILITY': 'R5RE',
+        'RAISE6SECACTUALAVAILABILITY': 'R6SE',
+        'RAISE60SECACTUALAVAILABILITY': 'R60S',
+        'RAISE5MINACTUALAVAILABILITY': 'R5MI',
+        'LOWERREGACTUALAVAILABILITY': 'L5RE',
+        'LOWER6SECACTUALAVAILABILITY': 'L6SE',
+        'LOWER60SECACTUALAVAILABILITY': 'L60S',
+        'LOWER5MINACTUALAVAILABILITY': 'L5MI',
+    }
+
+    # Augment DataFrame
+    observed_fcas_formatted = (observed_fcas.loc[(case_id, slice(None), intervention_status), column_map.keys()]
+                               .rename(columns=column_map).stack().to_frame('fcas_availability').droplevel([0, 2])
+                               .rename_axis(['trader_id', 'trade_type']))
+
+    # Combine trader solution with observed FCAS availability
+    df_c = df_trader_solution.join(observed_fcas_formatted, how='left')
+
+    # Difference between observed FCAS and available FCAS
+    df_c['fcas_availability_difference'] = df_c['model'] - df_c['fcas_availability']
+    df_c['fcas_availability_abs_difference'] = df_c['fcas_availability_difference'].abs()
+
+    # Sort to largest difference is first - if difference is positive then model > actual available --> problem
+    df_c = df_c.sort_values(by='fcas_availability_difference', ascending=False)
+
+    return df_c
+
+
 if __name__ == '__main__':
     # Directory containing case data
     data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
                                   os.path.pardir, os.path.pardir, 'nemweb', 'Reports', 'Data_Archive', 'NEMDE',
                                   'zipped')
 
+    sample_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, 'data')
+    tmp_directory = os.path.join(os.path.dirname(__file__), 'tmp')
+
     # Case data in json format
-    di_day, di_interval = 10, 10
+    di_day, di_interval = 21, 127
     case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, 2019, 10, di_day, di_interval)
-    save_case_json(data_directory, 2019, 10, di_day, di_interval)
+    # save_case_json(data_directory, 2019, 10, di_day, di_interval)
 
     # Get NEMDE model data as a Python dictionary
     cdata = json.loads(case_data_json)
@@ -2616,8 +2795,9 @@ if __name__ == '__main__':
     # df_rhs = check_generic_constraint_rhs_sample(data_directory, n=1000)
 
     # Fix variables (debugging)
-    # model = fix_interconnector_flow_solution(model, cdata)
-    # model = fix_energy_solution(model, cdata)
+    # model = fix_interconnector_flow_solution(model, cdata, intervention_status)
+    # model = fix_trader_solution(model, cdata, intervention_status, ['ENOF', 'LDOF'])
+    # model = fix_trader_solution(model, cdata, intervention_status, ['R5RE', 'L5RE'])
 
     # Solve model
     model = solve_model(model)
@@ -2627,6 +2807,8 @@ if __name__ == '__main__':
 
     # Difference
     trader_solution, df_trader_solution = utils.analysis.check_trader_solution(cdata, solution, intervention_status)
+    di_case_id = f'201910{di_day:02}{di_interval:03}'
+    df_trader_fcas_solution = check_fcas_solution(di_case_id, sample_directory, tmp_directory)
     utils.analysis.plot_trader_solution_difference(cdata, solution, intervention_status)
 
     # Get solution report

@@ -131,7 +131,8 @@ def check_trader_solution(data, solution, intervention):
 
     # Convert to DataFrame and sort by error corresponding to each unit
     df_out = {(k_1, k_2): v_2 for k_1, v_1 in out.items() for k_2, v_2 in v_1.items()}
-    df = pd.DataFrame(df_out).T.sort_values(by='abs_difference', ascending=False)
+    df = (pd.DataFrame(df_out).T.sort_values(by='abs_difference', ascending=False)
+          .rename_axis(['trader_id', 'trade_type']))
 
     return out, df
 
