@@ -1240,8 +1240,8 @@ def define_unit_constraints(m):
         if (j != 'ENOF') and (j != 'LDOF'):
             return pyo.Constraint.Skip
 
-        # Ramp rate
-        if i in m.P_TRADER_SCADA_RAMP_UP_RATE.keys():
+        # Ramp rate TODO: check if second condition is necessary
+        if (i in m.P_TRADER_SCADA_RAMP_UP_RATE.keys()) and (m.P_TRADER_SCADA_RAMP_UP_RATE[i] > 0):
             ramp_limit = min([m.P_TRADER_SCADA_RAMP_UP_RATE[i], m.P_TRADER_PERIOD_RAMP_UP_RATE[(i, j)]])
         else:
             ramp_limit = m.P_TRADER_PERIOD_RAMP_UP_RATE[(i, j)]
@@ -1261,8 +1261,8 @@ def define_unit_constraints(m):
         if (j != 'ENOF') and (j != 'LDOF'):
             return pyo.Constraint.Skip
 
-        # Ramp rate
-        if i in m.P_TRADER_SCADA_RAMP_DOWN_RATE.keys():
+        # Ramp rate TODO: check if second condition is necessary
+        if (i in m.P_TRADER_SCADA_RAMP_DOWN_RATE.keys()) and (m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] > 0):
             ramp_limit = min([m.P_TRADER_SCADA_RAMP_DOWN_RATE[i], m.P_TRADER_PERIOD_RAMP_DOWN_RATE[(i, j)]])
         else:
             ramp_limit = m.P_TRADER_PERIOD_RAMP_DOWN_RATE[(i, j)]
