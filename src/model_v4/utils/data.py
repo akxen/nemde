@@ -95,18 +95,12 @@ def get_trader_fast_start_index(data) -> list:
     return [i['@TraderID'] for i in traders if i.get('@FastStart') == '1']
 
 
-def get_generic_constraint_index(data, intervention) -> list:
-    """Get generic constraint index - depends on intervention status"""
+def get_generic_constraint_index(data) -> list:
+    """Get generic constraint index"""
 
-    # return [i['@ConstraintID']
-    #         for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
-    #                   .get('GenericConstraintPeriodCollection').get('GenericConstraintPeriod'))
-    #         if i['@Intervention'] == intervention]
-
-    # NEMSPDCaseFile.NemSpdOutputs.ConstraintSolution[0].@ConstraintID
-
-    return [i['@ConstraintID'] for i in data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('ConstraintSolution')
-            if i['@Intervention'] == intervention]
+    return [i['@ConstraintID'] for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection')
+                                         .get('Period').get('GenericConstraintPeriodCollection')
+                                         .get('GenericConstraintPeriod'))]
 
 
 def get_generic_constraint_trader_variable_index(data) -> list:
@@ -354,7 +348,7 @@ def get_trader_fcas_trapezium(data) -> dict:
         if j['@TradeType'] in ['R6SE', 'R60S', 'R5MI', 'R5RE', 'L6SE', 'L60S', 'L5MI', 'L5RE']}
 
 
-def get_trader_fcas_availability_status(data, intervention) -> dict:
+def get_trader_fcas_availability_status(data) -> dict:
     """Get FCAS availability"""
 
     # All FCAS offers
@@ -366,8 +360,7 @@ def get_trader_fcas_availability_status(data, intervention) -> dict:
         # Only check availability for FCAS offers
         if trade_type in ['L5RE', 'L6SE', 'L60S', 'L5MI', 'R5RE', 'R6SE', 'R60S', 'R5MI']:
             # Get FCAS availability status
-            fcas_status[(trader_id, trade_type)] = fcas.get_trader_fcas_availability_status(data, trader_id, trade_type,
-                                                                                            intervention)
+            fcas_status[(trader_id, trade_type)] = fcas.get_trader_fcas_availability_status(data, trader_id, trade_type)
 
     return fcas_status
 
@@ -384,80 +377,8 @@ def get_trader_fast_start_attribute(data, attribute, func) -> dict:
     return {i['@TraderID']: func(i[attribute]) for i in traders if i['@TraderID'] in fast_start_traders}
 
 
-def get_trader_fast_start_effective_current_mode(data, intervention) -> dict:
-    """Effective current mode depends on intervention flag"""
-
-    # All traders
-    traders = data.get('NEMSPDCaseFile').get('NemSpdInputs').get('TraderCollection').get('Trader')
-
-    # Fast start traders
-    fast_start_traders = get_trader_fast_start_index(data)
-
-    # No intervention - use InitialMW
-    if lookup.get_case_attribute(data, '@Intervention', str) == 'False' and intervention == '0':
-        return get_trader_fast_start_attribute(data, '@CurrentMode', float)
-
-    # Intervention occurred for case - use WhatIfInitialMW for pricing run (intervention status='0')
-    elif lookup.get_case_attribute(data, '@Intervention', str) == 'True' and intervention == '0':
-        return get_trader_fast_start_attribute(data, '@WhatIfCurrentMode', float)
-
-    # Intervention occurred for case - use IfInitialMW for physical run (intervention status='1')
-    elif lookup.get_case_attribute(data, '@Intervention', str) == 'True' and intervention == '1':
-        return get_trader_fast_start_attribute(data, '@CurrentMode', float)
-
-    else:
-        raise Exception('Unhandled case')
-
-
-def get_trader_fast_start_effective_current_mode_time(data, intervention) -> dict:
-    """Effective current mode depends on intervention flag"""
-
-    # All traders
-    traders = data.get('NEMSPDCaseFile').get('NemSpdInputs').get('TraderCollection').get('Trader')
-
-    # Fast start traders
-    fast_start_traders = get_trader_fast_start_index(data)
-
-    # No intervention - use InitialMW
-    if lookup.get_case_attribute(data, '@Intervention', str) == 'False' and intervention == '0':
-        return get_trader_fast_start_attribute(data, '@CurrentModeTime', float)
-
-    # Intervention occurred for case - use WhatIfInitialMW for pricing run (intervention status='0')
-    elif lookup.get_case_attribute(data, '@Intervention', str) == 'True' and intervention == '0':
-        return get_trader_fast_start_attribute(data, '@WhatIfCurrentModeTime', float)
-
-    # Intervention occurred for case - use IfInitialMW for physical run (intervention status='1')
-    elif lookup.get_case_attribute(data, '@Intervention', str) == 'True' and intervention == '1':
-        return get_trader_fast_start_attribute(data, '@CurrentModeTime', float)
-
-    else:
-        raise Exception('Unhandled case')
-
-
-def get_trader_effective_initial_mw(data, intervention) -> dict:
-    """
-    Get trader effective InitialMW - depends on intervention status input and whether intervention occurred
-    for the case
-    """
-
-    # No intervention - use InitialMW
-    if lookup.get_case_attribute(data, '@Intervention', str) == 'False' and intervention == '0':
-        return get_trader_initial_condition_attribute(data, 'InitialMW', float)
-
-    # Intervention occurred for case - use WhatIfInitialMW for pricing run (intervention status='0')
-    elif lookup.get_case_attribute(data, '@Intervention', str) == 'True' and intervention == '0':
-        return get_trader_initial_condition_attribute(data, 'WhatIfInitialMW', float)
-
-    # Intervention occurred for case - use IfInitialMW for physical run (intervention status='1')
-    elif lookup.get_case_attribute(data, '@Intervention', str) == 'True' and intervention == '1':
-        return get_trader_initial_condition_attribute(data, 'InitialMW', float)
-
-    else:
-        raise Exception('Unhandled case')
-
-
-def get_interconnector_initial_condition_attribute(data, attribute, func) -> dict:
-    """Get interconnector initial condition attribute"""
+def get_interconnector_collection_attribute(data, attribute, func) -> dict:
+    """Get interconnector collection attribute"""
 
     # All interconnectors
     interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('InterconnectorCollection')
@@ -662,11 +583,11 @@ def get_interconnector_loss_estimate(data, interconnector_id, flow) -> float:
     return total_area
 
 
-def get_interconnector_initial_loss_estimate(data, intervention) -> dict:
+def get_interconnector_initial_loss_estimate(data) -> dict:
     """Get initial loss estimate for each interconnector"""
 
-    # Effective InitialMW (use WhatIfInitialMW if intervention='0' and @Intervention=True)
-    initial_mw = get_interconnector_effective_initial_mw(data, intervention)
+    # Initial MW for all interconnectors
+    initial_mw = get_interconnector_collection_attribute(data, 'InitialMW', float)
 
     # Loss estimate
     loss_estimate = {}
@@ -760,28 +681,6 @@ def get_interconnector_solution_attribute(data, attribute, func, intervention) -
     return values
 
 
-def get_interconnector_effective_initial_mw(data, intervention) -> dict:
-    """
-    Get interconnector effective InitialMW - depends on intervention status input and whether intervention occurred
-    for the case
-    """
-
-    # No intervention - use InitialMW
-    if lookup.get_case_attribute(data, '@Intervention', str) == 'False' and intervention == '0':
-        return get_interconnector_initial_condition_attribute(data, 'InitialMW', float)
-
-    # Intervention occurred for case - use WhatIfInitialMW for pricing run (intervention status='0')
-    elif lookup.get_case_attribute(data, '@Intervention', str) == 'True' and intervention == '0':
-        return get_interconnector_initial_condition_attribute(data, 'WhatIfInitialMW', float)
-
-    # Intervention occurred for case - use IfInitialMW for physical run (intervention status='1')
-    elif lookup.get_case_attribute(data, '@Intervention', str) == 'True' and intervention == '1':
-        return get_interconnector_initial_condition_attribute(data, 'InitialMW', float)
-
-    else:
-        raise Exception('Unhandled case')
-
-
 def get_mnsp_price_bands(data) -> dict:
     """Get MNSP price bands"""
 
@@ -849,7 +748,7 @@ def get_mnsp_offer_attribute(data, attribute) -> dict:
     return values
 
 
-def get_mnsp_max_available(data) -> dict:
+def get_mnsp_quantity_band_attribute(data, attribute, func) -> dict:
     """Get MNSP max available"""
 
     # All interconnectors
@@ -863,7 +762,7 @@ def get_mnsp_max_available(data) -> dict:
             continue
 
         for j in i.get('MNSPOfferCollection').get('MNSPOffer'):
-            max_available[(i['@InterconnectorID'], j['@RegionID'])] = float(j['@MaxAvail'])
+            max_available[(i['@InterconnectorID'], j['@RegionID'])] = func(j[attribute])
 
     return max_available
 
@@ -957,7 +856,7 @@ def get_generic_constraint_rhs(data, intervention) -> dict:
         NEMDE case file dictionary
 
     intervention : str
-        Intervention status
+        Intervention flag - '0' -> no intervention constraints, '1' -> intervention constraints included
 
     Returns
     -------
@@ -1013,39 +912,6 @@ def get_generic_constraint_collection_attribute(data, attribute, func) -> dict:
         values[i['@ConstraintID']] = func(i[f'{attribute}'])
 
     return values
-
-
-def get_generic_constraint_attribute_filtered(data, attribute, func, intervention) -> dict:
-    """
-    Get generic constraint attribute - filtered to take into account intervention status
-
-    Parameters
-    ----------
-    data : dict
-        NEMDE case file dictionary
-
-    attribute : str
-        Generic constraint attribute
-
-    func : function
-        Parse output
-
-    intervention : str
-        Intervention status
-
-    Returns
-    -------
-    rhs : dict
-        Dictionary with keys = ConstraintIDs, values = constraint RHS
-    """
-
-    # Constraint types
-    constraint_type = get_generic_constraint_collection_attribute(data, attribute, func)
-
-    # Constraint index - takes into account intervention status
-    constraint_index = get_generic_constraint_index(data, intervention)
-
-    return {k: v for k, v in constraint_type.items() if k in constraint_index}
 
 
 def parse_constraint(constraint_data):
@@ -1270,13 +1136,6 @@ def parse_case_data_json(data, intervention) -> dict:
     # Convert to dictionary
     data_dict = json.loads(data)
 
-    # No intervention for this case
-    if (lookup.get_case_attribute(data_dict, '@Intervention', str) == 'False') and (intervention != '0'):
-        raise Exception("No intervention defined for case. Expect intervention status='0'")
-
-    if (lookup.get_case_attribute(data_dict, '@Intervention', str) == 'True') and (intervention not in ['1', '0']):
-        raise Exception("Expected status='0' or '1'")
-
     case_data = {
         'S_REGIONS': get_region_index(data_dict),
         'S_TRADERS': get_trader_index(data_dict),
@@ -1286,7 +1145,7 @@ def parse_case_data_json(data, intervention) -> dict:
         'S_TRADER_FCAS_OFFERS': get_trader_fcas_offer_index(data_dict),
         'S_TRADER_FAST_START': get_trader_fast_start_index(data_dict),
         'S_TRADER_PRICE_TIED': get_price_tied_bands(data_dict),
-        'S_GENERIC_CONSTRAINTS': get_generic_constraint_index(data_dict, intervention),
+        'S_GENERIC_CONSTRAINTS': get_generic_constraint_index(data_dict),
         'S_GC_TRADER_VARS': get_generic_constraint_trader_variable_index(data_dict),
         'S_GC_INTERCONNECTOR_VARS': get_generic_constraint_interconnector_variable_index(data_dict),
         'S_GC_REGION_VARS': get_generic_constraint_region_variable_index(data_dict),
@@ -1299,7 +1158,7 @@ def parse_case_data_json(data, intervention) -> dict:
         'P_TRADER_QUANTITY_BAND': get_trader_quantity_bands(data_dict),
         'P_TRADER_MAX_AVAILABLE': get_trader_period_trade_attribute(data_dict, '@MaxAvail', float),
         'P_TRADER_UIGF': get_trader_period_attribute(data_dict, '@UIGF', float),
-        'P_TRADER_EFFECTIVE_INITIAL_MW': get_trader_effective_initial_mw(data_dict, intervention),
+        'P_TRADER_INITIAL_MW': get_trader_initial_condition_attribute(data_dict, 'InitialMW', float),
         'P_TRADER_HMW': get_trader_initial_condition_attribute(data_dict, 'HMW', float),
         'P_TRADER_LMW': get_trader_initial_condition_attribute(data_dict, 'LMW', float),
         'P_TRADER_AGC_STATUS': get_trader_initial_condition_attribute(data_dict, 'AGCStatus', str),
@@ -1311,16 +1170,13 @@ def parse_case_data_json(data, intervention) -> dict:
         'P_TRADER_SCADA_RAMP_UP_RATE': get_trader_initial_condition_attribute(data_dict, 'SCADARampUpRate', float),
         'P_TRADER_SCADA_RAMP_DOWN_RATE': get_trader_initial_condition_attribute(data_dict, 'SCADARampDnRate', float),
         'P_TRADER_MIN_LOADING_MW': get_trader_fast_start_attribute(data_dict, '@MinLoadingMW', float),
-        # 'P_TRADER_CURRENT_MODE': get_trader_fast_start_attribute(data_dict, '@CurrentMode', str),
-        'P_TRADER_EFFECTIVE_CURRENT_MODE': get_trader_fast_start_effective_current_mode(data_dict, intervention),
-        # 'P_TRADER_CURRENT_MODE_TIME': get_trader_fast_start_attribute(data_dict, '@CurrentModeTime', float),
-        'P_TRADER_EFFECTIVE_CURRENT_MODE_TIME': get_trader_fast_start_effective_current_mode_time(data_dict,
-                                                                                                  intervention),
+        'P_TRADER_CURRENT_MODE': get_trader_fast_start_attribute(data_dict, '@CurrentMode', str),
+        'P_TRADER_CURRENT_MODE_TIME': get_trader_fast_start_attribute(data_dict, '@CurrentModeTime', float),
         'P_TRADER_T1': get_trader_fast_start_attribute(data_dict, '@T1', float),
         'P_TRADER_T2': get_trader_fast_start_attribute(data_dict, '@T2', float),
         'P_TRADER_T3': get_trader_fast_start_attribute(data_dict, '@T3', float),
         'P_TRADER_T4': get_trader_fast_start_attribute(data_dict, '@T4', float),
-        'P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW': get_interconnector_effective_initial_mw(data_dict, intervention),
+        'P_INTERCONNECTOR_INITIAL_MW': get_interconnector_collection_attribute(data_dict, 'InitialMW', float),
         'P_INTERCONNECTOR_TO_REGION': get_interconnector_period_collection_attribute(data_dict, '@ToRegion', str),
         'P_INTERCONNECTOR_FROM_REGION': get_interconnector_period_collection_attribute(data_dict, '@FromRegion', str),
         'P_INTERCONNECTOR_LOWER_LIMIT': get_interconnector_period_collection_attribute(data_dict, '@LowerLimit', float),
@@ -1329,10 +1185,10 @@ def parse_case_data_json(data, intervention) -> dict:
         'P_INTERCONNECTOR_LOSS_SHARE': get_interconnector_loss_model_attribute(data_dict, '@LossShare', float),
         'P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_X': get_interconnector_loss_model_breakpoints_x(data_dict),
         'P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y': get_interconnector_loss_model_breakpoints_y(data_dict),
-        'P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE': get_interconnector_initial_loss_estimate(data_dict, intervention),
+        'P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE': get_interconnector_initial_loss_estimate(data_dict),
         'P_MNSP_PRICE_BAND': get_mnsp_price_bands(data_dict),
         'P_MNSP_QUANTITY_BAND': get_mnsp_quantity_bands(data_dict),
-        'P_MNSP_MAX_AVAILABLE': get_mnsp_max_available(data_dict),
+        'P_MNSP_MAX_AVAILABLE': get_mnsp_quantity_band_attribute(data_dict, '@MaxAvail', float),
         'P_MNSP_TO_REGION_LF': get_mnsp_period_collection_attribute(data_dict, '@ToRegionLF', float),
         'P_MNSP_TO_REGION_LF_EXPORT': get_mnsp_period_collection_attribute(data_dict, '@ToRegionLFExport', float),
         'P_MNSP_TO_REGION_LF_IMPORT': get_mnsp_period_collection_attribute(data_dict, '@ToRegionLFImport', float),
@@ -1340,12 +1196,14 @@ def parse_case_data_json(data, intervention) -> dict:
         'P_MNSP_FROM_REGION_LF_EXPORT': get_mnsp_period_collection_attribute(data_dict, '@FromRegionLFExport', float),
         'P_MNSP_FROM_REGION_LF_IMPORT': get_mnsp_period_collection_attribute(data_dict, '@FromRegionLFImport', float),
         'P_MNSP_LOSS_PRICE': get_case_attribute(data_dict, '@MNSPLossesPrice'),
+        'P_MNSP_RAMP_UP_RATE': get_mnsp_quantity_band_attribute(data_dict, '@RampUpRate', float),
+        'P_MNSP_RAMP_DOWN_RATE': get_mnsp_quantity_band_attribute(data_dict, '@RampDnRate', float),
         'P_REGION_INITIAL_DEMAND': get_region_initial_condition_attribute(data_dict, 'InitialDemand', float),
         'P_REGION_ADE': get_region_initial_condition_attribute(data_dict, 'ADE', float),
         'P_REGION_DF': get_region_period_collection_attribute(data_dict, '@DF', float),
         'P_GC_RHS': get_generic_constraint_rhs(data_dict, intervention),
-        'P_GC_TYPE': get_generic_constraint_attribute_filtered(data_dict, '@Type', str, intervention),
-        'P_CVF_GC': get_generic_constraint_attribute_filtered(data_dict, '@ViolationPrice', float, intervention),
+        'P_GC_TYPE': get_generic_constraint_collection_attribute(data_dict, '@Type', str),
+        'P_CVF_GC': get_generic_constraint_collection_attribute(data_dict, '@ViolationPrice', float),
         'P_CVF_VOLL': get_case_attribute(data_dict, '@VoLL'),
         'P_CVF_ENERGY_DEFICIT_PRICE': get_case_attribute(data_dict, '@EnergyDeficitPrice'),
         'P_CVF_ENERGY_SURPLUS_PRICE': get_case_attribute(data_dict, '@EnergySurplusPrice'),
@@ -1362,11 +1220,10 @@ def parse_case_data_json(data, intervention) -> dict:
         'P_CVF_INTERCONNECTOR_PRICE': get_case_attribute(data_dict, '@InterconnectorPrice'),
         'P_CVF_FAST_START_PRICE': get_case_attribute(data_dict, '@FastStartPrice'),
         'P_TIE_BREAK_PRICE': get_case_attribute(data_dict, '@TieBreakPrice'),
-        'P_INTERVENTION_STATUS': lookup.get_case_attribute(data_dict, '@Intervention', str),
         'preprocessed': {
             'GC_LHS_TERMS': get_generic_constraint_lhs_terms(data_dict),
             'FCAS_TRAPEZIUM': get_trader_fcas_trapezium(data_dict),
-            'FCAS_AVAILABILITY_STATUS': get_trader_fcas_availability_status(data_dict, intervention)
+            'FCAS_AVAILABILITY_STATUS': get_trader_fcas_availability_status(data_dict)
         },
         'solution': {
             'traders': get_trader_solution(data_dict, intervention),

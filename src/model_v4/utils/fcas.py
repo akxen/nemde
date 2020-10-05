@@ -386,11 +386,14 @@ def get_trader_fcas_availability_agc_status_condition(data, trader_id, trade_typ
         return True
 
 
-def get_trader_fcas_availability_status(data, trader_id, trade_type, intervention) -> bool:
+def get_trader_fcas_availability_status(data, trader_id, trade_type) -> bool:
     """Get trader FCAS availability status"""
 
     # Scaled FCAS trapezium
     trapezium = get_trader_fcas_trapezium_scaled(data, trader_id, trade_type)
+
+    # Initial MW
+    initial_mw = lookup.get_trader_collection_initial_condition_attribute(data, trader_id, 'InitialMW', float)
 
     # Max availability condition
     cond_1 = trapezium['MaxAvail'] > 0
@@ -403,16 +406,6 @@ def get_trader_fcas_availability_status(data, trader_id, trade_type, interventio
 
     # Enablement max must be greater than 0
     cond_4 = trapezium['EnablementMax'] >= 0
-
-    # Get initial MW based on intervention status
-    if (lookup.get_case_attribute(data, '@Intervention', str) == 'False') and (intervention == '0'):
-        initial_mw = lookup.get_trader_collection_initial_condition_attribute(data, trader_id, 'InitialMW', float)
-    elif (lookup.get_case_attribute(data, '@Intervention', str) == 'True') and (intervention == '0'):
-        initial_mw = lookup.get_trader_collection_initial_condition_attribute(data, trader_id, 'WhatIfInitialMW', float)
-    elif (lookup.get_case_attribute(data, '@Intervention', str) == 'True') and (intervention == '1'):
-        initial_mw = lookup.get_trader_collection_initial_condition_attribute(data, trader_id, 'InitialMW', float)
-    else:
-        raise Exception('Unhandled case:', intervention, lookup.get_case_attribute(data, '@Intervention', str))
 
     # Unit must be operating between enablement min and enablement max
     cond_5 = trapezium['EnablementMin'] <= initial_mw <= trapezium['EnablementMax']

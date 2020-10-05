@@ -3,7 +3,7 @@
 import os
 import json
 import time
-import itertools
+import pickle
 
 import numpy as np
 import pandas as pd
@@ -44,7 +44,7 @@ def define_sets(m, data):
     # Price tied bands
     m.S_TRADER_PRICE_TIED = pyo.Set(initialize=data['S_TRADER_PRICE_TIED'])
 
-    # Generic constraints - only includes constraints ID (no intervention status)
+    # Generic constraints
     m.S_GENERIC_CONSTRAINTS = pyo.Set(initialize=data['S_GENERIC_CONSTRAINTS'])
 
     # Generic constraints trader pyo.Variables
@@ -90,7 +90,7 @@ def define_parameters(m, data):
     m.P_TRADER_MAX_AVAILABLE = pyo.Param(m.S_TRADER_OFFERS, initialize=data['P_TRADER_MAX_AVAILABLE'])
 
     # Initial MW output for generators / loads
-    m.P_TRADER_EFFECTIVE_INITIAL_MW = pyo.Param(m.S_TRADERS, initialize=data['P_TRADER_EFFECTIVE_INITIAL_MW'])
+    m.P_TRADER_INITIAL_MW = pyo.Param(m.S_TRADERS, initialize=data['P_TRADER_INITIAL_MW'])
 
     # UIGF for semi-dispatchable plant
     m.P_TRADER_UIGF = pyo.Param(m.S_TRADERS_SEMI_DISPATCH, initialize=data['P_TRADER_UIGF'])
@@ -148,10 +148,8 @@ def define_parameters(m, data):
 
     # Trader fast start parameters
     m.P_TRADER_MIN_LOADING_MW = pyo.Param(m.S_TRADER_FAST_START, initialize=data['P_TRADER_MIN_LOADING_MW'])
-    m.P_TRADER_EFFECTIVE_CURRENT_MODE = pyo.Param(m.S_TRADER_FAST_START,
-                                                  initialize=data['P_TRADER_EFFECTIVE_CURRENT_MODE'])
-    m.P_TRADER_EFFECTIVE_CURRENT_MODE_TIME = pyo.Param(m.S_TRADER_FAST_START,
-                                                       initialize=data['P_TRADER_EFFECTIVE_CURRENT_MODE_TIME'])
+    m.P_TRADER_CURRENT_MODE = pyo.Param(m.S_TRADER_FAST_START, initialize=data['P_TRADER_CURRENT_MODE'])
+    m.P_TRADER_CURRENT_MODE_TIME = pyo.Param(m.S_TRADER_FAST_START, initialize=data['P_TRADER_CURRENT_MODE_TIME'])
     m.P_TRADER_T1 = pyo.Param(m.S_TRADER_FAST_START, initialize=data['P_TRADER_T1'])
     m.P_TRADER_T2 = pyo.Param(m.S_TRADER_FAST_START, initialize=data['P_TRADER_T2'])
     m.P_TRADER_T3 = pyo.Param(m.S_TRADER_FAST_START, initialize=data['P_TRADER_T3'])
@@ -162,8 +160,7 @@ def define_parameters(m, data):
     m.P_TRADER_SCADA_RAMP_DOWN_RATE = pyo.Param(m.S_TRADERS, initialize=data['P_TRADER_SCADA_RAMP_DOWN_RATE'])
 
     # Interconnector initial MW
-    m.P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW = pyo.Param(m.S_INTERCONNECTORS,
-                                                        initialize=data['P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW'])
+    m.P_INTERCONNECTOR_INITIAL_MW = pyo.Param(m.S_INTERCONNECTORS, initialize=data['P_INTERCONNECTOR_INITIAL_MW'])
 
     # Interconnector 'to' and 'from' regions
     m.P_INTERCONNECTOR_TO_REGION = pyo.Param(m.S_INTERCONNECTORS, initialize=data['P_INTERCONNECTOR_TO_REGION'])
@@ -199,6 +196,10 @@ def define_parameters(m, data):
 
     # Max available output for given MNSP
     m.P_MNSP_MAX_AVAILABLE = pyo.Param(m.S_MNSP_OFFERS, initialize=data['P_MNSP_MAX_AVAILABLE'])
+
+    # MNSP ramp rates (in offers)
+    m.P_MNSP_RAMP_UP_RATE = pyo.Param(m.S_MNSP_OFFERS, initialize=data['P_MNSP_RAMP_UP_RATE'])
+    m.P_MNSP_RAMP_DOWN_RATE = pyo.Param(m.S_MNSP_OFFERS, initialize=data['P_MNSP_RAMP_DOWN_RATE'])
 
     # MNSP 'to' and 'from' region loss factor
     m.P_MNSP_TO_REGION_LF_EXPORT = pyo.Param(m.S_MNSPS, initialize=data['P_MNSP_TO_REGION_LF_EXPORT'])
@@ -310,6 +311,10 @@ def define_variables(m):
 
     # MNSP total capacity < max available violation
     m.V_CV_MNSP_CAPACITY = pyo.Var(m.S_MNSP_OFFERS, within=pyo.NonNegativeReals)
+
+    # MNSP ramp rate constraint violation
+    m.V_CV_MNSP_RAMP_UP = pyo.Var(m.S_MNSP_OFFERS, within=pyo.NonNegativeReals)
+    m.V_CV_MNSP_RAMP_DOWN = pyo.Var(m.S_MNSP_OFFERS, within=pyo.NonNegativeReals)
 
     # Ramp rate constraint violation pyo.Variables
     m.V_CV_TRADER_RAMP_UP = pyo.Var(m.S_TRADERS, within=pyo.NonNegativeReals)
@@ -564,6 +569,22 @@ def define_constraint_violation_penalty_expressions(m):
     # Constraint violation penalty for total offer amount exceeding max available
     m.E_CV_MNSP_CAPACITY_PENALTY = pyo.Expression(m.S_MNSP_OFFERS, rule=mnsp_capacity_penalty_rule)
 
+    def mnsp_ramp_up_penalty_rule(m, i, j):
+        """Penalty applied to MNSP ramp-up rate violation"""
+
+        return m.P_CVF_MNSP_RAMP_RATE_PRICE * m.V_CV_MNSP_RAMP_UP[i, j]
+
+    # Constraint violation penalty for ramp-up rate constraint violation
+    m.E_CV_MNSP_RAMP_UP_PENALTY = pyo.Expression(m.S_MNSP_OFFERS, rule=mnsp_ramp_up_penalty_rule)
+
+    def mnsp_ramp_down_penalty_rule(m, i, j):
+        """Penalty applied to MNSP ramp-down rate violation"""
+
+        return m.P_CVF_MNSP_RAMP_RATE_PRICE * m.V_CV_MNSP_RAMP_DOWN[i, j]
+
+    # Constraint violation penalty for ramp-down rate constraint violation
+    m.E_CV_MNSP_RAMP_DOWN_PENALTY = pyo.Expression(m.S_MNSP_OFFERS, rule=mnsp_ramp_down_penalty_rule)
+
     def interconnector_forward_penalty_rule(m, i):
         """Penalty for forward power flow exceeding max allowable flow"""
 
@@ -603,6 +624,8 @@ def define_constraint_violation_penalty_expressions(m):
              + sum(m.E_CV_TRADER_INFLEXIBILITY_PROFILE_RHS[i] for i in m.S_TRADER_FAST_START)
              + sum(m.E_CV_MNSP_OFFER_PENALTY[i, j, k] for i, j in m.S_MNSP_OFFERS for k in m.S_BANDS)
              + sum(m.E_CV_MNSP_CAPACITY_PENALTY[i] for i in m.S_MNSP_OFFERS)
+             + sum(m.E_CV_MNSP_RAMP_UP_PENALTY[i] for i in m.S_MNSP_OFFERS)
+             + sum(m.E_CV_MNSP_RAMP_DOWN_PENALTY[i] for i in m.S_MNSP_OFFERS)
              + sum(m.E_CV_INTERCONNECTOR_FORWARD_PENALTY[i] for i in m.S_INTERCONNECTORS)
              + sum(m.E_CV_INTERCONNECTOR_REVERSE_PENALTY[i] for i in m.S_INTERCONNECTORS)
     )
@@ -638,7 +661,7 @@ def define_aggregate_power_expressions(m):
         for i, j in m.S_TRADER_OFFERS:
             if j == 'LDOF':
                 if (r == m.P_TRADER_REGION[i]) and (m.P_TRADER_SEMI_DISPATCH_STATUS[i] == '0'):
-                    total += m.P_TRADER_EFFECTIVE_INITIAL_MW[i]
+                    total += m.P_TRADER_INITIAL_MW[i]
 
         return total
 
@@ -661,7 +684,7 @@ def define_aggregate_power_expressions(m):
 
             # MNSP losses applied to sending end - based on InitialMW
             if m.P_INTERCONNECTOR_MNSP_STATUS[i] == '1':
-                if m.P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW[i] >= 0:
+                if m.P_INTERCONNECTOR_INITIAL_MW[i] >= 0:
                     mnsp_loss_share = 1
                 else:
                     mnsp_loss_share = 0
@@ -706,7 +729,7 @@ def define_aggregate_power_expressions(m):
             # Interconnector flow from solution
             loss = m.V_LOSS[i]
             loss_share = m.P_INTERCONNECTOR_LOSS_SHARE[i]
-            initial_mw = m.P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW[i]
+            initial_mw = m.P_INTERCONNECTOR_INITIAL_MW[i]
 
             # MNSP losses applied to sending end - based on InitialMW
             if mnsp_status == '1':
@@ -761,7 +784,7 @@ def define_aggregate_power_expressions(m):
                 continue
 
             # Initial MW and solution flow
-            initial_mw = m.P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW[i]
+            initial_mw = m.P_INTERCONNECTOR_INITIAL_MW[i]
 
             to_lf_export = m.P_MNSP_TO_REGION_LF_EXPORT[i]
             to_lf_import = m.P_MNSP_TO_REGION_LF_IMPORT[i]
@@ -852,7 +875,7 @@ def define_aggregate_power_expressions(m):
 
             # TODO: if InitialMW and Flow are in different directions, then need to re-run model. not sure how abstract
             # this. For now assume InitialMW will suffice.
-            initial_flow = m.P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW[i]
+            initial_flow = m.P_INTERCONNECTOR_INITIAL_MW[i]
             flow = m.V_GC_INTERCONNECTOR[i]
 
             to_lf_export = m.P_MNSP_TO_REGION_LF_EXPORT[i]
@@ -1220,7 +1243,7 @@ def define_unit_constraints(m):
         ramp_limit = m.P_TRADER_PERIOD_RAMP_UP_RATE[(i, j)]
 
         # Initial MW
-        initial_mw = m.P_TRADER_EFFECTIVE_INITIAL_MW[i]
+        initial_mw = m.P_TRADER_INITIAL_MW[i]
 
         return m.V_TRADER_TOTAL_OFFER[i, j] - initial_mw <= (ramp_limit / 12) + m.V_CV_TRADER_RAMP_UP[i]
 
@@ -1238,7 +1261,7 @@ def define_unit_constraints(m):
         ramp_limit = m.P_TRADER_PERIOD_RAMP_DOWN_RATE[(i, j)]
 
         # Initial MW
-        initial_mw = m.P_TRADER_EFFECTIVE_INITIAL_MW[i]
+        initial_mw = m.P_TRADER_INITIAL_MW[i]
 
         return m.V_TRADER_TOTAL_OFFER[i, j] - initial_mw + m.V_CV_TRADER_RAMP_DOWN[i] >= - (ramp_limit / 12)
 
@@ -1291,6 +1314,30 @@ def define_interconnector_constraints(m):
     return m
 
 
+def define_mnsp_constraints(m):
+    """Define MNSP ramping constraints"""
+
+    def mnsp_ramp_up_rule(m, i, j):
+        """MNSP ramp-up constraint"""
+
+        return (m.V_MNSP_TOTAL_OFFER[i, j] <= m.P_INTERCONNECTOR_INITIAL_MW[i] + (m.P_MNSP_RAMP_UP_RATE[i, j] / 12)
+                + m.V_CV_MNSP_RAMP_UP[i, j])
+
+    # MNSP ramp up constraint
+    m.C_MNSP_RAMP_UP = pyo.Constraint(m.S_MNSP_OFFERS, rule=mnsp_ramp_up_rule)
+
+    def mnsp_ramp_down_rule(m, i, j):
+        """MNSP ramp-down constraint"""
+
+        return (m.V_MNSP_TOTAL_OFFER[i, j] + m.V_CV_MNSP_RAMP_DOWN[i, j]
+                >= m.P_INTERCONNECTOR_INITIAL_MW[i] - (m.P_MNSP_RAMP_DOWN_RATE[i, j] / 12))
+
+    # MNSP ramp down constraint
+    m.C_MNSP_RAMP_DOWN = pyo.Constraint(m.S_MNSP_OFFERS, rule=mnsp_ramp_down_rule)
+
+    return m
+
+
 def define_fcas_constraints(m, data):
     """Define FCAS constraints"""
 
@@ -1309,8 +1356,8 @@ def define_fcas_constraints(m, data):
         elif not m.P_TRADER_FCAS_AVAILABILITY_STATUS[i, j]:
             return pyo.Constraint.Skip
 
-        # SCADA ramp rate must be greater than 0
-        elif m.P_TRADER_SCADA_RAMP_UP_RATE[i] <= 0:
+        # SCADA ramp rate must be defined and greater than 0
+        elif (i not in m.P_TRADER_SCADA_RAMP_UP_RATE.keys()) or (m.P_TRADER_SCADA_RAMP_UP_RATE[i] <= 0):
             return pyo.Constraint.Skip
 
         # Must have an energy offer
@@ -1319,7 +1366,7 @@ def define_fcas_constraints(m, data):
 
         else:
             return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + m.V_TRADER_TOTAL_OFFER[i, 'R5RE']
-                    <= m.P_TRADER_EFFECTIVE_INITIAL_MW[i] + (m.P_TRADER_SCADA_RAMP_UP_RATE[i] / 12)
+                    <= m.P_TRADER_INITIAL_MW[i] + (m.P_TRADER_SCADA_RAMP_UP_RATE[i] / 12)
                     + m.V_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, j])
 
     # Generator joint ramp up constraint
@@ -1340,8 +1387,8 @@ def define_fcas_constraints(m, data):
         elif not m.P_TRADER_FCAS_AVAILABILITY_STATUS[i, j]:
             return pyo.Constraint.Skip
 
-        # SCADA ramp rate must be greater than 0
-        elif m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] <= 0:
+        # SCADA ramp rate must be defined and greater than 0
+        elif (i not in m.P_TRADER_SCADA_RAMP_DOWN_RATE.keys()) or (m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] <= 0):
             return pyo.Constraint.Skip
 
         # Must have an energy offer
@@ -1351,7 +1398,7 @@ def define_fcas_constraints(m, data):
         else:
             return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] - m.V_TRADER_TOTAL_OFFER[i, 'L5RE']
                     + m.V_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, j]
-                    >= m.P_TRADER_EFFECTIVE_INITIAL_MW[i] - (m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] / 12))
+                    >= m.P_TRADER_INITIAL_MW[i] - (m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] / 12))
 
     # Generator joint ramp down constraint
     m.C_FCAS_GENERATOR_JOINT_RAMPING_DOWN = pyo.Constraint(m.S_TRADER_OFFERS, rule=generator_joint_ramping_down_rule)
@@ -1496,11 +1543,19 @@ def define_fcas_constraints(m, data):
             return m.V_TRADER_TOTAL_OFFER[i, j] == 0 + m.V_CV_TRADER_FCAS_MAX_AVAILABLE[i, j]
 
         elif j == 'R5RE':
-            effective_max_avail = min([(m.P_TRADER_SCADA_RAMP_UP_RATE[i] / 12), m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]])
+            # No AGC ramp scaling applied if SCADA ramp rate missing (from FCAS docs)
+            if i not in m.P_TRADER_SCADA_RAMP_UP_RATE.keys():
+                effective_max_avail = m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]
+            else:
+                effective_max_avail = min([(m.P_TRADER_SCADA_RAMP_UP_RATE[i] / 12), m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]])
             return m.V_TRADER_TOTAL_OFFER[i, j] <= effective_max_avail + m.V_CV_TRADER_FCAS_MAX_AVAILABLE[i, j]
 
         elif j == 'L5RE':
-            effective_max_avail = min([(m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] / 12), m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]])
+            # No AGC ramp scaling applied if SCADA ramp rate missing (from FCAS docs)
+            if i not in m.P_TRADER_SCADA_RAMP_DOWN_RATE.keys():
+                effective_max_avail = m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]
+            else:
+                effective_max_avail = min([(m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] / 12), m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]])
             return m.V_TRADER_TOTAL_OFFER[i, j] <= effective_max_avail + m.V_CV_TRADER_FCAS_MAX_AVAILABLE[i, j]
 
         else:
@@ -1525,8 +1580,8 @@ def define_fcas_constraints(m, data):
         elif not m.P_TRADER_FCAS_AVAILABILITY_STATUS[i, j]:
             return pyo.Constraint.Skip
 
-        # SCADA ramp rate must be greater than 0
-        elif m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] <= 0:
+        # SCADA ramp rate must be defined and greater than 0
+        elif (i not in m.P_TRADER_SCADA_RAMP_DOWN_RATE.keys()) or (m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] <= 0):
             return pyo.Constraint.Skip
 
         # Must have an energy offer
@@ -1536,7 +1591,7 @@ def define_fcas_constraints(m, data):
         else:
             return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] - m.V_TRADER_TOTAL_OFFER[i, 'R5RE']
                     + m.V_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, j]
-                    >= m.P_TRADER_EFFECTIVE_INITIAL_MW[i] - (m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] / 12))
+                    >= m.P_TRADER_INITIAL_MW[i] - (m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] / 12))
 
     # Load joint ramp up constraint
     m.C_FCAS_LOAD_JOINT_RAMPING_UP = pyo.Constraint(m.S_TRADER_OFFERS, rule=load_joint_ramping_up_rule)
@@ -1556,8 +1611,8 @@ def define_fcas_constraints(m, data):
         elif not m.P_TRADER_FCAS_AVAILABILITY_STATUS[i, j]:
             return pyo.Constraint.Skip
 
-        # SCADA ramp rate must be greater than 0
-        elif m.P_TRADER_SCADA_RAMP_UP_RATE[i] <= 0:
+        # SCADA ramp rate must be defined and greater than 0
+        elif (i not in m.P_TRADER_SCADA_RAMP_UP_RATE.keys()) or (m.P_TRADER_SCADA_RAMP_UP_RATE[i] <= 0):
             return pyo.Constraint.Skip
 
         # Must have an energy offer
@@ -1566,7 +1621,7 @@ def define_fcas_constraints(m, data):
 
         else:
             return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] + m.V_TRADER_TOTAL_OFFER[i, 'L5RE']
-                    <= m.P_TRADER_EFFECTIVE_INITIAL_MW[i] + (m.P_TRADER_SCADA_RAMP_UP_RATE[i] / 12)
+                    <= m.P_TRADER_INITIAL_MW[i] + (m.P_TRADER_SCADA_RAMP_UP_RATE[i] / 12)
                     + m.V_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, j])
 
     # Load joint ramp down constraint
@@ -1712,11 +1767,19 @@ def define_fcas_constraints(m, data):
             return m.V_TRADER_TOTAL_OFFER[i, j] == 0 + m.V_CV_TRADER_FCAS_MAX_AVAILABLE[i, j]
 
         elif j == 'R5RE':
-            effective_max_avail = min([(m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] / 12), m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]])
+            # No AGC ramp scaling applied if SCADA ramp rate missing (from FCAS docs)
+            if i not in m.P_TRADER_SCADA_RAMP_DOWN_RATE.keys():
+                effective_max_avail = m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]
+            else:
+                effective_max_avail = min([(m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] / 12), m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]])
             return m.V_TRADER_TOTAL_OFFER[i, j] <= effective_max_avail + m.V_CV_TRADER_FCAS_MAX_AVAILABLE[i, j]
 
         elif j == 'L5RE':
-            effective_max_avail = min([(m.P_TRADER_SCADA_RAMP_UP_RATE[i] / 12), m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]])
+            # No AGC ramp scaling applied if SCADA ramp rate missing (from FCAS docs)
+            if i not in m.P_TRADER_SCADA_RAMP_UP_RATE.keys():
+                effective_max_avail = m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]
+            else:
+                effective_max_avail = min([(m.P_TRADER_SCADA_RAMP_UP_RATE[i] / 12), m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]])
             return m.V_TRADER_TOTAL_OFFER[i, j] <= effective_max_avail + m.V_CV_TRADER_FCAS_MAX_AVAILABLE[i, j]
 
         else:
@@ -1838,24 +1901,24 @@ def define_fast_start_unit_inflexibility_constraints(m):
             raise Exception('Unexpected energy offer:', i)
 
         # Unit is synchronising - output = 0
-        if (m.P_TRADER_EFFECTIVE_CURRENT_MODE[i] == '0') or (m.P_TRADER_EFFECTIVE_CURRENT_MODE[i] == '1'):
+        if (m.P_TRADER_CURRENT_MODE[i] == '0') or (m.P_TRADER_CURRENT_MODE[i] == '1'):
             return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_LHS[i]
                     == 0 + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_RHS[i])
 
         # Unit ramping to min loading - energy output fixed to profile
-        elif m.P_TRADER_EFFECTIVE_CURRENT_MODE[i] == '2':
+        elif m.P_TRADER_CURRENT_MODE[i] == '2':
             slope = m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T2
             startup_profile = slope * m.P_TRADER_CURRENT_MODE_TIME[i]
             return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_LHS[i]
                     == startup_profile + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_RHS[i])
 
         # Output lower bounded by MinLoadingMW
-        elif m.P_TRADER_EFFECTIVE_CURRENT_MODE[i] == '3':
+        elif m.P_TRADER_CURRENT_MODE[i] == '3':
             return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] + m.V_CV_TRADER_INFLEXIBILITY_PROFILE[i]
                     >= m.P_TRADER_MIN_LOADING_MW[i])
 
         # Output still lower bounded by inflexibility profile
-        elif (m.P_TRADER_EFFECTIVE_CURRENT_MODE[i] == '4') and (m.P_TRADER_EFFECTIVE_CURRENT_MODE_TIME[i] < m.P_TRADER_T4[i]):
+        elif (m.P_TRADER_CURRENT_MODE[i] == '4') and (m.P_TRADER_CURRENT_MODE_TIME[i] < m.P_TRADER_T4[i]):
             slope = - m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T4[i]
             max_output = (slope * m.P_TRADER_CURRENT_MODE_TIME[i]) + m.P_TRADER_MIN_LOADING_MW[i]
 
@@ -1916,6 +1979,10 @@ def define_constraints(m, case_data):
     m = define_interconnector_constraints(m)
     print('Defined interconnector constraints:', time.time() - t0)
 
+    # MNSP constraints
+    m = define_mnsp_constraints(m)
+    print('Defined MNSP constraints:', time.time() - t0)
+
     # Construct FCAS constraints
     m = define_fcas_constraints(m, case_data)
     print('Defined FCAS constraints:', time.time() - t0)
@@ -1926,9 +1993,11 @@ def define_constraints(m, case_data):
 
     # Fast start unit inflexibility profile
     m = define_fast_start_unit_inflexibility_constraints(m)
+    print('Defined fast start unit inflexibility constraints:', time.time() - t0)
 
     # Tie-breaking constraints
     m = define_tie_breaking_constraints(m)
+    print('Defined tie-breaking constraints:', time.time() - t0)
 
     return m
 
@@ -1969,11 +2038,8 @@ def construct_model(data, case_data):
     return m
 
 
-def fix_interconnector_flow_solution(m, data):
+def fix_interconnector_flow_solution(m, data, intervention):
     """Fix interconnector solution to observed values"""
-
-    # Get intervention status
-    intervention = utils.lookup.get_intervention_status(data)
 
     for i in m.S_GC_INTERCONNECTOR_VARS:
         observed_flow = utils.lookup.get_interconnector_solution_attribute(data, i, '@Flow', float, intervention)
@@ -1982,11 +2048,8 @@ def fix_interconnector_flow_solution(m, data):
     return m
 
 
-def fix_energy_solution(m, data):
+def fix_energy_solution(m, data, intervention):
     """Fix FCAS solution"""
-
-    # Intervention status
-    intervention = utils.lookup.get_intervention_status(data)
 
     for i, j in m.S_TRADER_OFFERS:
         if j in ['ENOF', 'LDOF']:
@@ -2032,18 +2095,19 @@ def solve_model(m):
 def check_region_fixed_demand(data, m, region_id, intervention):
     """Check fixed demand calculation"""
 
-    # # Get intervention flag corresponding to physical NEMDE run
-    # intervention = utils.lookup.get_intervention_status(data)
-
     # Container for output
     calculated = m.E_REGION_FIXED_DEMAND[region_id].expr()
     observed = utils.lookup.get_region_solution_attribute(data, region_id, '@FixedDemand', float, intervention)
 
     out = {
-        'calculated': calculated,
+        'model': calculated,
         'observed': observed,
         'difference': calculated - observed,
-        'abs_difference': abs(calculated - observed)
+        'abs_difference': abs(calculated - observed),
+        'region_id': region_id,
+        'intervention_flag': intervention,
+        'case_id': utils.lookup.get_case_attribute(data, '@CaseID', str),
+        'case_intervention': utils.lookup.get_case_attribute(data, '@Intervention', str),
     }
 
     return out
@@ -2052,18 +2116,19 @@ def check_region_fixed_demand(data, m, region_id, intervention):
 def check_region_net_export(data, m, region_id, intervention):
     """Check net export calculation"""
 
-    # # Get intervention flag corresponding to physical NEMDE run
-    # intervention = utils.lookup.get_intervention_status(data)
-
     # Container for output
     calculated = m.E_REGION_NET_EXPORT[region_id].expr()
     observed = utils.lookup.get_region_solution_attribute(data, region_id, '@NetExport', float, intervention)
 
     out = {
-        'calculated': calculated,
+        'model': calculated,
         'observed': observed,
         'difference': calculated - observed,
-        'abs_difference': abs(calculated - observed)
+        'abs_difference': abs(calculated - observed),
+        'region_id': region_id,
+        'intervention_flag': intervention,
+        'case_id': utils.lookup.get_case_attribute(data, '@CaseID', str),
+        'case_intervention': utils.lookup.get_case_attribute(data, '@Intervention', str),
     }
 
     return out
@@ -2072,18 +2137,19 @@ def check_region_net_export(data, m, region_id, intervention):
 def check_region_dispatched_generation(data, m, region_id, intervention):
     """Check region dispatched generation"""
 
-    # # Get intervention flag corresponding to physical NEMDE run
-    # intervention = utils.lookup.get_intervention_status(data)
-
     # Container for output
     calculated = m.E_REGION_DISPATCHED_GENERATION[region_id].expr()
     observed = utils.lookup.get_region_solution_attribute(data, region_id, '@DispatchedGeneration', float, intervention)
 
     out = {
-        'calculated': calculated,
+        'model': calculated,
         'observed': observed,
         'difference': calculated - observed,
-        'abs_difference': abs(calculated - observed)
+        'abs_difference': abs(calculated - observed),
+        'region_id': region_id,
+        'intervention_flag': intervention,
+        'case_id': utils.lookup.get_case_attribute(data, '@CaseID', str),
+        'case_intervention': utils.lookup.get_case_attribute(data, '@Intervention', str),
     }
 
     return out
@@ -2092,18 +2158,19 @@ def check_region_dispatched_generation(data, m, region_id, intervention):
 def check_region_dispatched_load(data, m, region_id, intervention):
     """Check region dispatched load"""
 
-    # # Get intervention flag corresponding to physical NEMDE run
-    # intervention = utils.lookup.get_intervention_status(data)
-
     # Container for output
     calculated = m.E_REGION_DISPATCHED_LOAD[region_id].expr()
     observed = utils.lookup.get_region_solution_attribute(data, region_id, '@DispatchedLoad', float, intervention)
 
     out = {
-        'calculated': calculated,
+        'model': calculated,
         'observed': observed,
         'difference': calculated - observed,
-        'abs_difference': abs(calculated - observed)
+        'abs_difference': abs(calculated - observed),
+        'region_id': region_id,
+        'intervention_flag': intervention,
+        'case_id': utils.lookup.get_case_attribute(data, '@CaseID', str),
+        'case_intervention': utils.lookup.get_case_attribute(data, '@Intervention', str),
     }
 
     return out
@@ -2111,9 +2178,6 @@ def check_region_dispatched_load(data, m, region_id, intervention):
 
 def check_interconnector_flow(data, m, interconnector_id, intervention):
     """Check interconnector flow calculation"""
-
-    # # Get intervention flag corresponding to physical NEMDE run
-    # intervention = utils.lookup.get_intervention_status(data)
 
     # Container for output
     calculated = m.V_GC_INTERCONNECTOR[interconnector_id].value
@@ -2123,7 +2187,11 @@ def check_interconnector_flow(data, m, interconnector_id, intervention):
         'model': calculated,
         'observed': observed,
         'difference': calculated - observed,
-        'abs_difference': abs(calculated - observed)
+        'abs_difference': abs(calculated - observed),
+        'interconnector_id': interconnector_id,
+        'intervention_flag': intervention,
+        'case_id': utils.lookup.get_case_attribute(data, '@CaseID', str),
+        'case_intervention': utils.lookup.get_case_attribute(data, '@Intervention', str),
     }
 
     return out
@@ -2131,9 +2199,6 @@ def check_interconnector_flow(data, m, interconnector_id, intervention):
 
 def check_interconnector_loss(data, m, interconnector_id, intervention):
     """Check interconnector loss calculation"""
-
-    # # Get intervention flag corresponding to physical NEMDE run
-    # intervention = utils.lookup.get_intervention_status(data)
 
     # Container for output
     calculated = m.V_LOSS[interconnector_id].value
@@ -2144,7 +2209,61 @@ def check_interconnector_loss(data, m, interconnector_id, intervention):
         'model': calculated,
         'observed': observed,
         'difference': calculated - observed,
-        'abs_difference': abs(calculated - observed)
+        'abs_difference': abs(calculated - observed),
+        'interconnector_id': interconnector_id,
+        'intervention_flag': intervention,
+        'case_id': utils.lookup.get_case_attribute(data, '@CaseID', str),
+        'case_intervention': utils.lookup.get_case_attribute(data, '@Intervention', str),
+    }
+
+    return out
+
+
+def check_trader_output(data, m, trader_id, trade_type, intervention):
+    """Check trader output"""
+
+    # Calculated and observed values
+    calculated = m.V_TRADER_TOTAL_OFFER[trader_id, trade_type].value
+
+    # Map between NEMDE output keys and keys used in solution dictionary
+    key_map = {'ENOF': '@EnergyTarget', 'LDOF': '@EnergyTarget',
+               'R6SE': '@R6Target', 'R60S': '@R60Target', 'R5MI': '@R5Target', 'R5RE': '@R5RegTarget',
+               'L6SE': '@L6Target', 'L60S': '@L60Target', 'L5MI': '@L5Target', 'L5RE': '@L5RegTarget'}
+
+    # Observed dispatch
+    observed = utils.lookup.get_trader_solution_attribute(data, trader_id, key_map[trade_type], float, intervention)
+
+    out = {
+        'model': calculated,
+        'observed': observed,
+        'difference': calculated - observed,
+        'abs_difference': abs(calculated - observed),
+        'trader_id': trader_id,
+        'trade_type': trade_type,
+        'intervention_flag': intervention,
+        'case_id': utils.lookup.get_case_attribute(data, '@CaseID', str),
+        'case_intervention': utils.lookup.get_case_attribute(data, '@Intervention', str),
+    }
+
+    return out
+
+
+def check_region_price(data, m, region_id, intervention):
+    """Check region energy price (exclude FCAS for now)"""
+
+    # Calculated and observed values
+    calculated = m.dual[m.C_POWER_BALANCE[region_id]]
+    observed = utils.lookup.get_region_solution_attribute(data, region_id, '@EnergyPrice', float, intervention)
+
+    out = {
+        'model': calculated,
+        'observed': observed,
+        'difference': calculated - observed,
+        'abs_difference': abs(calculated - observed),
+        'region_id': region_id,
+        'intervention_flag': intervention,
+        'case_id': utils.lookup.get_case_attribute(data, '@CaseID', str),
+        'case_intervention': utils.lookup.get_case_attribute(data, '@Intervention', str),
     }
 
     return out
@@ -2155,13 +2274,16 @@ def check_objective_value(data, m, intervention):
 
     # Container for output
     calculated = m.OBJECTIVE.expr()
-    observed = utils.lookup.get_period_solution_attribute(data, '@TotalObjective', intervention, float)
+    observed = utils.lookup.get_period_solution_attribute(data, '@TotalObjective', float, intervention)
 
     out = {
         'model': calculated,
         'observed': observed,
         'difference': calculated - observed,
-        'abs_difference': abs(calculated - observed)
+        'abs_difference': abs(calculated - observed),
+        'intervention_flag': intervention,
+        'case_id': utils.lookup.get_case_attribute(data, '@CaseID', str),
+        'case_intervention': utils.lookup.get_case_attribute(data, '@Intervention', str),
     }
 
     return out
@@ -2170,57 +2292,89 @@ def check_objective_value(data, m, intervention):
 def get_solution_report(data, m, intervention):
     """Check solution"""
 
-    fixed_demand = {}
+    # Columns to retain in DataFrame
+    cols = ['abs_difference', 'difference', 'model', 'observed']
+
+    fixed_demand = []
     for i in m.S_REGIONS:
-        fixed_demand[i] = check_region_fixed_demand(data, m, i, intervention)
+        fixed_demand.append(check_region_fixed_demand(data, m, i, intervention))
     print('Region fixed demand')
-    df_fixed_demand = pd.DataFrame(fixed_demand).T
+    df_fixed_demand = pd.DataFrame(fixed_demand).set_index('region_id')[cols]
     print(df_fixed_demand)
 
-    net_export = {}
+    net_export = []
     for i in m.S_REGIONS:
-        net_export[i] = check_region_net_export(data, m, i, intervention)
+        net_export.append(check_region_net_export(data, m, i, intervention))
     print('Region net export')
-    df_net_export = pd.DataFrame(net_export).T
+    df_net_export = pd.DataFrame(net_export).set_index('region_id')[cols]
     print(df_net_export)
 
-    dispatched_generation = {}
+    dispatched_generation = []
     for i in m.S_REGIONS:
-        dispatched_generation[i] = check_region_dispatched_generation(data, m, i, intervention)
+        dispatched_generation.append(check_region_dispatched_generation(data, m, i, intervention))
     print('Region dispatched generation')
-    df_dispatched_generation = pd.DataFrame(dispatched_generation).T
+    df_dispatched_generation = pd.DataFrame(dispatched_generation).set_index('region_id')[cols]
     print(df_dispatched_generation)
 
-    dispatched_load = {}
+    dispatched_load = []
     for i in m.S_REGIONS:
-        dispatched_load[i] = check_region_dispatched_load(data, m, i, intervention)
+        dispatched_load.append(check_region_dispatched_load(data, m, i, intervention))
     print('Region dispatched load')
-    df_dispatched_load = pd.DataFrame(dispatched_load).T
+    df_dispatched_load = pd.DataFrame(dispatched_load).set_index('region_id')[cols]
     print(df_dispatched_load)
 
-    interconnector_flow = {}
+    energy_price = []
+    for i in m.S_REGIONS:
+        energy_price.append(check_region_price(data, m, i, intervention))
+    print('Region energy price')
+    df_energy_price = pd.DataFrame(energy_price).set_index('region_id')[cols]
+    print(df_energy_price)
+
+    interconnector_flow = []
     for i in m.S_INTERCONNECTORS:
-        interconnector_flow[i] = check_interconnector_flow(data, m, i, intervention)
+        interconnector_flow.append(check_interconnector_flow(data, m, i, intervention))
     print('Interconnector flow')
-    df_interconnector_flow = pd.DataFrame(interconnector_flow).T
+    df_interconnector_flow = pd.DataFrame(interconnector_flow).set_index('interconnector_id')[cols]
     print(df_interconnector_flow)
 
-    interconnector_losses = {}
+    interconnector_losses = []
     for i in m.S_INTERCONNECTORS:
-        interconnector_losses[i] = check_interconnector_loss(data, m, i, intervention)
+        interconnector_losses.append(check_interconnector_loss(data, m, i, intervention))
     print('Interconnector losses')
-    df_interconnector_losses = pd.DataFrame(interconnector_losses).T
+    df_interconnector_losses = pd.DataFrame(interconnector_losses).set_index('interconnector_id')[cols]
     print(df_interconnector_losses)
+
+    trader_output = []
+    for i, j in m.S_TRADER_OFFERS:
+        trader_output.append(check_trader_output(data, m, i, j, intervention))
+    print('Trader output')
+    df_trader_output = (pd.DataFrame(trader_output).set_index(['trader_id', 'trade_type'])[cols]
+                        .sort_values(by='abs_difference', ascending=False))
+    print(df_trader_output.head())
 
     print('Objective value')
     print(pd.Series(check_objective_value(data, m, intervention)).T)
 
+    # Summary of model output
+    output = {
+        'fixed_demand': fixed_demand,
+        'net_export': net_export,
+        'energy_price': energy_price,
+        'dispatched_generation': dispatched_generation,
+        'dispatched_load': dispatched_load,
+        'interconnector_flow': interconnector_flow,
+        'interconnector_losses': interconnector_losses,
+        'trader_output': trader_output,
+    }
 
-def check_region_fixed_demand_calculation_sample(data_dir, n=5):
-    """Check region fixed demand calculations for a random sample of dispatch intervals"""
+    return output
+
+
+def get_dispatch_interval_sample(n, seed=10):
+    """Get sample of dispatch intervals"""
 
     # Seed random number generator to get reproducable results
-    np.random.seed(10)
+    np.random.seed(seed)
 
     # Population of dispatch intervals for a given month
     population = [(i, j) for i in range(1, 30) for j in range(1, 289)]
@@ -2229,6 +2383,15 @@ def check_region_fixed_demand_calculation_sample(data_dir, n=5):
     # Random sample of dispatch intervals
     sample_keys = np.random.choice(list(population_map.keys()), n, replace=False)
     sample = [population_map[i] for i in sample_keys]
+
+    return sample
+
+
+def check_region_fixed_demand_calculation_sample(data_dir, intervention, n=5):
+    """Check region fixed demand calculations for a random sample of dispatch intervals"""
+
+    # Random sample of dispatch intervals (with seeded random number generator for reproducible results)
+    sample = get_dispatch_interval_sample(n, seed=10)
 
     # Container for model output
     out = {}
@@ -2278,11 +2441,8 @@ def check_region_fixed_demand_calculation_sample(data_dir, n=5):
     return df
 
 
-def check_generic_constraint_rhs(data, m, constraint_id):
+def check_generic_constraint_rhs(data, m, constraint_id, intervention):
     """Check generic constraint RHS"""
-
-    # Get intervention flag corresponding to physical NEMDE run
-    intervention = utils.lookup.get_intervention_status(data)
 
     # Container for output
     calculated = m.P_GC_RHS[constraint_id]
@@ -2298,19 +2458,11 @@ def check_generic_constraint_rhs(data, m, constraint_id):
     return out
 
 
-def check_generic_constraint_rhs_sample(data_dir, n=5):
+def check_generic_constraint_rhs_sample(data_dir, intervention, n=5):
     """Check generic constraint RHS for a random sample of dispatch intervals"""
 
-    # Seed random number generator to get reproducable results
-    np.random.seed(10)
-
-    # Population of dispatch intervals for a given month
-    population = [(i, j) for i in range(1, 30) for j in range(1, 289)]
-    population_map = {i: j for i, j in enumerate(population)}
-
-    # Random sample of dispatch intervals
-    sample_keys = np.random.choice(list(population_map.keys()), n, replace=False)
-    sample = [population_map[i] for i in sample_keys]
+    # Random sample of dispatch intervals (with seeded random number generator for reproducible results)
+    sample = get_dispatch_interval_sample(n, seed=10)
 
     # Container for model output
     out = {}
@@ -2340,7 +2492,7 @@ def check_generic_constraint_rhs_sample(data_dir, n=5):
 
         for j in constraints:
             # Check difference
-            info = check_generic_constraint_rhs(case_data, m, j)
+            info = check_generic_constraint_rhs(case_data, m, j, intervention)
 
             # Add to dictionary
             out[(j, day, interval)] = info
@@ -2360,6 +2512,83 @@ def check_generic_constraint_rhs_sample(data_dir, n=5):
     return df
 
 
+def check_model(data_dir, n=5):
+    """Run model for a random selection of dispatch intervals - compare model output with observed output"""
+
+    # Random sample of dispatch intervals (with seeded random number generator for reproducible results)
+    sample = get_dispatch_interval_sample(n, seed=10)
+
+    # Container for results comparing model output with observed values
+    output = []
+    # Compute fixed demand for each interval
+    for i, (day, interval) in enumerate(sample):
+        print(f'({day}, {interval}) {i + 1}/{len(sample)}')
+
+        # Case data in json format
+        data_json = utils.loaders.load_dispatch_interval_json(data_dir, 2019, 10, day, interval)
+
+        # Get NEMDE model data as a Python dictionary
+        case_data = json.loads(data_json)
+
+        # Get intervention status - only want physical run
+        intervention = utils.lookup.get_intervention_status(case_data, 'physical')
+
+        # Preprocessed case data
+        processed_data = utils.data.parse_case_data_json(data_json, intervention)
+
+        # Construct model
+        m = construct_model(processed_data, case_data)
+
+        # Solve model
+        m = solve_model(m)
+
+        # Append solution report to results container
+        output.append(get_solution_report(case_data, m, intervention))
+
+    def extract_values(results, key, sort_key):
+        """Extract data and convert to DataFrame"""
+        return pd.DataFrame([s for r in results for s in r[key]]).sort_values(by=sort_key, ascending=False)
+
+    # Summary of results
+    summary = {
+        'fixed_demand': extract_values(output, 'fixed_demand', 'abs_difference'),
+        'net_export': extract_values(output, 'net_export', 'abs_difference'),
+        'energy_price': extract_values(output, 'energy_price', 'abs_difference'),
+        'dispatched_generation': extract_values(output, 'dispatched_generation', 'abs_difference'),
+        'dispatched_load': extract_values(output, 'dispatched_load', 'abs_difference'),
+        'interconnector_flow': extract_values(output, 'interconnector_flow', 'abs_difference'),
+        'interconnector_losses': extract_values(output, 'interconnector_losses', 'abs_difference'),
+        'trader_output': extract_values(output, 'trader_output', 'abs_difference'),
+    }
+
+    # Print summary
+    for k, v in summary.items():
+        print(k)
+        print(v.head())
+
+    # Save results
+    with open(os.path.join(os.path.dirname(__file__), 'output', 'summary.json'), 'w') as f:
+        json.dump(output, f)
+
+    with open(os.path.join(os.path.dirname(__file__), 'output', 'summary.pickle'), 'wb') as f:
+        pickle.dump(summary, f)
+
+    return summary
+
+
+def save_case_json(data_dir, year, month, day, interval):
+    """Save casefile in JSON format for inspection"""
+
+    # Case data in json format
+    data_json = utils.loaders.load_dispatch_interval_json(data_dir, year, month, day, interval)
+
+    # Get NEMDE model data as a Python dictionary
+    data = json.loads(data_json)
+
+    with open(f'example-{year}-{month:02}-{day:02}-{interval:03}.json', 'w') as f:
+        json.dump(data, f)
+
+
 if __name__ == '__main__':
     # Directory containing case data
     data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
@@ -2367,12 +2596,16 @@ if __name__ == '__main__':
                                   'zipped')
 
     # Case data in json format
-    case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, 2019, 10, 19, 131)
-    intervention_status = '0'
+    di_day, di_interval = 10, 10
+    case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, 2019, 10, di_day, di_interval)
+    save_case_json(data_directory, 2019, 10, di_day, di_interval)
+
     # Get NEMDE model data as a Python dictionary
     cdata = json.loads(case_data_json)
 
     # Preprocessed case data
+    intervention_status = utils.lookup.get_intervention_status(cdata, 'physical')
+    # intervention_status = '0'
     model_data = utils.data.parse_case_data_json(case_data_json, intervention_status)
 
     # Construct model
@@ -2393,34 +2626,20 @@ if __name__ == '__main__':
     solution = utils.solution.get_model_solution(model)
 
     # Difference
-    trader_solution, df_trader_solution = utils.analysis.check_trader_solution(cdata, solution)
-    utils.analysis.plot_trader_solution_difference(cdata, solution)
+    trader_solution, df_trader_solution = utils.analysis.check_trader_solution(cdata, solution, intervention_status)
+    utils.analysis.plot_trader_solution_difference(cdata, solution, intervention_status)
 
     # Get solution report
     get_solution_report(cdata, model, intervention_status)
 
-    # # Seed random number generator to get reproducable results
-    # np.random.seed(10)
+    # # Check model for a random selection of dispatch intervals
+    # model_output = check_model(data_directory, n=20)
     #
-    # # Population of dispatch intervals for a given month
-    # population = [(i, j) for i in range(1, 30) for j in range(1, 289)]
-    # population_map = {i: j for i, j in enumerate(population)}
-    #
-    # # Random sample of dispatch intervals
-    # sample_keys = np.random.choice(list(population_map.keys()), 10, replace=False)
-    # sample = [population_map[i] for i in sample_keys]
-    #
-    # # Case data in json format
-    # for day, interval in sample:
-    #     case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, 2019, 10, day, interval)
-    #
-    #     # Get NEMDE model data as a Python dictionary
-    #     cdata = json.loads(case_data_json)
-    #     print(day, interval, cdata['NEMSPDCaseFile']['NemSpdInputs']['Case']['@Intervention'])
-
-    # case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, 2019, 10, 19, 131)
-    #
-    # # Get NEMDE model data as a Python dictionary
-    # cdata = json.loads(case_data_json)
-    # with open('example-2019-10-19-131.json', 'w') as f:
-    #     json.dump(cdata, f)
+    # df_fixed_demand_output = model_output['fixed_demand']
+    # df_net_export_output = model_output['net_export']
+    # df_energy_price_output = model_output['energy_price']
+    # df_dispatched_generation_output = model_output['dispatched_generation']
+    # df_dispatched_load_output = model_output['dispatched_load']
+    # df_interconnector_flow_output = model_output['interconnector_flow']
+    # df_interconnector_losses_output = model_output['interconnector_losses']
+    # df_trader_output_output = model_output['trader_output']

@@ -18,12 +18,12 @@ def get_observed_trader_solution(data):
     # Container for output
     out = {}
     for i in traders:
-        out.setdefault(i['@TraderID'], {})
+        out.setdefault((i['@TraderID'], i['@Intervention']), {})
         for j, k in i.items():
             if j in str_keys:
-                out[i['@TraderID']][j] = str(k)
+                out[(i['@TraderID'], i['@Intervention'])][j] = str(k)
             else:
-                out[i['@TraderID']][j] = float(k)
+                out[(i['@TraderID'], i['@Intervention'])][j] = float(k)
 
     return out
 
@@ -40,12 +40,12 @@ def get_observed_region_solution(data):
     # Container for output
     out = {}
     for i in regions:
-        out.setdefault(i['@RegionID'], {})
+        out.setdefault((i['@RegionID'], i['@Intervention']), {})
         for j, k in i.items():
             if j in str_keys:
-                out[i['@RegionID']][j] = str(k)
+                out[(i['@RegionID'], i['@Intervention'])][j] = str(k)
             else:
-                out[i['@RegionID']][j] = float(k)
+                out[(i['@RegionID'], i['@Intervention'])][j] = float(k)
 
     return out
 
@@ -58,9 +58,6 @@ def get_trader_marginal_price_band(data, trader_id, trade_type, output):
         f'PriceBand{i}': lookup.get_trader_price_band_attribute(data, trader_id, trade_type, f'@PriceBand{i}', float)
         for i in range(1, 11)
     }
-
-    # price_bands = lookup.get_trader_price_bands(data, trader_id, trade_type)
-    # quantity_bands = lookup.get_trader_quantity_bands(data, trader_id, trade_type)
 
     # Trader quantity bands
     quantity_bands = {
@@ -82,7 +79,7 @@ def get_trader_marginal_price_band(data, trader_id, trade_type, output):
     return price_bands['PriceBand10']
 
 
-def check_trader_solution(data, solution):
+def check_trader_solution(data, solution, intervention):
     """Compare trader model solution with observed solution"""
 
     # Observed solution
@@ -101,9 +98,6 @@ def check_trader_solution(data, solution):
                      'R6SE': '@R6Price', 'R60S': '@R60Price', 'R5MI': '@R5Price', 'R5RE': '@R5RegPrice',
                      'L6SE': '@L6Price', 'L60S': '@L60Price', 'L5MI': '@L5Price', 'L5RE': '@L5RegPrice'}
 
-    # Intervention status
-    intervention = lookup.get_intervention_status(data)
-
     # Difference between observed and model solution
     for trader_id, trader_solution in solution['traders'].items():
         out.setdefault(trader_id, {})
@@ -116,7 +110,7 @@ def check_trader_solution(data, solution):
                                                                 intervention)
 
             # Observed output
-            observed_output = observed[trader_id][key_map[trade_type]]
+            observed_output = observed[(trader_id, intervention)][key_map[trade_type]]
 
             # Model and observed marginal price bands
             model_marginal_price = get_trader_marginal_price_band(data, trader_id, trade_type, target)
@@ -126,6 +120,7 @@ def check_trader_solution(data, solution):
             out[trader_id][trade_type] = {
                 'model': target,
                 'observed': observed_output,
+                'intervention': intervention,
                 'difference': target - observed_output,
                 'abs_difference': abs(target - observed_output),
                 'region_id': region_id,
@@ -141,7 +136,7 @@ def check_trader_solution(data, solution):
     return out, df
 
 
-def plot_trader_solution_difference(data, solution):
+def plot_trader_solution_difference(data, solution, intervention):
     """Plot trader model solution against observed solution"""
 
     # Observed solution
@@ -159,7 +154,7 @@ def plot_trader_solution_difference(data, solution):
     for trader_id, trader_solution in solution['traders'].items():
         for trade_type, target in trader_solution.items():
             # Append model value (x-axis) and observed value (y-axis) for given energy type
-            out[trade_type].append((target, observed[trader_id][key_map[trade_type]]))
+            out[trade_type].append((target, observed[(trader_id, intervention)][key_map[trade_type]]))
 
     # Initialise figure
     fig, ((ax1, ax2), (ax3, ax4), (ax5, ax6), (ax7, ax8), (ax9, ax10)) = plt.subplots(nrows=5, ncols=2)

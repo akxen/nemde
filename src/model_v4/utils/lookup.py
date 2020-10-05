@@ -60,7 +60,7 @@ def get_region_period_collection_attribute(data, region_id, attribute, func):
     raise LookupError('Attribute not found:', region_id, attribute)
 
 
-def get_region_solution_attribute(data, region_id, attribute, func, intervention='1'):
+def get_region_solution_attribute(data, region_id, attribute, func, intervention):
     """Extract region solution attribute"""
 
     # All regions
@@ -134,7 +134,6 @@ def get_trader_price_band_attribute(data, trader_id, trade_type, attribute, func
     """Get trader price band attribute"""
 
     # All traders
-    # NEMSPDCaseFile.NemSpdInputs.TraderCollection.Trader[0].TradePriceStructureCollection.TradePriceStructure.TradeTypePriceStructureCollection.TradeTypePriceStructure.@TradeType
     traders = data.get('NEMSPDCaseFile').get('NemSpdInputs').get('TraderCollection').get('Trader')
 
     for i in traders:
@@ -149,7 +148,7 @@ def get_trader_price_band_attribute(data, trader_id, trade_type, attribute, func
     raise LookupError('Attribute not found:', trader_id, trade_type, attribute)
 
 
-def get_trader_solution_attribute(data, trader_id, attribute, func, intervention='1'):
+def get_trader_solution_attribute(data, trader_id, attribute, func, intervention):
     """Get trader solution attribute"""
 
     # All traders
@@ -222,7 +221,7 @@ def get_interconnector_loss_model_attribute(data, interconnector_id, attribute, 
     raise Exception('Attribute not found:', interconnector_id, attribute)
 
 
-def get_interconnector_solution_attribute(data, interconnector_id, attribute, func, intervention='1'):
+def get_interconnector_solution_attribute(data, interconnector_id, attribute, func, intervention):
     """Get interconnector solution attribute"""
 
     # All interconnectors
@@ -235,7 +234,7 @@ def get_interconnector_solution_attribute(data, interconnector_id, attribute, fu
     raise LookupError('Attribute not found:', interconnector_id, attribute, intervention)
 
 
-def get_generic_constraint_solution_attribute(data, constraint_id, attribute, func, intervention='1'):
+def get_generic_constraint_solution_attribute(data, constraint_id, attribute, func, intervention):
     """Get generic constraint solution attribute"""
 
     # All constraints
@@ -248,10 +247,13 @@ def get_generic_constraint_solution_attribute(data, constraint_id, attribute, fu
     raise LookupError('Attribute not found:', constraint_id, attribute, intervention)
 
 
-def get_period_solution_attribute(data, attribute, intervention, func):
+def get_period_solution_attribute(data, attribute, func, intervention):
     """Get period solution attribute"""
 
-    for i in convert_to_list(data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('PeriodSolution')):
+    # All period solutions
+    period_solution = convert_to_list(data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('PeriodSolution'))
+
+    for i in period_solution:
         if i['@Intervention'] == intervention:
             return func(i[attribute])
 
@@ -293,7 +295,15 @@ def get_generic_constraint_index(data) -> list:
                                          .get('GenericConstraintPeriod'))]
 
 
-def get_intervention_status(data) -> str:
+def get_intervention_status(data, mode) -> str:
     """Check if intervention pricing run occurred - trying to model physical run if intervention occurred"""
-
-    return '0' if get_case_attribute(data, '@Intervention', str) == 'False' else '1'
+    if (get_case_attribute(data, '@Intervention', str) == 'False') and (mode == 'physical'):
+        return '0'
+    elif (get_case_attribute(data, '@Intervention', str) == 'False') and (mode == 'pricing'):
+        return '0'
+    elif (get_case_attribute(data, '@Intervention', str) == 'True') and (mode == 'physical'):
+        return '1'
+    elif (get_case_attribute(data, '@Intervention', str) == 'True') and (mode == 'pricing'):
+        return '0'
+    else:
+        raise Exception('Unhandled case:', mode)

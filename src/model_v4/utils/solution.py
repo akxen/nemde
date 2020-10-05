@@ -40,11 +40,7 @@ def get_region_solution(m) -> dict:
     for r in m.S_REGIONS:
         out[r] = {
             'EnergyPrice': m.dual[m.C_POWER_BALANCE[r]],
-            'DispatchedGeneration': m.E_REGION_DISPATCHED_GENERATION[r].expr(),
-            'DispatchedLoad': m.E_REGION_DISPATCHED_LOAD[r].expr(),
             'FixedDemand': m.E_REGION_FIXED_DEMAND[r].expr(),
-            'NetExport': m.E_REGION_NET_EXPORT[r].expr(),
-            'ClearedDemand': m.E_REGION_FIXED_DEMAND[r].expr(),
         }
 
     return out
