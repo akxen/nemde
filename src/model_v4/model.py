@@ -2889,7 +2889,7 @@ if __name__ == '__main__':
     tmp_directory = os.path.join(os.path.dirname(__file__), 'tmp')
 
     # Define the dispatch interval to investigate
-    di_year, di_month, di_day, di_interval = 2019, 10, 25, 183
+    di_year, di_month, di_day, di_interval = 2019, 10, 4, 179
     di_case_id = f'{di_year}{di_month:02}{di_day:02}{di_interval:03}'
 
     # Case data in json format
@@ -2946,3 +2946,6 @@ if __name__ == '__main__':
     # df_interconnector_losses_output = model_output['interconnector_losses']
     # df_trader_output_output = model_output['trader_output']
     # df_objective_value_output = model_output['objective_value']
+
+    # TODO: QPS2 is a fast start unit that is in mode 0 at start of interval but has EnergyTarget=11MW at end
+    # of interval. Think I need to use WhatIfInitialMW to check if unit will switch on over interval.
