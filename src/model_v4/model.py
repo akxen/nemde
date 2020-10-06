@@ -1252,9 +1252,19 @@ def define_unit_constraints(m):
             # Time unit above min loading
             min_loading_time = max([0, 5 - t1_time_remaining - t2_time])
 
-            # Ramping capability
-            ramp_up_capability = (((m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T2[i]) * t2_time)
-                                  + ((ramp_limit / 60) * min_loading_time))
+            # If T2=0 then unit immediately operates at min loading after synchronisation complete
+            if m.P_TRADER_T2[i] == 0:
+                t2_ramp_capability = m.P_TRADER_MIN_LOADING_MW[i]
+
+            # Else unit must follow fixed startup trajectory
+            else:
+                t2_ramp_capability = (m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T2[i]) * t2_time
+
+            # Ramping capability over T3
+            t3_ramp_capability = (ramp_limit / 60) * min_loading_time
+
+            # Total ramp up capability
+            ramp_up_capability = t2_ramp_capability + t3_ramp_capability
 
             # InitialMW = 0 if CurrentMode is T1
             initial_mw = 0
@@ -1268,10 +1278,19 @@ def define_unit_constraints(m):
             # Time unit is above min loading level over the dispatch interval
             min_loading_time = max([0, 5 - t2_time_remaining])
 
-            # Ramping capability depends on effective ramp rate over startup trajectory and SCADA ramp rate when above
-            # min loading
-            ramp_up_capability = (((m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T2[i]) * t2_time_remaining)
-                                  + ((ramp_limit / 60) * min_loading_time))
+            # If T2=0 then unit immediately operates at min loading after synchronisation complete
+            if m.P_TRADER_T2[i] == 0:
+                t2_ramp_capability = m.P_TRADER_MIN_LOADING_MW[i]
+
+            # Else unit must follow fixed startup trajectory
+            else:
+                t2_ramp_capability = (m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T2[i]) * t2_time_remaining
+
+            # Ramping capability over T3
+            t3_ramp_capability = (ramp_limit / 60) * min_loading_time
+
+            # Total ramp up capability
+            ramp_up_capability = t2_ramp_capability + t3_ramp_capability
 
             # InitialMW based on anticipated startup profile MW (may differ from actual InitialMW recorded by SCADA)
             initial_mw = (m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T2[i]) * m.P_TRADER_CURRENT_MODE_TIME[i]
@@ -2846,7 +2865,7 @@ if __name__ == '__main__':
     tmp_directory = os.path.join(os.path.dirname(__file__), 'tmp')
 
     # Case data in json format
-    di_day, di_interval = 8, 21
+    di_day, di_interval = 5, 62
     case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, 2019, 10, di_day, di_interval)
     # save_case_json(data_directory, 2019, 10, di_day, di_interval)
 
