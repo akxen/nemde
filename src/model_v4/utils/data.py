@@ -1208,6 +1208,7 @@ def parse_case_data_json(data, intervention) -> dict:
         'P_CVF_VOLL': get_case_attribute(data_dict, '@VoLL'),
         'P_CVF_ENERGY_DEFICIT_PRICE': get_case_attribute(data_dict, '@EnergyDeficitPrice'),
         'P_CVF_ENERGY_SURPLUS_PRICE': get_case_attribute(data_dict, '@EnergySurplusPrice'),
+        'P_CVF_UIGF_SURPLUS_PRICE': get_case_attribute(data_dict, '@UIGFSurplusPrice'),
         'P_CVF_RAMP_RATE_PRICE': get_case_attribute(data_dict, '@RampRatePrice'),
         'P_CVF_CAPACITY_PRICE': get_case_attribute(data_dict, '@CapacityPrice'),
         'P_CVF_OFFER_PRICE': get_case_attribute(data_dict, '@OfferPrice'),

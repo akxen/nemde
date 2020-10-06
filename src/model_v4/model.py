@@ -239,6 +239,9 @@ def define_parameters(m, data):
     # Energy surplus price
     m.P_CVF_ENERGY_SURPLUS_PRICE = pyo.Param(initialize=data['P_CVF_ENERGY_SURPLUS_PRICE'])
 
+    # UIGF surplus price
+    m.P_CVF_UIGF_SURPLUS_PRICE = pyo.Param(initialize=data['P_CVF_UIGF_SURPLUS_PRICE'])
+
     # Ramp-rate constraint violation factor
     m.P_CVF_RAMP_RATE_PRICE = pyo.Param(initialize=data['P_CVF_RAMP_RATE_PRICE'])
 
@@ -307,6 +310,7 @@ def define_variables(m):
 
     # Trader total capacity < max available violation
     m.V_CV_TRADER_CAPACITY = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
+    m.V_CV_TRADER_UIGF_SURPLUS = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
 
     # MNSP band offer < bid violation
     m.V_CV_MNSP_OFFER = pyo.Var(m.S_MNSP_OFFERS, m.S_BANDS, within=pyo.NonNegativeReals)
@@ -454,6 +458,14 @@ def define_constraint_violation_penalty_expressions(m):
 
     # Constraint violation penalty for total offer amount exceeding max available
     m.E_CV_TRADER_CAPACITY_PENALTY = pyo.Expression(m.S_TRADER_OFFERS, rule=trader_capacity_penalty_rule)
+
+    def trader_uigf_surplus_penalty_rule(m, i, j):
+        """Penalty for total band amount exceeding max available amount"""
+
+        return m.P_CVF_UIGF_SURPLUS_PRICE * m.V_CV_TRADER_UIGF_SURPLUS[i, j]
+
+    # Constraint violation penalty for total offer amount exceeding max available
+    m.E_CV_TRADER_UIGF_SURPLUS_PENALTY = pyo.Expression(m.S_TRADER_OFFERS, rule=trader_uigf_surplus_penalty_rule)
 
     def trader_ramp_up_penalty_rule(m, i):
         """Penalty for violating ramp down constraint"""
@@ -612,6 +624,7 @@ def define_constraint_violation_penalty_expressions(m):
              + sum(m.E_CV_GC_RHS_PENALTY[i] for i in m.S_GENERIC_CONSTRAINTS)
              + sum(m.E_CV_TRADER_OFFER_PENALTY[i, j, k] for i, j in m.S_TRADER_OFFERS for k in m.S_BANDS)
              + sum(m.E_CV_TRADER_CAPACITY_PENALTY[i] for i in m.S_TRADER_OFFERS)
+             + sum(m.E_CV_TRADER_UIGF_SURPLUS_PENALTY[i] for i in m.S_TRADER_OFFERS)
              + sum(m.E_CV_TRADER_RAMP_UP_PENALTY[i] for i in m.S_TRADERS)
              + sum(m.E_CV_TRADER_RAMP_DOWN_PENALTY[i] for i in m.S_TRADERS)
              + sum(m.E_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, j] for i, j in m.S_TRADER_OFFERS)
@@ -1135,7 +1148,7 @@ def define_offer_constraints(m):
 
         # UIGF constrains max output for semi-dispatchable plant
         if (i in m.S_TRADERS_SEMI_DISPATCH) and (j == 'ENOF'):
-            return m.V_TRADER_TOTAL_OFFER[i, j] <= m.P_TRADER_UIGF[i] + m.V_CV_TRADER_CAPACITY[i, j]
+            return m.V_TRADER_TOTAL_OFFER[i, j] <= m.P_TRADER_UIGF[i] + m.V_CV_TRADER_UIGF_SURPLUS[i, j]
         else:
             return m.V_TRADER_TOTAL_OFFER[i, j] <= m.P_TRADER_MAX_AVAILABLE[i, j] + m.V_CV_TRADER_CAPACITY[i, j]
 
@@ -2514,7 +2527,9 @@ def get_solution_report(data, m, intervention):
     print(df_trader_output.head())
 
     print('Objective value')
-    print(pd.Series(check_objective_value(data, m, intervention)).T)
+    objective_value = check_objective_value(data, m, intervention)
+    df_objective_value = pd.Series(objective_value).T
+    print(df_objective_value)
 
     # Summary of model output
     output = {
@@ -2526,6 +2541,7 @@ def get_solution_report(data, m, intervention):
         'interconnector_flow': interconnector_flow,
         'interconnector_losses': interconnector_losses,
         'trader_output': trader_output,
+        'objective_value': objective_value,
     }
 
     return output
@@ -2708,7 +2724,11 @@ def check_model(data_dir, n=5):
 
     def extract_values(results, key, sort_key):
         """Extract data and convert to DataFrame"""
-        return pd.DataFrame([s for r in results for s in r[key]]).sort_values(by=sort_key, ascending=False)
+
+        if key == 'objective_value':
+            return pd.DataFrame([r[key] for r in results]).sort_values(by=sort_key, ascending=False)
+        else:
+            return pd.DataFrame([s for r in results for s in r[key]]).sort_values(by=sort_key, ascending=False)
 
     # Summary of results
     summary = {
@@ -2720,6 +2740,7 @@ def check_model(data_dir, n=5):
         'interconnector_flow': extract_values(output, 'interconnector_flow', 'abs_difference'),
         'interconnector_losses': extract_values(output, 'interconnector_losses', 'abs_difference'),
         'trader_output': extract_values(output, 'trader_output', 'abs_difference'),
+        'objective_value': extract_values(output, 'objective_value', 'abs_difference'),
     }
 
     # Print summary
@@ -2774,8 +2795,11 @@ def get_observed_fcas_availability(data_dir, tmp_dir):
     return df
 
 
-def check_fcas_solution(case_id, sample_dir, tmp_dir, use_cache=True):
+def check_fcas_solution(data, solution, intervention, case_id, sample_dir, tmp_dir, use_cache=True):
     """Check FCAS solution and compare availability with observed availability"""
+
+    # Trader solution
+    _, df_trader_targets = utils.analysis.check_trader_solution(data, solution, intervention)
 
     # Load observed FCAS data
     if use_cache:
@@ -2796,12 +2820,12 @@ def check_fcas_solution(case_id, sample_dir, tmp_dir, use_cache=True):
     }
 
     # Augment DataFrame
-    observed_fcas_formatted = (observed_fcas.loc[(case_id, slice(None), intervention_status), column_map.keys()]
+    observed_fcas_formatted = (observed_fcas.loc[(case_id, slice(None), intervention), column_map.keys()]
                                .rename(columns=column_map).stack().to_frame('fcas_availability').droplevel([0, 2])
                                .rename_axis(['trader_id', 'trade_type']))
 
     # Combine trader solution with observed FCAS availability
-    df_c = df_trader_solution.join(observed_fcas_formatted, how='left')
+    df_c = df_trader_targets.join(observed_fcas_formatted, how='left')
 
     # Difference between observed FCAS and available FCAS
     df_c['fcas_availability_difference'] = df_c['model'] - df_c['fcas_availability']
@@ -2864,10 +2888,13 @@ if __name__ == '__main__':
     sample_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, 'data')
     tmp_directory = os.path.join(os.path.dirname(__file__), 'tmp')
 
+    # Define the dispatch interval to investigate
+    di_year, di_month, di_day, di_interval = 2019, 10, 25, 183
+    di_case_id = f'{di_year}{di_month:02}{di_day:02}{di_interval:03}'
+
     # Case data in json format
-    di_day, di_interval = 5, 62
-    case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, 2019, 10, di_day, di_interval)
-    # save_case_json(data_directory, 2019, 10, di_day, di_interval)
+    case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, di_year, di_month, di_day, di_interval)
+    save_case_json(data_directory, di_year, di_month, di_day, di_interval)
 
     # Get NEMDE model data as a Python dictionary
     cdata = json.loads(case_data_json)
@@ -2893,13 +2920,13 @@ if __name__ == '__main__':
     model = solve_model(model)
 
     # Extract solution
-    solution = utils.solution.get_model_solution(model)
+    model_solution = utils.solution.get_model_solution(model)
 
-    # Difference
-    trader_solution, df_trader_solution = utils.analysis.check_trader_solution(cdata, solution, intervention_status)
-    di_case_id = f'201910{di_day:02}{di_interval:03}'
-    df_trader_fcas_solution = check_fcas_solution(di_case_id, sample_directory, tmp_directory)
-    utils.analysis.plot_trader_solution_difference(cdata, solution, intervention_status)
+    # Check solution
+    _, df_trader_solution = utils.analysis.check_trader_solution(cdata, model_solution, intervention_status)
+    df_fcas_solution = check_fcas_solution(cdata, model_solution, intervention_status, di_case_id, sample_directory,
+                                           tmp_directory)
+    utils.analysis.plot_trader_solution_difference(cdata, model_solution, intervention_status)
 
     # Get solution report
     get_solution_report(cdata, model, intervention_status)
@@ -2908,7 +2935,7 @@ if __name__ == '__main__':
     check_constraint_violation(model)
 
     # # Check model for a random selection of dispatch intervals
-    # model_output = check_model(data_directory, n=100)
+    # model_output = check_model(data_directory, n=200)
     #
     # df_fixed_demand_output = model_output['fixed_demand']
     # df_net_export_output = model_output['net_export']
@@ -2918,3 +2945,4 @@ if __name__ == '__main__':
     # df_interconnector_flow_output = model_output['interconnector_flow']
     # df_interconnector_losses_output = model_output['interconnector_losses']
     # df_trader_output_output = model_output['trader_output']
+    # df_objective_value_output = model_output['objective_value']
