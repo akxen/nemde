@@ -1159,6 +1159,7 @@ def parse_case_data_json(data, intervention) -> dict:
         'P_TRADER_MAX_AVAILABLE': get_trader_period_trade_attribute(data_dict, '@MaxAvail', float),
         'P_TRADER_UIGF': get_trader_period_attribute(data_dict, '@UIGF', float),
         'P_TRADER_INITIAL_MW': get_trader_initial_condition_attribute(data_dict, 'InitialMW', float),
+        'P_TRADER_WHAT_IF_INITIAL_MW': get_trader_initial_condition_attribute(data_dict, 'WhatIfInitialMW', float),
         'P_TRADER_HMW': get_trader_initial_condition_attribute(data_dict, 'HMW', float),
         'P_TRADER_LMW': get_trader_initial_condition_attribute(data_dict, 'LMW', float),
         'P_TRADER_AGC_STATUS': get_trader_initial_condition_attribute(data_dict, 'AGCStatus', str),

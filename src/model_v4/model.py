@@ -92,6 +92,7 @@ def define_parameters(m, data):
 
     # Initial MW output for generators / loads
     m.P_TRADER_INITIAL_MW = pyo.Param(m.S_TRADERS, initialize=data['P_TRADER_INITIAL_MW'])
+    m.P_TRADER_WHAT_IF_INITIAL_MW = pyo.Param(m.S_TRADERS, initialize=data['P_TRADER_WHAT_IF_INITIAL_MW'])
 
     # UIGF for semi-dispatchable plant
     m.P_TRADER_UIGF = pyo.Param(m.S_TRADERS_SEMI_DISPATCH, initialize=data['P_TRADER_UIGF'])
@@ -1240,10 +1241,44 @@ def define_unit_constraints(m):
         else:
             ramp_limit = m.P_TRADER_PERIOD_RAMP_UP_RATE[(i, j)]
 
-        # Initial MW
-        initial_mw = m.P_TRADER_INITIAL_MW[i]
+        # Unit on fixed startup profile. T2 ramp rate applies while in T2, then SCADA ramp rate for rest of interval
+        if (i in m.P_TRADER_CURRENT_MODE.keys()) and (m.P_TRADER_CURRENT_MODE[i] == '1'):
+            # Output fixed to 0 for this amount of time over dispatch interval
+            t1_time_remaining = m.P_TRADER_T1[i] - m.P_TRADER_CURRENT_MODE_TIME[i]
 
-        return m.V_TRADER_TOTAL_OFFER[i, j] - initial_mw <= (ramp_limit / 12) + m.V_CV_TRADER_RAMP_UP[i]
+            # Unit follows fixed startup trajectory
+            t2_time = max(0, min(m.P_TRADER_T2[i], 5 - t1_time_remaining))
+
+            # Time unit above min loading
+            min_loading_time = max([0, 5 - t1_time_remaining - t2_time])
+
+            # Ramping capability
+            ramp_up_capability = (((m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T2[i]) * t2_time)
+                                  + ((ramp_limit / 60) * min_loading_time))
+
+            # InitialMW = 0 if CurrentMode is T1
+            initial_mw = 0
+
+            return m.V_TRADER_TOTAL_OFFER[i, j] <= initial_mw + ramp_up_capability + m.V_CV_TRADER_RAMP_UP[i]
+
+        elif (i in m.P_TRADER_CURRENT_MODE.keys()) and (m.P_TRADER_CURRENT_MODE[i] == '2'):
+            # Amount of time remaining in T2
+            t2_time_remaining = m.P_TRADER_T2[i] - m.P_TRADER_CURRENT_MODE_TIME[i]
+
+            # Time unit is above min loading level over the dispatch interval
+            min_loading_time = max([0, 5 - t2_time_remaining])
+
+            # Ramping capability depends on effective ramp rate over startup trajectory and SCADA ramp rate when above
+            # min loading
+            ramp_up_capability = (((m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T2[i]) * t2_time_remaining)
+                                  + ((ramp_limit / 60) * min_loading_time))
+
+            # InitialMW based on anticipated startup profile MW (may differ from actual InitialMW recorded by SCADA)
+            initial_mw = (m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T2[i]) * m.P_TRADER_CURRENT_MODE_TIME[i]
+
+            return m.V_TRADER_TOTAL_OFFER[i, j] <= initial_mw + ramp_up_capability + m.V_CV_TRADER_RAMP_UP[i]
+
+        return m.V_TRADER_TOTAL_OFFER[i, j] - m.P_TRADER_INITIAL_MW[i] <= (ramp_limit / 12) + m.V_CV_TRADER_RAMP_UP[i]
 
     # Ramp up rate limit
     m.C_TRADER_RAMP_UP_RATE = pyo.Constraint(m.S_TRADER_OFFERS, rule=trader_ramp_up_rate_rule)
@@ -2765,26 +2800,40 @@ def check_constraint_violation(m):
     print('E_CV_GC_PENALTY', pyo.value(sum(m.E_CV_GC_PENALTY[i] for i in m.S_GENERIC_CONSTRAINTS)))
     print('E_CV_GC_LHS_PENALTY', pyo.value(sum(m.E_CV_GC_LHS_PENALTY[i] for i in m.S_GENERIC_CONSTRAINTS)))
     print('E_CV_GC_RHS_PENALTY', pyo.value(sum(m.E_CV_GC_RHS_PENALTY[i] for i in m.S_GENERIC_CONSTRAINTS)))
-    print('E_CV_TRADER_OFFER_PENALTY', pyo.value(sum(m.E_CV_TRADER_OFFER_PENALTY[i, j, k] for i, j in m.S_TRADER_OFFERS for k in m.S_BANDS)))
+    print('E_CV_TRADER_OFFER_PENALTY',
+          pyo.value(sum(m.E_CV_TRADER_OFFER_PENALTY[i, j, k] for i, j in m.S_TRADER_OFFERS for k in m.S_BANDS)))
     print('E_CV_TRADER_CAPACITY_PENALTY', pyo.value(sum(m.E_CV_TRADER_CAPACITY_PENALTY[i] for i in m.S_TRADER_OFFERS)))
     print('E_CV_TRADER_RAMP_UP_PENALTY', pyo.value(sum(m.E_CV_TRADER_RAMP_UP_PENALTY[i] for i in m.S_TRADERS)))
     print('E_CV_TRADER_RAMP_DOWN_PENALTY', pyo.value(sum(m.E_CV_TRADER_RAMP_DOWN_PENALTY[i] for i in m.S_TRADERS)))
-    print('E_CV_TRADER_FCAS_JOINT_RAMPING_UP', pyo.value(sum(m.E_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, j] for i, j in m.S_TRADER_OFFERS)))
-    print('E_CV_TRADER_FCAS_JOINT_RAMPING_DOWN', pyo.value(sum(m.E_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, j] for i, j in m.S_TRADER_OFFERS)))
-    print('E_CV_TRADER_FCAS_JOINT_CAPACITY_RHS', pyo.value(sum(m.E_CV_TRADER_FCAS_JOINT_CAPACITY_RHS[i, j] for i, j in m.S_TRADER_OFFERS)))
-    print('E_CV_TRADER_FCAS_JOINT_CAPACITY_LHS', pyo.value(sum(m.E_CV_TRADER_FCAS_JOINT_CAPACITY_LHS[i, j] for i, j in m.S_TRADER_OFFERS)))
-    print('E_CV_TRADER_FCAS_ENERGY_REGULATING_RHS', pyo.value(sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RHS[i, j] for i, j in m.S_TRADER_OFFERS)))
-    print('E_CV_TRADER_FCAS_ENERGY_REGULATING_LHS', pyo.value(sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LHS[i, j] for i, j in m.S_TRADER_OFFERS)))
-    print('E_CV_TRADER_FCAS_MAX_AVAILABLE', pyo.value(sum(m.E_CV_TRADER_FCAS_MAX_AVAILABLE[i, j] for i, j in m.S_TRADER_OFFERS)))
-    print('E_CV_TRADER_INFLEXIBILITY_PROFILE', pyo.value(sum(m.E_CV_TRADER_INFLEXIBILITY_PROFILE[i] for i in m.S_TRADER_FAST_START)))
-    print('E_CV_TRADER_INFLEXIBILITY_PROFILE_LHS', pyo.value(sum(m.E_CV_TRADER_INFLEXIBILITY_PROFILE_LHS[i] for i in m.S_TRADER_FAST_START)))
-    print('E_CV_TRADER_INFLEXIBILITY_PROFILE_RHS', pyo.value(sum(m.E_CV_TRADER_INFLEXIBILITY_PROFILE_RHS[i] for i in m.S_TRADER_FAST_START)))
-    print('E_CV_MNSP_OFFER_PENALTY', pyo.value(sum(m.E_CV_MNSP_OFFER_PENALTY[i, j, k] for i, j in m.S_MNSP_OFFERS for k in m.S_BANDS)))
+    print('E_CV_TRADER_FCAS_JOINT_RAMPING_UP',
+          pyo.value(sum(m.E_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, j] for i, j in m.S_TRADER_OFFERS)))
+    print('E_CV_TRADER_FCAS_JOINT_RAMPING_DOWN',
+          pyo.value(sum(m.E_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, j] for i, j in m.S_TRADER_OFFERS)))
+    print('E_CV_TRADER_FCAS_JOINT_CAPACITY_RHS',
+          pyo.value(sum(m.E_CV_TRADER_FCAS_JOINT_CAPACITY_RHS[i, j] for i, j in m.S_TRADER_OFFERS)))
+    print('E_CV_TRADER_FCAS_JOINT_CAPACITY_LHS',
+          pyo.value(sum(m.E_CV_TRADER_FCAS_JOINT_CAPACITY_LHS[i, j] for i, j in m.S_TRADER_OFFERS)))
+    print('E_CV_TRADER_FCAS_ENERGY_REGULATING_RHS',
+          pyo.value(sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RHS[i, j] for i, j in m.S_TRADER_OFFERS)))
+    print('E_CV_TRADER_FCAS_ENERGY_REGULATING_LHS',
+          pyo.value(sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LHS[i, j] for i, j in m.S_TRADER_OFFERS)))
+    print('E_CV_TRADER_FCAS_MAX_AVAILABLE',
+          pyo.value(sum(m.E_CV_TRADER_FCAS_MAX_AVAILABLE[i, j] for i, j in m.S_TRADER_OFFERS)))
+    print('E_CV_TRADER_INFLEXIBILITY_PROFILE',
+          pyo.value(sum(m.E_CV_TRADER_INFLEXIBILITY_PROFILE[i] for i in m.S_TRADER_FAST_START)))
+    print('E_CV_TRADER_INFLEXIBILITY_PROFILE_LHS',
+          pyo.value(sum(m.E_CV_TRADER_INFLEXIBILITY_PROFILE_LHS[i] for i in m.S_TRADER_FAST_START)))
+    print('E_CV_TRADER_INFLEXIBILITY_PROFILE_RHS',
+          pyo.value(sum(m.E_CV_TRADER_INFLEXIBILITY_PROFILE_RHS[i] for i in m.S_TRADER_FAST_START)))
+    print('E_CV_MNSP_OFFER_PENALTY',
+          pyo.value(sum(m.E_CV_MNSP_OFFER_PENALTY[i, j, k] for i, j in m.S_MNSP_OFFERS for k in m.S_BANDS)))
     print('E_CV_MNSP_CAPACITY_PENALTY', pyo.value(sum(m.E_CV_MNSP_CAPACITY_PENALTY[i] for i in m.S_MNSP_OFFERS)))
     print('E_CV_MNSP_RAMP_UP_PENALTY', pyo.value(sum(m.E_CV_MNSP_RAMP_UP_PENALTY[i] for i in m.S_MNSP_OFFERS)))
     print('E_CV_MNSP_RAMP_DOWN_PENALTY', pyo.value(sum(m.E_CV_MNSP_RAMP_DOWN_PENALTY[i] for i in m.S_MNSP_OFFERS)))
-    print('E_CV_INTERCONNECTOR_FORWARD_PENALTY', pyo.value(sum(m.E_CV_INTERCONNECTOR_FORWARD_PENALTY[i] for i in m.S_INTERCONNECTORS)))
-    print('E_CV_INTERCONNECTOR_REVERSE_PENALTY', pyo.value(sum(m.E_CV_INTERCONNECTOR_REVERSE_PENALTY[i] for i in m.S_INTERCONNECTORS)))
+    print('E_CV_INTERCONNECTOR_FORWARD_PENALTY',
+          pyo.value(sum(m.E_CV_INTERCONNECTOR_FORWARD_PENALTY[i] for i in m.S_INTERCONNECTORS)))
+    print('E_CV_INTERCONNECTOR_REVERSE_PENALTY',
+          pyo.value(sum(m.E_CV_INTERCONNECTOR_REVERSE_PENALTY[i] for i in m.S_INTERCONNECTORS)))
 
 
 if __name__ == '__main__':
@@ -2797,7 +2846,7 @@ if __name__ == '__main__':
     tmp_directory = os.path.join(os.path.dirname(__file__), 'tmp')
 
     # Case data in json format
-    di_day, di_interval = 25, 254
+    di_day, di_interval = 8, 21
     case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, 2019, 10, di_day, di_interval)
     # save_case_json(data_directory, 2019, 10, di_day, di_interval)
 
@@ -2840,7 +2889,7 @@ if __name__ == '__main__':
     check_constraint_violation(model)
 
     # # Check model for a random selection of dispatch intervals
-    # model_output = check_model(data_directory, n=20)
+    # model_output = check_model(data_directory, n=100)
     #
     # df_fixed_demand_output = model_output['fixed_demand']
     # df_net_export_output = model_output['net_export']
