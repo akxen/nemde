@@ -1063,14 +1063,8 @@ def define_fcas_expressions(m):
         else:
             agc_down_limit = None
 
-        # UIGF from semi-dispatchable plant
-        if m.P_TRADER_SEMI_DISPATCH_STATUS[i] == '1':
-            uigf = m.P_TRADER_UIGF[i]
-        else:
-            uigf = None
-
-        # Terms used to determine effective enablement max
-        terms = [enablement_min, agc_down_limit, uigf]
+        # Terms used to determine effective enablement min
+        terms = [enablement_min, agc_down_limit]
 
         return max([i for i in terms if i is not None])
 
@@ -2765,6 +2759,34 @@ def check_fcas_solution(case_id, sample_dir, tmp_dir, use_cache=True):
     return df_c
 
 
+def check_constraint_violation(m):
+    """Check constraint violation expressions"""
+
+    print('E_CV_GC_PENALTY', pyo.value(sum(m.E_CV_GC_PENALTY[i] for i in m.S_GENERIC_CONSTRAINTS)))
+    print('E_CV_GC_LHS_PENALTY', pyo.value(sum(m.E_CV_GC_LHS_PENALTY[i] for i in m.S_GENERIC_CONSTRAINTS)))
+    print('E_CV_GC_RHS_PENALTY', pyo.value(sum(m.E_CV_GC_RHS_PENALTY[i] for i in m.S_GENERIC_CONSTRAINTS)))
+    print('E_CV_TRADER_OFFER_PENALTY', pyo.value(sum(m.E_CV_TRADER_OFFER_PENALTY[i, j, k] for i, j in m.S_TRADER_OFFERS for k in m.S_BANDS)))
+    print('E_CV_TRADER_CAPACITY_PENALTY', pyo.value(sum(m.E_CV_TRADER_CAPACITY_PENALTY[i] for i in m.S_TRADER_OFFERS)))
+    print('E_CV_TRADER_RAMP_UP_PENALTY', pyo.value(sum(m.E_CV_TRADER_RAMP_UP_PENALTY[i] for i in m.S_TRADERS)))
+    print('E_CV_TRADER_RAMP_DOWN_PENALTY', pyo.value(sum(m.E_CV_TRADER_RAMP_DOWN_PENALTY[i] for i in m.S_TRADERS)))
+    print('E_CV_TRADER_FCAS_JOINT_RAMPING_UP', pyo.value(sum(m.E_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, j] for i, j in m.S_TRADER_OFFERS)))
+    print('E_CV_TRADER_FCAS_JOINT_RAMPING_DOWN', pyo.value(sum(m.E_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, j] for i, j in m.S_TRADER_OFFERS)))
+    print('E_CV_TRADER_FCAS_JOINT_CAPACITY_RHS', pyo.value(sum(m.E_CV_TRADER_FCAS_JOINT_CAPACITY_RHS[i, j] for i, j in m.S_TRADER_OFFERS)))
+    print('E_CV_TRADER_FCAS_JOINT_CAPACITY_LHS', pyo.value(sum(m.E_CV_TRADER_FCAS_JOINT_CAPACITY_LHS[i, j] for i, j in m.S_TRADER_OFFERS)))
+    print('E_CV_TRADER_FCAS_ENERGY_REGULATING_RHS', pyo.value(sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RHS[i, j] for i, j in m.S_TRADER_OFFERS)))
+    print('E_CV_TRADER_FCAS_ENERGY_REGULATING_LHS', pyo.value(sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LHS[i, j] for i, j in m.S_TRADER_OFFERS)))
+    print('E_CV_TRADER_FCAS_MAX_AVAILABLE', pyo.value(sum(m.E_CV_TRADER_FCAS_MAX_AVAILABLE[i, j] for i, j in m.S_TRADER_OFFERS)))
+    print('E_CV_TRADER_INFLEXIBILITY_PROFILE', pyo.value(sum(m.E_CV_TRADER_INFLEXIBILITY_PROFILE[i] for i in m.S_TRADER_FAST_START)))
+    print('E_CV_TRADER_INFLEXIBILITY_PROFILE_LHS', pyo.value(sum(m.E_CV_TRADER_INFLEXIBILITY_PROFILE_LHS[i] for i in m.S_TRADER_FAST_START)))
+    print('E_CV_TRADER_INFLEXIBILITY_PROFILE_RHS', pyo.value(sum(m.E_CV_TRADER_INFLEXIBILITY_PROFILE_RHS[i] for i in m.S_TRADER_FAST_START)))
+    print('E_CV_MNSP_OFFER_PENALTY', pyo.value(sum(m.E_CV_MNSP_OFFER_PENALTY[i, j, k] for i, j in m.S_MNSP_OFFERS for k in m.S_BANDS)))
+    print('E_CV_MNSP_CAPACITY_PENALTY', pyo.value(sum(m.E_CV_MNSP_CAPACITY_PENALTY[i] for i in m.S_MNSP_OFFERS)))
+    print('E_CV_MNSP_RAMP_UP_PENALTY', pyo.value(sum(m.E_CV_MNSP_RAMP_UP_PENALTY[i] for i in m.S_MNSP_OFFERS)))
+    print('E_CV_MNSP_RAMP_DOWN_PENALTY', pyo.value(sum(m.E_CV_MNSP_RAMP_DOWN_PENALTY[i] for i in m.S_MNSP_OFFERS)))
+    print('E_CV_INTERCONNECTOR_FORWARD_PENALTY', pyo.value(sum(m.E_CV_INTERCONNECTOR_FORWARD_PENALTY[i] for i in m.S_INTERCONNECTORS)))
+    print('E_CV_INTERCONNECTOR_REVERSE_PENALTY', pyo.value(sum(m.E_CV_INTERCONNECTOR_REVERSE_PENALTY[i] for i in m.S_INTERCONNECTORS)))
+
+
 if __name__ == '__main__':
     # Directory containing case data
     data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
@@ -2777,7 +2799,7 @@ if __name__ == '__main__':
     # Case data in json format
     di_day, di_interval = 25, 254
     case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, 2019, 10, di_day, di_interval)
-    save_case_json(data_directory, 2019, 10, di_day, di_interval)
+    # save_case_json(data_directory, 2019, 10, di_day, di_interval)
 
     # Get NEMDE model data as a Python dictionary
     cdata = json.loads(case_data_json)
@@ -2813,6 +2835,9 @@ if __name__ == '__main__':
 
     # Get solution report
     get_solution_report(cdata, model, intervention_status)
+
+    # Check constraint violation
+    check_constraint_violation(model)
 
     # # Check model for a random selection of dispatch intervals
     # model_output = check_model(data_directory, n=20)
