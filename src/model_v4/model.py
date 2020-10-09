@@ -2476,6 +2476,55 @@ def check_objective_value(data, m, intervention):
     return out
 
 
+def check_fast_start_error_condition(data, intervention):
+    """Check if fast start unit is in CurrentMode=0 and has EnergyTarget > 0"""
+
+    # All traders
+    traders = data.get('NEMSPDCaseFile').get('NemSpdInputs').get('TraderCollection').get('Trader')
+
+    # Mode 0 unit committed - initialise to False
+    mode_0_committed = False
+
+    for i in traders:
+        trader_id = i['@TraderID']
+        trade_type = '@EnergyTarget'
+        energy_target = utils.lookup.get_trader_solution_attribute(data, trader_id, trade_type, float, intervention)
+        fast_start_threshold = utils.lookup.get_case_attribute(data, '@FastStartThreshold', float)
+        if (i.get('@CurrentMode') == '0') and (energy_target > fast_start_threshold):
+            mode_0_committed = True
+
+    return mode_0_committed
+
+
+def check_mnsp_flow_inverts_condition(data, intervention):
+    """Check if MNSP flow direction switches over dispatch interval"""
+
+    # Flow switches - initialise to False
+    mnsp_flow_switches = False
+
+    for i in utils.lookup.get_mnsp_index(data):
+        initial_mw = utils.lookup.get_interconnector_collection_initial_condition_attribute(data, i, 'InitialMW', float)
+        target_flow = utils.lookup.get_interconnector_solution_attribute(data, i, '@Flow', float, intervention)
+
+        if ((initial_mw < 0) and (target_flow > 0)) or ((initial_mw > 0) and (target_flow < 0)):
+            mnsp_flow_switches = True
+
+    return mnsp_flow_switches
+
+
+def check_known_unhandled_cases(data, intervention):
+    """Run diagnostics to check if known unhandled cases are present"""
+
+    # Run diagnostics on case data to check if known issues associated with case
+    output = {
+        'case_id': utils.lookup.get_case_attribute(data, '@CaseID', str),
+        'fast_start_error': check_fast_start_error_condition(data, intervention),
+        'mnsp_flow_inverts': check_mnsp_flow_inverts_condition(data, intervention),
+    }
+
+    return output
+
+
 def get_solution_report(data, m, intervention):
     """Check solution"""
 
@@ -2544,6 +2593,11 @@ def get_solution_report(data, m, intervention):
     df_objective_value = pd.Series(objective_value).T
     print(df_objective_value)
 
+    print('Unhandled cases')
+    unhandled_cases = check_known_unhandled_cases(data, intervention)
+    df_unhandled_cases = pd.Series(unhandled_cases).T
+    print(df_unhandled_cases)
+
     # Summary of model output
     output = {
         'fixed_demand': fixed_demand,
@@ -2555,6 +2609,7 @@ def get_solution_report(data, m, intervention):
         'interconnector_losses': interconnector_losses,
         'trader_output': trader_output,
         'objective_value': objective_value,
+        'unhandled_cases': unhandled_cases,
     }
 
     return output
@@ -2738,7 +2793,7 @@ def check_model(data_dir, n=5):
     def extract_values(results, key, sort_key):
         """Extract data and convert to DataFrame"""
 
-        if key == 'objective_value':
+        if key in ['objective_value', 'unhandled_cases']:
             return pd.DataFrame([r[key] for r in results]).sort_values(by=sort_key, ascending=False)
         else:
             return pd.DataFrame([s for r in results for s in r[key]]).sort_values(by=sort_key, ascending=False)
@@ -2754,6 +2809,7 @@ def check_model(data_dir, n=5):
         'interconnector_losses': extract_values(output, 'interconnector_losses', 'abs_difference'),
         'trader_output': extract_values(output, 'trader_output', 'abs_difference'),
         'objective_value': extract_values(output, 'objective_value', 'abs_difference'),
+        'unhandled_cases': extract_values(output, 'unhandled_cases', 'mnsp_flow_inverts'),
     }
 
     # Print summary
@@ -2913,12 +2969,11 @@ if __name__ == '__main__':
     # Directory containing model check results
     check_directory = os.path.join(os.path.dirname(__file__), 'output', 'check')
 
-
     # sample_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, 'data')
     # tmp_directory = os.path.join(os.path.dirname(__file__), 'tmp')
     #
     # # Define the dispatch interval to investigate
-    # di_year, di_month, di_day, di_interval = 2019, 10, 22, 235
+    # di_year, di_month, di_day, di_interval = 2019, 10, 8, 199
     # di_case_id = f'{di_year}{di_month:02}{di_day:02}{di_interval:03}'
     #
     # # Case data in json format
@@ -2927,7 +2982,7 @@ if __name__ == '__main__':
     #
     # # Get NEMDE model data as a Python dictionary
     # cdata = json.loads(case_data_json)
-    #
+
     # # Preprocessed case data
     # intervention_status = utils.lookup.get_intervention_status(cdata, 'physical')
     # # intervention_status = '0'
@@ -2973,7 +3028,7 @@ if __name__ == '__main__':
     # check_constraint_violation(model)
 
     # Check model for a random selection of dispatch intervals
-    model_output = check_model(data_directory, n=1000)
+    model_output = check_model(data_directory, n=3)
 
     df_fixed_demand_output = model_output['fixed_demand']
     df_net_export_output = model_output['net_export']
@@ -2984,13 +3039,14 @@ if __name__ == '__main__':
     df_interconnector_losses_output = model_output['interconnector_losses']
     df_trader_output_output = model_output['trader_output']
     df_objective_value_output = model_output['objective_value']
+    df_unhandled_cases_output = model_output['unhandled_cases']
 
-    # Save results
-    df_fixed_demand_output.to_csv(os.path.join(check_directory, 'fixed_demand.csv'))
-    df_net_export_output.to_csv(os.path.join(check_directory, 'net_export.csv'))
-    df_dispatched_generation_output.to_csv(os.path.join(check_directory, 'dispatched_generation.csv'))
-    df_dispatched_load_output.to_csv(os.path.join(check_directory, 'dispatched_load.csv'))
-    df_interconnector_flow_output.to_csv(os.path.join(check_directory, 'interconnector_flow.csv'))
-    df_interconnector_losses_output.to_csv(os.path.join(check_directory, 'interconnector_losses.csv'))
-    df_trader_output_output.to_csv(os.path.join(check_directory, 'trader_output.csv'))
-    df_objective_value_output.to_csv(os.path.join(check_directory, 'objective_value.csv'))
+    # # Save results
+    # df_fixed_demand_output.to_csv(os.path.join(check_directory, 'fixed_demand.csv'))
+    # df_net_export_output.to_csv(os.path.join(check_directory, 'net_export.csv'))
+    # df_dispatched_generation_output.to_csv(os.path.join(check_directory, 'dispatched_generation.csv'))
+    # df_dispatched_load_output.to_csv(os.path.join(check_directory, 'dispatched_load.csv'))
+    # df_interconnector_flow_output.to_csv(os.path.join(check_directory, 'interconnector_flow.csv'))
+    # df_interconnector_losses_output.to_csv(os.path.join(check_directory, 'interconnector_losses.csv'))
+    # df_trader_output_output.to_csv(os.path.join(check_directory, 'trader_output.csv'))
+    # df_objective_value_output.to_csv(os.path.join(check_directory, 'objective_value.csv'))

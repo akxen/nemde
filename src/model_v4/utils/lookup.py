@@ -274,6 +274,23 @@ def get_trader_offer_index(data) -> list:
     return out
 
 
+def get_interconnector_index(data) -> list:
+    """Get interconnector index"""
+
+    return [i['@InterconnectorID'] for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                                             .get('InterconnectorCollection').get('Interconnector'))]
+
+
+def get_mnsp_index(data) -> list:
+    """Get MNSP index"""
+
+    # All MNSPs
+    mnsps = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
+             .get('InterconnectorPeriodCollection').get('InterconnectorPeriod'))
+
+    return [i['@InterconnectorID'] for i in mnsps if i['@MNSP'] == '1']
+
+
 def get_region_index(data) -> list:
     """Get list of all regions"""
 
@@ -297,6 +314,7 @@ def get_generic_constraint_index(data) -> list:
 
 def get_intervention_status(data, mode) -> str:
     """Check if intervention pricing run occurred - trying to model physical run if intervention occurred"""
+
     if (get_case_attribute(data, '@Intervention', str) == 'False') and (mode == 'physical'):
         return '0'
     elif (get_case_attribute(data, '@Intervention', str) == 'False') and (mode == 'pricing'):
