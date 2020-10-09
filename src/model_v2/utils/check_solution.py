@@ -987,7 +987,7 @@ if __name__ == '__main__':
                                   'NEMDE', 'zipped')
 
     # Case data in json format
-    case_data_json = loaders.load_dispatch_interval_json(data_directory, 2019, 10, 10, 10)
+    case_data_json = loaders.load_dispatch_interval_json(data_directory, 2019, 10, 22, 235)
 
     # Get NEMDE model data as a Python dictionary
     cdata = json.loads(case_data_json)
@@ -1005,8 +1005,8 @@ if __name__ == '__main__':
     #                                                     n=1000)
     # c8, c8_df, c8_max = check_region_calculation_sample(data_directory, check_region_dispatched_load_calculation,
     #                                                     n=1000)
-    c9, c9_df, c9_max = check_generic_constraint_calculation_sample(data_directory,
-                                                                    check_generic_constraint_rhs_calculation, n=1)
+    # c9, c9_df, c9_max = check_generic_constraint_calculation_sample(data_directory,
+    #                                                                 check_generic_constraint_rhs_calculation, n=1)
     # check_unique_generic_constraint_id_sample(data_directory, check_unique_generic_constraint_id, n=1000)
 
     # interval_index = list(set([i[:2] for i in c3_df.index.to_list()]))
@@ -1018,5 +1018,5 @@ if __name__ == '__main__':
     #
     # c3_df = c3_df.rename_axis(['day', 'interval', 'region'])
     # c3_df.join(c6_df).join(c7_df)
-    # c10 = check_region_net_export_calculation(cdata, 'VIC1', '0')
+    c10 = check_region_net_export_calculation(cdata, 'VIC1', '0')
     # c11, c11_df, c11_max = check_trader_what_if_initial_mw_sample(data_directory, n=1000)

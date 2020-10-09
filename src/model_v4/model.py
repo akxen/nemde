@@ -486,7 +486,8 @@ def define_constraint_violation_penalty_expressions(m):
     def trader_fcas_joint_ramping_up_rule(m, i, j):
         """Penalty for violating FCAS constraint - generator joint ramping up"""
 
-        return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, j]
+        # return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, j]
+        return m.P_CVF_AS_MAX_AVAIL_PRICE * m.V_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, j]
 
     # Penalty factor for generator FCAS joint ramping up constraint
     m.E_CV_TRADER_FCAS_JOINT_RAMPING_UP = pyo.Expression(m.S_TRADER_OFFERS, rule=trader_fcas_joint_ramping_up_rule)
@@ -494,7 +495,8 @@ def define_constraint_violation_penalty_expressions(m):
     def trader_fcas_joint_ramping_down_rule(m, i, j):
         """Penalty for violating FCAS constraint - generator joint ramping down"""
 
-        return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, j]
+        # return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, j]
+        return m.P_CVF_AS_MAX_AVAIL_PRICE * m.V_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, j]
 
     # Penalty factor for generator FCAS joint ramping up constraint
     m.E_CV_TRADER_FCAS_JOINT_RAMPING_DOWN = pyo.Expression(m.S_TRADER_OFFERS, rule=trader_fcas_joint_ramping_down_rule)
@@ -502,7 +504,9 @@ def define_constraint_violation_penalty_expressions(m):
     def trader_fcas_joint_capacity_rhs_rule(m, i, j):
         """Joint capacity constraint RHS of trapezium"""
 
-        return m.P_CVF_AS_ENABLEMENT_MAX_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RHS[i, j]
+        # return m.P_CVF_AS_ENABLEMENT_MAX_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RHS[i, j]
+        return m.P_CVF_AS_MAX_AVAIL_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RHS[i, j]
+        # return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RHS[i, j]
 
     # Constraint violation for joint capacity constraint - RHS of trapezium
     m.E_CV_TRADER_FCAS_JOINT_CAPACITY_RHS = pyo.Expression(m.S_TRADER_OFFERS, rule=trader_fcas_joint_capacity_rhs_rule)
@@ -510,7 +514,9 @@ def define_constraint_violation_penalty_expressions(m):
     def trader_fcas_joint_capacity_lhs_rule(m, i, j):
         """Joint capacity constraint LHS of trapezium"""
 
-        return m.P_CVF_AS_ENABLEMENT_MIN_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LHS[i, j]
+        # return m.P_CVF_AS_ENABLEMENT_MIN_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LHS[i, j]
+        return m.P_CVF_AS_MAX_AVAIL_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LHS[i, j]
+        # return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LHS[i, j]
 
     # Constraint violation for joint capacity constraint - LHS of trapezium
     m.E_CV_TRADER_FCAS_JOINT_CAPACITY_LHS = pyo.Expression(m.S_TRADER_OFFERS, rule=trader_fcas_joint_capacity_lhs_rule)
@@ -518,7 +524,9 @@ def define_constraint_violation_penalty_expressions(m):
     def trader_fcas_energy_regulating_rhs_rule(m, i, j):
         """Energy regulating FCAS constraint RHS of trapezium"""
 
-        return m.P_CVF_AS_ENABLEMENT_MAX_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RHS[i, j]
+        # return m.P_CVF_AS_ENABLEMENT_MAX_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RHS[i, j]
+        return m.P_CVF_AS_MAX_AVAIL_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RHS[i, j]
+        # return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RHS[i, j]
 
     # Constraint violation for joint energy regulating FCAS constraint - RHS of trapezium
     m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RHS = pyo.Expression(m.S_TRADER_OFFERS,
@@ -527,7 +535,9 @@ def define_constraint_violation_penalty_expressions(m):
     def trader_fcas_energy_regulating_lhs_rule(m, i, j):
         """Energy regulating FCAS constraint LHS of trapezium"""
 
-        return m.P_CVF_AS_ENABLEMENT_MIN_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LHS[i, j]
+        # return m.P_CVF_AS_ENABLEMENT_MIN_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LHS[i, j]
+        return m.P_CVF_AS_MAX_AVAIL_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LHS[i, j]
+        # return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LHS[i, j]
 
     # Constraint violation for joint energy regulating FCAS constraint - RHS of trapezium
     m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LHS = pyo.Expression(m.S_TRADER_OFFERS,
@@ -1091,10 +1101,10 @@ def define_fcas_expressions(m):
 def define_tie_breaking_expressions(m):
     """Tie-breaking expressions"""
 
-    # Tie break cost TODO: Note that tie-break price of 1e-5 gives better results than 1e-6.
+    # Tie break cost TODO: Note that tie-break price of 1e-4 gives better results than 1e-6.
     m.E_TRADER_TIE_BREAK_COST = pyo.Expression(
         # expr=sum(m.P_TIE_BREAK_PRICE * (m.V_TRADER_SLACK_1[i] + m.V_TRADER_SLACK_2[i]) for i in m.S_TRADER_PRICE_TIED)
-        expr=sum(1e-4 * (m.V_TRADER_SLACK_1[i] + m.V_TRADER_SLACK_2[i]) for i in m.S_TRADER_PRICE_TIED)
+        expr=sum(1e-2 * (m.V_TRADER_SLACK_1[i] + m.V_TRADER_SLACK_2[i]) for i in m.S_TRADER_PRICE_TIED)
     )
 
     return m
@@ -1494,8 +1504,9 @@ def define_fcas_constraints(m, data):
             usc = utils.fcas.get_upper_slope_coefficient(data, i, j)
             return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + (usc * m.V_TRADER_TOTAL_OFFER[i, j])
                     + m.V_TRADER_TOTAL_OFFER[i, 'R5RE']
-                    <= m.P_TRADER_FCAS_ENABLEMENT_MAX[i, j] + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RHS[i, j])
-
+                    <= m.P_TRADER_FCAS_ENABLEMENT_MAX[i, j]
+                    + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RHS[i, j]
+                    )
         else:
             usc = utils.fcas.get_upper_slope_coefficient(data, i, j)
             return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + (usc * m.V_TRADER_TOTAL_OFFER[i, j])
@@ -1991,6 +2002,8 @@ def define_fast_start_unit_inflexibility_constraints(m):
         t4_end = t1 + t2 + t3 + t4
 
         # Get effective mode
+        # TODO: need to fix this in the future - possible that unit in mode 0 has EnergyTarget > 0. Two NEMDE runs must
+        # be performed. See fast start unit docs.
         if mode == '0':
             effective_mode = '0'
         elif minutes <= t1_end:
@@ -2236,7 +2249,7 @@ def solve_model(m):
     """Solve model"""
 
     # Setup solver
-    solver_options = {'mip tolerances mipgap': 1e-9}
+    solver_options = {'mip tolerances mipgap': 1e-12}
     # solver_options = {}
     opt = pyo.SolverFactory('cplex', solver_io='mps')
 
@@ -2758,7 +2771,7 @@ def check_model(data_dir, n=5):
     return summary
 
 
-def save_case_json(data_dir, year, month, day, interval):
+def save_case_json(data_dir, year, month, day, interval, overwrite=True):
     """Save casefile in JSON format for inspection"""
 
     # Case data in json format
@@ -2767,8 +2780,14 @@ def save_case_json(data_dir, year, month, day, interval):
     # Get NEMDE model data as a Python dictionary
     data = json.loads(data_json)
 
-    with open(f'example-{year}-{month:02}-{day:02}-{interval:03}.json', 'w') as f:
-        json.dump(data, f)
+    # Filename for JSON data
+    filename = f'example-{year}-{month:02}-{day:02}-{interval:03}.json'
+
+    if filename in os.listdir(os.path.dirname(__file__)) and not overwrite:
+        pass
+    else:
+        with open(filename, 'w') as f:
+            json.dump(data, f)
 
 
 def get_observed_fcas_availability(data_dir, tmp_dir):
@@ -2879,73 +2898,99 @@ def check_constraint_violation(m):
           pyo.value(sum(m.E_CV_INTERCONNECTOR_REVERSE_PENALTY[i] for i in m.S_INTERCONNECTORS)))
 
 
+def get_positive_variables(obj):
+    """Get all variables that are > 0"""
+
+    return [(i, obj[i].value) for i in obj.keys() if obj[i].value > 0]
+
+
 if __name__ == '__main__':
     # Directory containing case data
     data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
                                   os.path.pardir, os.path.pardir, 'nemweb', 'Reports', 'Data_Archive', 'NEMDE',
                                   'zipped')
 
-    sample_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, 'data')
-    tmp_directory = os.path.join(os.path.dirname(__file__), 'tmp')
+    # Directory containing model check results
+    check_directory = os.path.join(os.path.dirname(__file__), 'output', 'check')
 
-    # Define the dispatch interval to investigate
-    di_year, di_month, di_day, di_interval = 2019, 10, 4, 179
-    di_case_id = f'{di_year}{di_month:02}{di_day:02}{di_interval:03}'
 
-    # Case data in json format
-    case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, di_year, di_month, di_day, di_interval)
-    save_case_json(data_directory, di_year, di_month, di_day, di_interval)
-
-    # Get NEMDE model data as a Python dictionary
-    cdata = json.loads(case_data_json)
-
-    # Preprocessed case data
-    intervention_status = utils.lookup.get_intervention_status(cdata, 'physical')
-    # intervention_status = '0'
-    model_data = utils.data.parse_case_data_json(case_data_json, intervention_status)
-
-    # Construct model
-    model = construct_model(model_data, cdata)
-
-    # Perform model checks
-    # df_fixed_demand_check = check_region_fixed_demand_calculation_sample(data_directory, n=1000)
-    # df_rhs = check_generic_constraint_rhs_sample(data_directory, n=1000)
-
-    # Fix variables (debugging)
-    # model = fix_interconnector_flow_solution(model, cdata, intervention_status)
-    # model = fix_trader_solution(model, cdata, intervention_status, ['ENOF', 'LDOF'])
-    # model = fix_trader_solution(model, cdata, intervention_status, ['R5RE', 'L5RE'])
-
-    # Solve model
-    model = solve_model(model)
-
-    # Extract solution
-    model_solution = utils.solution.get_model_solution(model)
-
-    # Check solution
-    _, df_trader_solution = utils.analysis.check_trader_solution(cdata, model_solution, intervention_status)
-    df_fcas_solution = check_fcas_solution(cdata, model_solution, intervention_status, di_case_id, sample_directory,
-                                           tmp_directory)
-    utils.analysis.plot_trader_solution_difference(cdata, model_solution, intervention_status)
-
-    # Get solution report
-    get_solution_report(cdata, model, intervention_status)
-
-    # Check constraint violation
-    check_constraint_violation(model)
-
-    # # Check model for a random selection of dispatch intervals
-    # model_output = check_model(data_directory, n=200)
+    # sample_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, 'data')
+    # tmp_directory = os.path.join(os.path.dirname(__file__), 'tmp')
     #
-    # df_fixed_demand_output = model_output['fixed_demand']
-    # df_net_export_output = model_output['net_export']
-    # df_energy_price_output = model_output['energy_price']
-    # df_dispatched_generation_output = model_output['dispatched_generation']
-    # df_dispatched_load_output = model_output['dispatched_load']
-    # df_interconnector_flow_output = model_output['interconnector_flow']
-    # df_interconnector_losses_output = model_output['interconnector_losses']
-    # df_trader_output_output = model_output['trader_output']
-    # df_objective_value_output = model_output['objective_value']
+    # # Define the dispatch interval to investigate
+    # di_year, di_month, di_day, di_interval = 2019, 10, 22, 235
+    # di_case_id = f'{di_year}{di_month:02}{di_day:02}{di_interval:03}'
+    #
+    # # Case data in json format
+    # case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, di_year, di_month, di_day, di_interval)
+    # save_case_json(data_directory, di_year, di_month, di_day, di_interval, overwrite=False)
+    #
+    # # Get NEMDE model data as a Python dictionary
+    # cdata = json.loads(case_data_json)
+    #
+    # # Preprocessed case data
+    # intervention_status = utils.lookup.get_intervention_status(cdata, 'physical')
+    # # intervention_status = '0'
+    # model_data = utils.data.parse_case_data_json(case_data_json, intervention_status)
+    #
+    # # Construct model
+    # model = construct_model(model_data, cdata)
+    #
+    # # Perform model checks
+    # # df_fixed_demand_check = check_region_fixed_demand_calculation_sample(data_directory, n=1000)
+    # # df_rhs = check_generic_constraint_rhs_sample(data_directory, n=1000)
+    #
+    # # Fix variables (debugging)
+    # model = fix_interconnector_flow_solution(model, cdata, intervention_status)
+    # # model = fix_trader_solution(model, cdata, intervention_status, ['ENOF', 'LDOF'])
+    # # model = fix_trader_solution(model, cdata, intervention_status, ['R5RE', 'L5RE'])
+    #
+    # # offer_types = ['R6SE', 'R60S', 'R5MI', 'L6SE', 'L60S', 'L5MI', 'L5RE', 'R5RE', 'ENOF', 'LDOF']
+    # # offer_types = ['R5RE', 'R6SE', 'R60S', 'R5MI', 'L5RE', 'L6SE', 'L60S', 'L5MI']
+    # # offer_types = ['R5RE', 'L5RE', 'L6SE', 'L60S', 'L5MI']
+    # # offer_types = ['ENOF', 'LDOF']
+    # # model = fix_trader_solution(model, cdata, intervention_status, offer_types)
+    #
+    # # model.V_TRADER_TOTAL_OFFER['TARONG#1', 'ENOF'].fix(286.02208)
+    # # model.V_TRADER_TOTAL_OFFER['TARONG#2', 'ENOF'].fix(286.02208)
+    #
+    # # Solve model
+    # model = solve_model(model)
+    #
+    # # Extract solution
+    # model_solution = utils.solution.get_model_solution(model)
+    #
+    # # Check solution
+    # _, df_trader_solution = utils.analysis.check_trader_solution(cdata, model_solution, intervention_status)
+    # df_fcas_solution = check_fcas_solution(cdata, model_solution, intervention_status, di_case_id, sample_directory,
+    #                                        tmp_directory)
+    # utils.analysis.plot_trader_solution_difference(cdata, model_solution, intervention_status)
+    #
+    # # Get solution report
+    # get_solution_report(cdata, model, intervention_status)
+    #
+    # # Check constraint violation
+    # check_constraint_violation(model)
 
-    # TODO: QPS2 is a fast start unit that is in mode 0 at start of interval but has EnergyTarget=11MW at end
-    # of interval. Think I need to use WhatIfInitialMW to check if unit will switch on over interval.
+    # Check model for a random selection of dispatch intervals
+    model_output = check_model(data_directory, n=1000)
+
+    df_fixed_demand_output = model_output['fixed_demand']
+    df_net_export_output = model_output['net_export']
+    df_energy_price_output = model_output['energy_price']
+    df_dispatched_generation_output = model_output['dispatched_generation']
+    df_dispatched_load_output = model_output['dispatched_load']
+    df_interconnector_flow_output = model_output['interconnector_flow']
+    df_interconnector_losses_output = model_output['interconnector_losses']
+    df_trader_output_output = model_output['trader_output']
+    df_objective_value_output = model_output['objective_value']
+
+    # Save results
+    df_fixed_demand_output.to_csv(os.path.join(check_directory, 'fixed_demand.csv'))
+    df_net_export_output.to_csv(os.path.join(check_directory, 'net_export.csv'))
+    df_dispatched_generation_output.to_csv(os.path.join(check_directory, 'dispatched_generation.csv'))
+    df_dispatched_load_output.to_csv(os.path.join(check_directory, 'dispatched_load.csv'))
+    df_interconnector_flow_output.to_csv(os.path.join(check_directory, 'interconnector_flow.csv'))
+    df_interconnector_losses_output.to_csv(os.path.join(check_directory, 'interconnector_losses.csv'))
+    df_trader_output_output.to_csv(os.path.join(check_directory, 'trader_output.csv'))
+    df_objective_value_output.to_csv(os.path.join(check_directory, 'objective_value.csv'))
