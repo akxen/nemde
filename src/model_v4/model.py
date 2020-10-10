@@ -350,6 +350,10 @@ def define_variables(m):
     m.V_CV_INTERCONNECTOR_FORWARD = pyo.Var(m.S_INTERCONNECTORS, within=pyo.NonNegativeReals)
     m.V_CV_INTERCONNECTOR_REVERSE = pyo.Var(m.S_INTERCONNECTORS, within=pyo.NonNegativeReals)
 
+    # Region surplus / deficit power
+    m.V_CV_REGION_GENERATION_SURPLUS = pyo.Var(m.S_REGIONS, within=pyo.NonNegativeReals)
+    m.V_CV_REGION_GENERATION_DEFICIT = pyo.Var(m.S_REGIONS, within=pyo.NonNegativeReals)
+
     # Loss model breakpoints and intervals
     m.V_LOSS = pyo.Var(m.S_INTERCONNECTORS)
     m.V_LOSS_LAMBDA = pyo.Var(m.S_INTERCONNECTOR_LOSS_MODEL_BREAKPOINTS, within=pyo.NonNegativeReals)
@@ -627,6 +631,22 @@ def define_constraint_violation_penalty_expressions(m):
     m.E_CV_INTERCONNECTOR_REVERSE_PENALTY = pyo.Expression(m.S_INTERCONNECTORS,
                                                            rule=interconnector_reverse_penalty_rule)
 
+    def region_power_surplus_penalty_rule(m, i):
+        """Surplus power in region"""
+
+        return m.P_CVF_ENERGY_SURPLUS_PRICE * m.V_CV_REGION_GENERATION_SURPLUS[i]
+
+    # Constraint violation penalty for region energy surplus
+    m.E_CV_REGION_SURPLUS_POWER = pyo.Expression(m.S_REGIONS, rule=region_power_surplus_penalty_rule)
+
+    def region_power_deficit_penalty_rule(m, i):
+        """Deficit power in region"""
+
+        return m.P_CVF_ENERGY_DEFICIT_PRICE * m.V_CV_REGION_GENERATION_DEFICIT[i]
+
+    # Constraint violation penalty for region energy surplus
+    m.E_CV_REGION_DEFICIT_POWER = pyo.Expression(m.S_REGIONS, rule=region_power_deficit_penalty_rule)
+
     # Sum of all constraint violation penalties
     m.E_CV_TOTAL_PENALTY = pyo.Expression(
         expr=sum(m.E_CV_GC_PENALTY[i] for i in m.S_GENERIC_CONSTRAINTS)
@@ -653,6 +673,8 @@ def define_constraint_violation_penalty_expressions(m):
              + sum(m.E_CV_MNSP_RAMP_DOWN_PENALTY[i] for i in m.S_MNSP_OFFERS)
              + sum(m.E_CV_INTERCONNECTOR_FORWARD_PENALTY[i] for i in m.S_INTERCONNECTORS)
              + sum(m.E_CV_INTERCONNECTOR_REVERSE_PENALTY[i] for i in m.S_INTERCONNECTORS)
+             + sum(m.E_CV_REGION_SURPLUS_POWER[i] for i in m.S_REGIONS)
+             + sum(m.E_CV_REGION_DEFICIT_POWER[i] for i in m.S_REGIONS)
     )
 
     return m
@@ -1359,10 +1381,11 @@ def define_region_constraints(m):
         FixedDemand + DispatchedLoad + NetExport = DispatchedGeneration
         """
         # TODO: check if a penalty factor needs to be applied here - probably not because captured by other expressions
-        return (m.E_REGION_DISPATCHED_GENERATION[r]
+        return (m.E_REGION_DISPATCHED_GENERATION[r] + m.V_CV_REGION_GENERATION_DEFICIT[r]
                 == m.E_REGION_FIXED_DEMAND[r]
                 + m.E_REGION_DISPATCHED_LOAD[r]
-                + m.E_REGION_NET_EXPORT[r])
+                + m.E_REGION_NET_EXPORT[r]
+                + m.V_CV_REGION_GENERATION_SURPLUS[r])
 
     # Power balance in each region
     m.C_POWER_BALANCE = pyo.Constraint(m.S_REGIONS, rule=power_balance_rule)
@@ -2249,7 +2272,16 @@ def solve_model(m):
     """Solve model"""
 
     # Setup solver
-    solver_options = {'mip tolerances mipgap': 1e-12}
+    solver_options = {
+        # 'mip tolerances mipgap': 1e-50,
+        'mip tolerances absmipgap': 1e-50,
+    }
+
+    # solver_options = {
+    #     'MIPGapAbs': 1e-20,
+    #     'MIPGap': 1e-20,
+    # }
+
     # solver_options = {}
     opt = pyo.SolverFactory('cplex', solver_io='mps')
 
@@ -2512,20 +2544,49 @@ def check_mnsp_flow_inverts_condition(data, intervention):
     return mnsp_flow_switches
 
 
-def check_known_unhandled_cases(data, intervention):
+def check_price_tied_condition(data, solution, intervention, trade_type):
+    """Price tied units may cause dispatch outcomes to vary from NEMDE solution"""
+
+    # Get trader solution
+    _, df = utils.analysis.check_trader_solution(data, solution, intervention)
+
+    # Units with a dispatch discrepancy
+    try:
+        units = df.loc[df.loc[:, 'abs_difference'] > 0.001, :].loc[(slice(None), trade_type), :]
+    except KeyError:
+        return 0, 0
+
+    # Unique dispatch band prices
+    unique_prices = units.loc[:, 'model_current_price'].unique()
+
+    return units.shape[0], len(unique_prices)
+
+
+def check_known_unhandled_cases(data, solution, intervention):
     """Run diagnostics to check if known unhandled cases are present"""
+
+    # Number of generators with an EnergyTarget discrepancy and the number of unique prices corresponding to those units
+    n_enof_discrepancy, n_enof_unique_current_prices = check_price_tied_condition(data, solution, intervention, 'ENOF')
+
+    # MNSP output
+    mnsp_initial_mw = utils.lookup.get_interconnector_collection_initial_condition_attribute(data, 'T-V-MNSP1',
+                                                                                             'InitialMW', float)
 
     # Run diagnostics on case data to check if known issues associated with case
     output = {
         'case_id': utils.lookup.get_case_attribute(data, '@CaseID', str),
         'fast_start_error': check_fast_start_error_condition(data, intervention),
         'mnsp_flow_inverts': check_mnsp_flow_inverts_condition(data, intervention),
+        'n_enof_discrepancy': n_enof_discrepancy,
+        'n_enof_unique_current_prices': n_enof_unique_current_prices,
+        'mnsp_initial_mw': mnsp_initial_mw,
+        'mnsp_target_flow': solution.get('interconnectors').get('T-V-MNSP1').get('Flow'),
     }
 
     return output
 
 
-def get_solution_report(data, m, intervention):
+def get_solution_report(data, m, solution, intervention):
     """Check solution"""
 
     # Columns to retain in DataFrame
@@ -2594,7 +2655,7 @@ def get_solution_report(data, m, intervention):
     print(df_objective_value)
 
     print('Unhandled cases')
-    unhandled_cases = check_known_unhandled_cases(data, intervention)
+    unhandled_cases = check_known_unhandled_cases(data, solution, intervention)
     df_unhandled_cases = pd.Series(unhandled_cases).T
     print(df_unhandled_cases)
 
@@ -2626,7 +2687,16 @@ def get_dispatch_interval_sample(n, seed=10):
     population_map = {i: j for i, j in enumerate(population)}
 
     # Random sample of dispatch intervals
-    sample_keys = np.random.choice(list(population_map.keys()), n, replace=False)
+    # sample_keys = np.random.choice(list(population_map.keys()), n, replace=False)
+    all_keys = list(population_map.keys())
+
+    # Shuffle keys to randomise sample (should be reproducible though because seed is set)
+    np.random.shuffle(all_keys)
+
+    # Sample of keys
+    sample_keys = all_keys[:n]
+
+    # Extract sample
     sample = [population_map[i] for i in sample_keys]
 
     return sample
@@ -2788,8 +2858,11 @@ def check_model(data_dir, sample=None, n=5):
         # Solve model
         m = solve_model(m)
 
+        # Extract model solution
+        solution = utils.solution.get_model_solution(m)
+
         # Append solution report to results container
-        output.append(get_solution_report(case_data, m, intervention))
+        output.append(get_solution_report(case_data, m, solution, intervention))
 
     def extract_values(results, key, sort_key):
         """Extract data and convert to DataFrame"""
@@ -2974,7 +3047,7 @@ if __name__ == '__main__':
     tmp_directory = os.path.join(os.path.dirname(__file__), 'tmp')
 
     # Define the dispatch interval to investigate
-    di_year, di_month, di_day, di_interval = 2019, 10, 6, 47
+    di_year, di_month, di_day, di_interval = 2019, 10, 8, 6
     di_case_id = f'{di_year}{di_month:02}{di_day:02}{di_interval:03}'
 
     # Case data in json format
@@ -3020,16 +3093,17 @@ if __name__ == '__main__':
     utils.analysis.plot_trader_solution_difference(cdata, model_solution, intervention_status)
 
     # Get solution report
-    get_solution_report(cdata, model, intervention_status)
+    get_solution_report(cdata, model, model_solution, intervention_status)
 
     # Check constraint violation
     check_constraint_violation(model)
 
     # # Check model for a random selection of dispatch intervals
-    # interrogate_sample = (pd.read_csv(os.path.join(check_directory, 'net_export.csv'))
-    #                       .apply(lambda x: (int(str(x['case_id'])[-6:-3]), int(str(x['case_id'])[-3:])), axis=1)
-    #                       .unique().tolist()[:10])
-    # model_output = check_model(data_directory, interrogate_sample)
+    # # interrogate_sample = (pd.read_csv(os.path.join(check_directory, 'net_export.csv'))
+    # #                       .apply(lambda x: (int(str(x['case_id'])[-6:-3]), int(str(x['case_id'])[-3:])), axis=1)
+    # #                       .unique().tolist()[:10])
+    # # model_output = check_model(data_directory, interrogate_sample)
+    # model_output = check_model(data_directory, n=10)
     #
     # df_fixed_demand_output = model_output['fixed_demand']
     # df_net_export_output = model_output['net_export']
@@ -3041,15 +3115,14 @@ if __name__ == '__main__':
     # df_trader_output_output = model_output['trader_output']
     # df_objective_value_output = model_output['objective_value']
     # df_unhandled_cases_output = model_output['unhandled_cases']
-    #
-    # # # Save results
-    # # df_fixed_demand_output.to_csv(os.path.join(check_directory, 'fixed_demand.csv'))
-    # # df_net_export_output.to_csv(os.path.join(check_directory, 'net_export.csv'))
-    # # df_dispatched_generation_output.to_csv(os.path.join(check_directory, 'dispatched_generation.csv'))
-    # # df_dispatched_load_output.to_csv(os.path.join(check_directory, 'dispatched_load.csv'))
-    # # df_interconnector_flow_output.to_csv(os.path.join(check_directory, 'interconnector_flow.csv'))
-    # # df_interconnector_losses_output.to_csv(os.path.join(check_directory, 'interconnector_losses.csv'))
-    # # df_trader_output_output.to_csv(os.path.join(check_directory, 'trader_output.csv'))
-    # # df_objective_value_output.to_csv(os.path.join(check_directory, 'objective_value.csv'))
 
-    # len(df_trader_solution.loc[df_trader_solution.loc[:, 'abs_difference'] > 0.001, :].loc[(slice(None), 'ENOF'), 'model_marginal_price'].unique())
+    # # Save results
+    # df_fixed_demand_output.to_csv(os.path.join(check_directory, 'fixed_demand.csv'))
+    # df_net_export_output.to_csv(os.path.join(check_directory, 'net_export.csv'))
+    # df_dispatched_generation_output.to_csv(os.path.join(check_directory, 'dispatched_generation.csv'))
+    # df_dispatched_load_output.to_csv(os.path.join(check_directory, 'dispatched_load.csv'))
+    # df_interconnector_flow_output.to_csv(os.path.join(check_directory, 'interconnector_flow.csv'))
+    # df_interconnector_losses_output.to_csv(os.path.join(check_directory, 'interconnector_losses.csv'))
+    # df_trader_output_output.to_csv(os.path.join(check_directory, 'trader_output.csv'))
+    # df_objective_value_output.to_csv(os.path.join(check_directory, 'objective_value.csv'))
+    # df_unhandled_cases_output.to_csv(os.path.join(check_directory, 'unhandled_cases.csv'))

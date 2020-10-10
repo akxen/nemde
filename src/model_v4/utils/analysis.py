@@ -50,7 +50,7 @@ def get_observed_region_solution(data):
     return out
 
 
-def get_trader_marginal_price_band(data, trader_id, trade_type, output):
+def get_trader_marginal_price_band(data, trader_id, trade_type, output, mode):
     """Get marginal price for a given trader"""
 
     # Trader price and quantity bands
@@ -70,9 +70,19 @@ def get_trader_marginal_price_band(data, trader_id, trade_type, output):
     for i in range(1, 11):
         total_output += quantity_bands[f'BandAvail{i}']
 
-        # Check if aggregate output is greater than the specified level
-        if total_output > output:
-            # Return price corresponding to band
+        # The cost corresponding to the dispatch band (may be at end of band so marginal cost can differ)
+        if mode == 'current':
+            band_condition = total_output >= output
+
+        # Check if aggregate output is greater than the specified level - the cost to produce an additional unit
+        elif mode == 'marginal':
+            band_condition = total_output > output
+
+        else:
+            raise Exception(f'Unhandled mode: {mode}')
+
+        if band_condition:
+            # Return price corresponding to quantity band
             return price_bands[f'PriceBand{i}']
 
     # Max price (highest price band)
@@ -112,9 +122,13 @@ def check_trader_solution(data, solution, intervention):
             # Observed output
             observed_output = observed[(trader_id, intervention)][key_map[trade_type]]
 
-            # Model and observed marginal price bands
-            model_marginal_price = get_trader_marginal_price_band(data, trader_id, trade_type, target)
-            observed_marginal_price = get_trader_marginal_price_band(data, trader_id, trade_type, observed_output)
+            # Model and observed marginal price bands - cost to produce an incremental additional unit
+            mod_marginal_p = get_trader_marginal_price_band(data, trader_id, trade_type, target, 'marginal')
+            obs_marginal_p = get_trader_marginal_price_band(data, trader_id, trade_type, observed_output, 'marginal')
+
+            # Price corresponding to dispatch band
+            mod_current_p = get_trader_marginal_price_band(data, trader_id, trade_type, target, 'current')
+            obs_current_p = get_trader_marginal_price_band(data, trader_id, trade_type, observed_output, 'current')
 
             # Observed marginal price band
             out[trader_id][trade_type] = {
@@ -125,8 +139,10 @@ def check_trader_solution(data, solution, intervention):
                 'abs_difference': abs(target - observed_output),
                 'region_id': region_id,
                 'region_price': region_price,
-                'model_marginal_price': model_marginal_price,
-                'observed_marginal_price': observed_marginal_price,
+                'model_marginal_price': mod_marginal_p,
+                'model_current_price': mod_current_p,
+                'observed_marginal_price': obs_marginal_p,
+                'observed_current_price': obs_current_p,
             }
 
     # Convert to DataFrame and sort by error corresponding to each unit
