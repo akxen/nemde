@@ -209,9 +209,6 @@ def define_parameters(m, data):
     m.P_MNSP_FROM_REGION_LF_EXPORT = pyo.Param(m.S_MNSPS, initialize=data['P_MNSP_FROM_REGION_LF_EXPORT'])
     m.P_MNSP_FROM_REGION_LF_IMPORT = pyo.Param(m.S_MNSPS, initialize=data['P_MNSP_FROM_REGION_LF_IMPORT'])
 
-    # MNSP loss price
-    m.P_MNSP_LOSS_PRICE = pyo.Param(initialize=data['P_MNSP_LOSS_PRICE'])
-
     # Initial region demand
     m.P_REGION_INITIAL_DEMAND = pyo.Param(m.S_REGIONS, initialize=data['P_REGION_INITIAL_DEMAND'])
 
@@ -230,7 +227,7 @@ def define_parameters(m, data):
     # Generic constraint violation factors
     m.P_CVF_GC = pyo.Param(m.S_GENERIC_CONSTRAINTS, initialize=data['P_CVF_GC'])
 
-    # Value of lost load
+    # Value of lost load TODO: check if necessary - not used
     m.P_CVF_VOLL = pyo.Param(initialize=data['P_CVF_VOLL'])
 
     # Energy deficit price
@@ -260,16 +257,21 @@ def define_parameters(m, data):
     # MNSP capacity price (assume for constraint ensuring max available capacity not exceeded)
     m.P_CVF_MNSP_CAPACITY_PRICE = pyo.Param(initialize=data['P_CVF_MNSP_CAPACITY_PRICE'])
 
-    # Ancillary services profile price (assume for constraint ensure FCAS trapezium not violated)
+    # MNSP loss price TODO: check - not used
+    m.P_CVF_MNSP_LOSS_PRICE = pyo.Param(initialize=data['P_MNSP_LOSS_PRICE'])
+
+    # Ancillary services profile price (assume for constraint ensure FCAS trapezium not violated) TODO: check - not used
     m.P_CVF_AS_PROFILE_PRICE = pyo.Param(initialize=data['P_CVF_AS_PROFILE_PRICE'])
 
     # Ancillary services max available price (assume for constraint ensure max available amount not exceeded)
     m.P_CVF_AS_MAX_AVAIL_PRICE = pyo.Param(initialize=data['P_CVF_AS_MAX_AVAIL_PRICE'])
 
     # Ancillary services enablement min price (assume for constraint ensure FCAS > enablement min if active)
+    # TODO: check - not used
     m.P_CVF_AS_ENABLEMENT_MIN_PRICE = pyo.Param(initialize=data['P_CVF_AS_ENABLEMENT_MIN_PRICE'])
 
     # Ancillary services enablement max price (assume for constraint ensure FCAS < enablement max if active)
+    # TODO: check - not used
     m.P_CVF_AS_ENABLEMENT_MAX_PRICE = pyo.Param(initialize=data['P_CVF_AS_ENABLEMENT_MAX_PRICE'])
 
     # Interconnector power flow violation price
@@ -278,13 +280,13 @@ def define_parameters(m, data):
     # Trader fast start inflexibility constraint violation price
     m.P_CVF_FAST_START_PRICE = pyo.Param(initialize=data['P_CVF_FAST_START_PRICE'])
 
-    # Generic constraint price
+    # Generic constraint price TODO: check - not used
     m.P_CVF_GENERIC_CONSTRAINT_PRICE = pyo.Param(initialize=data['P_CVF_GENERIC_CONSTRAINT_PRICE'])
 
-    # Satisfactory network constraint price
+    # Satisfactory network constraint price TODO: check - not used
     m.P_CVF_SATISFACTORY_NETWORK_PRICE = pyo.Param(initialize=data['P_CVF_SATISFACTORY_NETWORK_PRICE'])
 
-    # Tie-break price
+    # Tie-break price TODO: check - not used
     m.P_TIE_BREAK_PRICE = pyo.Param(initialize=data['P_TIE_BREAK_PRICE'])
 
     return m
