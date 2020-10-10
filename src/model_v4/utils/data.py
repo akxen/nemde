@@ -1221,6 +1221,8 @@ def parse_case_data_json(data, intervention) -> dict:
         'P_CVF_AS_ENABLEMENT_MAX_PRICE': get_case_attribute(data_dict, '@ASEnablementMaxPrice'),
         'P_CVF_INTERCONNECTOR_PRICE': get_case_attribute(data_dict, '@InterconnectorPrice'),
         'P_CVF_FAST_START_PRICE': get_case_attribute(data_dict, '@FastStartPrice'),
+        'P_CVF_GENERIC_CONSTRAINT_PRICE': get_case_attribute(data_dict, '@GenericConstraintPrice'),
+        'P_CVF_SATISFACTORY_NETWORK_PRICE': get_case_attribute(data_dict, '@Satisfactory_Network_Price'),
         'P_TIE_BREAK_PRICE': get_case_attribute(data_dict, '@TieBreakPrice'),
         'preprocessed': {
             'GC_LHS_TERMS': get_generic_constraint_lhs_terms(data_dict),

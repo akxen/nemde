@@ -278,6 +278,12 @@ def define_parameters(m, data):
     # Trader fast start inflexibility constraint violation price
     m.P_CVF_FAST_START_PRICE = pyo.Param(initialize=data['P_CVF_FAST_START_PRICE'])
 
+    # Generic constraint price
+    m.P_CVF_GENERIC_CONSTRAINT_PRICE = pyo.Param(initialize=data['P_CVF_GENERIC_CONSTRAINT_PRICE'])
+
+    # Satisfactory network constraint price
+    m.P_CVF_SATISFACTORY_NETWORK_PRICE = pyo.Param(initialize=data['P_CVF_SATISFACTORY_NETWORK_PRICE'])
+
     # Tie-break price
     m.P_TIE_BREAK_PRICE = pyo.Param(initialize=data['P_TIE_BREAK_PRICE'])
 
