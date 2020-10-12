@@ -950,10 +950,10 @@ def get_generic_constraint_lhs_terms(data) -> dict:
     return {i.get('@ConstraintID'): parse_constraint(i) for i in constraints}
 
 
-def get_case_attribute(data, attribute) -> float:
+def get_case_attribute(data, attribute, func):
     """Extract case attribute"""
 
-    return float(data.get('NEMSPDCaseFile').get('NemSpdInputs').get('Case')[attribute])
+    return func(data.get('NEMSPDCaseFile').get('NemSpdInputs').get('Case')[attribute])
 
 
 def get_trader_solution(data, intervention) -> dict:
@@ -1154,6 +1154,8 @@ def parse_case_data_json(data, intervention) -> dict:
         'S_INTERCONNECTORS': get_interconnector_index(data_dict),
         'S_INTERCONNECTOR_LOSS_MODEL_BREAKPOINTS': get_interconnector_loss_model_breakpoint_index(data_dict),
         'S_INTERCONNECTOR_LOSS_MODEL_INTERVALS': get_interconnector_loss_model_interval_index(data_dict),
+        'P_CASE_ID': get_case_attribute(data_dict, '@CaseID', str),
+        'P_INTERVENTION_STATUS': intervention,
         'P_TRADER_PRICE_BAND': get_trader_price_bands(data_dict),
         'P_TRADER_QUANTITY_BAND': get_trader_quantity_bands(data_dict),
         'P_TRADER_MAX_AVAILABLE': get_trader_period_trade_attribute(data_dict, '@MaxAvail', float),
@@ -1196,7 +1198,7 @@ def parse_case_data_json(data, intervention) -> dict:
         'P_MNSP_FROM_REGION_LF': get_mnsp_period_collection_attribute(data_dict, '@FromRegionLF', float),
         'P_MNSP_FROM_REGION_LF_EXPORT': get_mnsp_period_collection_attribute(data_dict, '@FromRegionLFExport', float),
         'P_MNSP_FROM_REGION_LF_IMPORT': get_mnsp_period_collection_attribute(data_dict, '@FromRegionLFImport', float),
-        'P_MNSP_LOSS_PRICE': get_case_attribute(data_dict, '@MNSPLossesPrice'),
+        'P_MNSP_LOSS_PRICE': get_case_attribute(data_dict, '@MNSPLossesPrice', float),
         'P_MNSP_RAMP_UP_RATE': get_mnsp_quantity_band_attribute(data_dict, '@RampUpRate', float),
         'P_MNSP_RAMP_DOWN_RATE': get_mnsp_quantity_band_attribute(data_dict, '@RampDnRate', float),
         'P_REGION_INITIAL_DEMAND': get_region_initial_condition_attribute(data_dict, 'InitialDemand', float),
@@ -1205,25 +1207,25 @@ def parse_case_data_json(data, intervention) -> dict:
         'P_GC_RHS': get_generic_constraint_rhs(data_dict, intervention),
         'P_GC_TYPE': get_generic_constraint_collection_attribute(data_dict, '@Type', str),
         'P_CVF_GC': get_generic_constraint_collection_attribute(data_dict, '@ViolationPrice', float),
-        'P_CVF_VOLL': get_case_attribute(data_dict, '@VoLL'),
-        'P_CVF_ENERGY_DEFICIT_PRICE': get_case_attribute(data_dict, '@EnergyDeficitPrice'),
-        'P_CVF_ENERGY_SURPLUS_PRICE': get_case_attribute(data_dict, '@EnergySurplusPrice'),
-        'P_CVF_UIGF_SURPLUS_PRICE': get_case_attribute(data_dict, '@UIGFSurplusPrice'),
-        'P_CVF_RAMP_RATE_PRICE': get_case_attribute(data_dict, '@RampRatePrice'),
-        'P_CVF_CAPACITY_PRICE': get_case_attribute(data_dict, '@CapacityPrice'),
-        'P_CVF_OFFER_PRICE': get_case_attribute(data_dict, '@OfferPrice'),
-        'P_CVF_MNSP_OFFER_PRICE': get_case_attribute(data_dict, '@MNSPOfferPrice'),
-        'P_CVF_MNSP_RAMP_RATE_PRICE': get_case_attribute(data_dict, '@MNSPRampRatePrice'),
-        'P_CVF_MNSP_CAPACITY_PRICE': get_case_attribute(data_dict, '@MNSPCapacityPrice'),
-        'P_CVF_AS_PROFILE_PRICE': get_case_attribute(data_dict, '@ASProfilePrice'),
-        'P_CVF_AS_MAX_AVAIL_PRICE': get_case_attribute(data_dict, '@ASMaxAvailPrice'),
-        'P_CVF_AS_ENABLEMENT_MIN_PRICE': get_case_attribute(data_dict, '@ASEnablementMinPrice'),
-        'P_CVF_AS_ENABLEMENT_MAX_PRICE': get_case_attribute(data_dict, '@ASEnablementMaxPrice'),
-        'P_CVF_INTERCONNECTOR_PRICE': get_case_attribute(data_dict, '@InterconnectorPrice'),
-        'P_CVF_FAST_START_PRICE': get_case_attribute(data_dict, '@FastStartPrice'),
-        'P_CVF_GENERIC_CONSTRAINT_PRICE': get_case_attribute(data_dict, '@GenericConstraintPrice'),
-        'P_CVF_SATISFACTORY_NETWORK_PRICE': get_case_attribute(data_dict, '@Satisfactory_Network_Price'),
-        'P_TIE_BREAK_PRICE': get_case_attribute(data_dict, '@TieBreakPrice'),
+        'P_CVF_VOLL': get_case_attribute(data_dict, '@VoLL', float),
+        'P_CVF_ENERGY_DEFICIT_PRICE': get_case_attribute(data_dict, '@EnergyDeficitPrice', float),
+        'P_CVF_ENERGY_SURPLUS_PRICE': get_case_attribute(data_dict, '@EnergySurplusPrice', float),
+        'P_CVF_UIGF_SURPLUS_PRICE': get_case_attribute(data_dict, '@UIGFSurplusPrice', float),
+        'P_CVF_RAMP_RATE_PRICE': get_case_attribute(data_dict, '@RampRatePrice', float),
+        'P_CVF_CAPACITY_PRICE': get_case_attribute(data_dict, '@CapacityPrice', float),
+        'P_CVF_OFFER_PRICE': get_case_attribute(data_dict, '@OfferPrice', float),
+        'P_CVF_MNSP_OFFER_PRICE': get_case_attribute(data_dict, '@MNSPOfferPrice', float),
+        'P_CVF_MNSP_RAMP_RATE_PRICE': get_case_attribute(data_dict, '@MNSPRampRatePrice', float),
+        'P_CVF_MNSP_CAPACITY_PRICE': get_case_attribute(data_dict, '@MNSPCapacityPrice', float),
+        'P_CVF_AS_PROFILE_PRICE': get_case_attribute(data_dict, '@ASProfilePrice', float),
+        'P_CVF_AS_MAX_AVAIL_PRICE': get_case_attribute(data_dict, '@ASMaxAvailPrice', float),
+        'P_CVF_AS_ENABLEMENT_MIN_PRICE': get_case_attribute(data_dict, '@ASEnablementMinPrice', float),
+        'P_CVF_AS_ENABLEMENT_MAX_PRICE': get_case_attribute(data_dict, '@ASEnablementMaxPrice', float),
+        'P_CVF_INTERCONNECTOR_PRICE': get_case_attribute(data_dict, '@InterconnectorPrice', float),
+        'P_CVF_FAST_START_PRICE': get_case_attribute(data_dict, '@FastStartPrice', float),
+        'P_CVF_GENERIC_CONSTRAINT_PRICE': get_case_attribute(data_dict, '@GenericConstraintPrice', float),
+        'P_CVF_SATISFACTORY_NETWORK_PRICE': get_case_attribute(data_dict, '@Satisfactory_Network_Price', float),
+        'P_TIE_BREAK_PRICE': get_case_attribute(data_dict, '@TieBreakPrice', float),
         'preprocessed': {
             'GC_LHS_TERMS': get_generic_constraint_lhs_terms(data_dict),
             'FCAS_TRAPEZIUM': get_trader_fcas_trapezium(data_dict),

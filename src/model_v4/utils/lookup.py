@@ -69,7 +69,7 @@ def get_region_solution_attribute(data, region_id, attribute, func, intervention
         if (i['@RegionID'] == region_id) and (i['@Intervention'] == intervention):
             return func(i[attribute])
 
-    raise LookupError('Attribute not found:', region_id, attribute)
+    raise LookupError('Attribute not found:', region_id, attribute, intervention)
 
 
 def get_trader_collection_attribute(data, trader_id, attribute, func):

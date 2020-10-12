@@ -81,6 +81,12 @@ def define_sets(m, data):
 def define_parameters(m, data):
     """Define model parameters"""
 
+    # Intervention status
+    m.P_INTERVENTION_STATUS = pyo.Param(initialize=data['P_INTERVENTION_STATUS'])
+
+    # Case ID
+    m.P_CASE_ID = pyo.Param(initialize=data['P_CASE_ID'])
+
     # Price bands for traders (generators / loads)
     m.P_TRADER_PRICE_BAND = pyo.Param(m.S_TRADER_OFFERS, m.S_BANDS, initialize=data['P_TRADER_PRICE_BAND'])
 
@@ -3201,6 +3207,11 @@ if __name__ == '__main__':
 
     # Check constraint violation
     check_constraint_violation(model)
+
+    t0 = time.time()
+    a = utils.solution.get_model_solution2(model)
+    b = utils.solution.get_model_comparison(cdata, a)
+    print('completed', time.time() - t0)
 
     # Check model for a random selection of dispatch intervals
     # interrogate_sample = (pd.read_csv(os.path.join(check_directory, 'net_export.csv'))
