@@ -374,7 +374,7 @@ def get_trader_fast_start_attribute(data, attribute, func) -> dict:
     # Fast start traders
     fast_start_traders = get_trader_fast_start_index(data)
 
-    return {i['@TraderID']: func(i[attribute]) for i in traders if i['@TraderID'] in fast_start_traders}
+    return {i['@TraderID']: func(i.get(attribute)) if i.get(attribute) is not None else i.get(attribute) for i in traders if i['@TraderID'] in fast_start_traders}
 
 
 def get_interconnector_collection_attribute(data, attribute, func) -> dict:

@@ -348,6 +348,8 @@ def define_variables(m):
     m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RHS = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
     m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LHS = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
     m.V_CV_TRADER_FCAS_MAX_AVAILABLE = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
+    m.V_CV_TRADER_FCAS_ENABLEMENT_MIN = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
+    m.V_CV_TRADER_FCAS_ENABLEMENT_MAX = pyo.Var(m.S_TRADER_OFFERS, within=pyo.NonNegativeReals)
 
     # Inflexibility profile violation
     m.V_CV_TRADER_INFLEXIBILITY_PROFILE = pyo.Var(m.S_TRADER_FAST_START, within=pyo.NonNegativeReals)
@@ -516,8 +518,8 @@ def define_constraint_violation_penalty_expressions(m):
     def trader_fcas_joint_capacity_rhs_rule(m, i, j):
         """Joint capacity constraint RHS of trapezium"""
 
-        return m.P_CVF_AS_ENABLEMENT_MAX_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RHS[i, j]
-        # return m.P_CVF_AS_MAX_AVAIL_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RHS[i, j]
+        # return m.P_CVF_AS_ENABLEMENT_MAX_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RHS[i, j]
+        return m.P_CVF_AS_MAX_AVAIL_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RHS[i, j]
         # return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RHS[i, j]
 
     # Constraint violation for joint capacity constraint - RHS of trapezium
@@ -526,8 +528,8 @@ def define_constraint_violation_penalty_expressions(m):
     def trader_fcas_joint_capacity_lhs_rule(m, i, j):
         """Joint capacity constraint LHS of trapezium"""
 
-        return m.P_CVF_AS_ENABLEMENT_MIN_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LHS[i, j]
-        # return m.P_CVF_AS_MAX_AVAIL_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LHS[i, j]
+        # return m.P_CVF_AS_ENABLEMENT_MIN_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LHS[i, j]
+        return m.P_CVF_AS_MAX_AVAIL_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LHS[i, j]
         # return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LHS[i, j]
 
     # Constraint violation for joint capacity constraint - LHS of trapezium
@@ -536,8 +538,8 @@ def define_constraint_violation_penalty_expressions(m):
     def trader_fcas_energy_regulating_rhs_rule(m, i, j):
         """Energy regulating FCAS constraint RHS of trapezium"""
 
-        return m.P_CVF_AS_ENABLEMENT_MAX_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RHS[i, j]
-        # return m.P_CVF_AS_MAX_AVAIL_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RHS[i, j]
+        # return m.P_CVF_AS_ENABLEMENT_MAX_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RHS[i, j]
+        return m.P_CVF_AS_MAX_AVAIL_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RHS[i, j]
         # return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RHS[i, j]
 
     # Constraint violation for joint energy regulating FCAS constraint - RHS of trapezium
@@ -547,8 +549,8 @@ def define_constraint_violation_penalty_expressions(m):
     def trader_fcas_energy_regulating_lhs_rule(m, i, j):
         """Energy regulating FCAS constraint LHS of trapezium"""
 
-        return m.P_CVF_AS_ENABLEMENT_MIN_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LHS[i, j]
-        # return m.P_CVF_AS_MAX_AVAIL_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LHS[i, j]
+        # return m.P_CVF_AS_ENABLEMENT_MIN_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LHS[i, j]
+        return m.P_CVF_AS_MAX_AVAIL_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LHS[i, j]
         # return m.P_CVF_AS_PROFILE_PRICE * m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LHS[i, j]
 
     # Constraint violation for joint energy regulating FCAS constraint - RHS of trapezium
@@ -588,6 +590,22 @@ def define_constraint_violation_penalty_expressions(m):
 
     # Constraint violation for max available
     m.E_CV_TRADER_FCAS_MAX_AVAILABLE = pyo.Expression(m.S_TRADER_OFFERS, rule=trader_fcas_max_available_rule)
+
+    def trader_fcas_enablement_min_rule(m, i, j):
+        """Enablement min violation for FCAS offer"""
+
+        return m.P_CVF_AS_ENABLEMENT_MIN_PRICE * m.V_CV_TRADER_FCAS_ENABLEMENT_MIN[i, j]
+
+    # Constraint violation for max available
+    m.E_CV_TRADER_FCAS_ENABLEMENT_MIN = pyo.Expression(m.S_TRADER_OFFERS, rule=trader_fcas_enablement_min_rule)
+
+    def trader_fcas_enablement_max_rule(m, i, j):
+        """Enablement max violation for FCAS offer"""
+
+        return m.P_CVF_AS_ENABLEMENT_MAX_PRICE * m.V_CV_TRADER_FCAS_ENABLEMENT_MAX[i, j]
+
+    # Constraint violation for max available
+    m.E_CV_TRADER_FCAS_ENABLEMENT_MAX = pyo.Expression(m.S_TRADER_OFFERS, rule=trader_fcas_enablement_max_rule)
 
     def mnsp_offer_penalty_rule(m, i, j, k):
         """Penalty for band amount exceeding band bid amount"""
@@ -675,6 +693,8 @@ def define_constraint_violation_penalty_expressions(m):
              + sum(m.E_CV_TRADER_INFLEXIBILITY_PROFILE[i] for i in m.S_TRADER_FAST_START)
              + sum(m.E_CV_TRADER_INFLEXIBILITY_PROFILE_LHS[i] for i in m.S_TRADER_FAST_START)
              + sum(m.E_CV_TRADER_INFLEXIBILITY_PROFILE_RHS[i] for i in m.S_TRADER_FAST_START)
+             + sum(m.E_CV_TRADER_FCAS_ENABLEMENT_MIN[i] for i in m.S_TRADER_OFFERS)
+             + sum(m.E_CV_TRADER_FCAS_ENABLEMENT_MAX[i] for i in m.S_TRADER_OFFERS)
              + sum(m.E_CV_MNSP_OFFER_PENALTY[i, j, k] for i, j in m.S_MNSP_OFFERS for k in m.S_BANDS)
              + sum(m.E_CV_MNSP_CAPACITY_PENALTY[i] for i in m.S_MNSP_OFFERS)
              + sum(m.E_CV_MNSP_RAMP_UP_PENALTY[i] for i in m.S_MNSP_OFFERS)
@@ -1903,6 +1923,78 @@ def define_fcas_constraints(m, data):
     # Effective max available FCAS
     m.C_FCAS_LOAD_MAX_AVAILABLE = pyo.Constraint(m.S_TRADER_OFFERS, rule=load_fcas_max_available_rule)
 
+    def enablement_min_rule(m, i, j):
+        """Energy target must be >= EnablementMin"""
+
+        # Only consider FCAS offers
+        if j not in ['L6SE', 'L60S', 'L5MI', 'L5RE', 'R6SE', 'R60S', 'R5MI', 'R5RE']:
+            return pyo.Constraint.Skip
+
+        # Get energy offer type
+        if m.P_TRADER_TYPE[i] == 'GENERATOR':
+            energy_offer = 'ENOF'
+        elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
+            energy_offer = 'LDOF'
+        else:
+            raise Exception('Unexpected trade type:', m.P_TRADER_TYPE[i])
+
+        # Trader does not have an energy offer
+        if (i, energy_offer) not in m.V_TRADER_TOTAL_OFFER.keys():
+            return pyo.Constraint.Skip
+
+        # Check if FCAS is available - skip constraint if unavailable
+        if not m.P_TRADER_FCAS_AVAILABILITY_STATUS[i, j]:
+            return pyo.Constraint.Skip
+
+        # Effective EnablementMin
+        if j in ['L5RE', 'R5RE']:
+            enablement_min = m.E_TRADER_FCAS_EFFECTIVE_ENABLEMENT_MIN[i, j]
+        elif j in ['L6SE', 'L60S', 'L5MI', 'R6SE', 'R60S', 'R5MI']:
+            enablement_min = m.P_TRADER_FCAS_ENABLEMENT_MIN[i, j]
+        else:
+            raise Exception('Unexpected trade type:', j)
+
+        return m.V_TRADER_TOTAL_OFFER[i, energy_offer] + m.V_CV_TRADER_FCAS_ENABLEMENT_MIN[i, j] >= enablement_min
+
+    # Enablement min
+    m.C_FCAS_ENABLEMENT_MIN = pyo.Constraint(m.S_TRADER_OFFERS, rule=enablement_min_rule)
+
+    def enablement_max_rule(m, i, j):
+        """Energy target must be <= EnablementMax"""
+
+        # Only consider FCAS offers
+        if j not in ['L6SE', 'L60S', 'L5MI', 'L5RE', 'R6SE', 'R60S', 'R5MI', 'R5RE']:
+            return pyo.Constraint.Skip
+
+        # Get energy offer type
+        if m.P_TRADER_TYPE[i] == 'GENERATOR':
+            energy_offer = 'ENOF'
+        elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
+            energy_offer = 'LDOF'
+        else:
+            raise Exception('Unexpected trade type:', m.P_TRADER_TYPE[i])
+
+        # Trader does not have an energy offer
+        if (i, energy_offer) not in m.V_TRADER_TOTAL_OFFER.keys():
+            return pyo.Constraint.Skip
+
+        # Check if FCAS is available - skip constraint if unavailable
+        if not m.P_TRADER_FCAS_AVAILABILITY_STATUS[i, j]:
+            return pyo.Constraint.Skip
+
+        # Effective EnablementMax
+        if j in ['L5RE', 'R5RE']:
+            enablement_max = m.E_TRADER_FCAS_EFFECTIVE_ENABLEMENT_MAX[i, j]
+        elif j in ['L6SE', 'L60S', 'L5MI', 'R6SE', 'R60S', 'R5MI']:
+            enablement_max = m.P_TRADER_FCAS_ENABLEMENT_MAX[i, j]
+        else:
+            raise Exception('Unexpected trade type:', j)
+
+        return m.V_TRADER_TOTAL_OFFER[i, energy_offer] <= enablement_max + m.V_CV_TRADER_FCAS_ENABLEMENT_MAX[i, j]
+
+    # Enablement max
+    m.C_FCAS_ENABLEMENT_MAX = pyo.Constraint(m.S_TRADER_OFFERS, rule=enablement_max_rule)
+
     return m
 
 
@@ -2068,6 +2160,10 @@ def define_fast_start_unit_inflexibility_constraints(m):
 
     def profile_constraint_rule(m, i):
         """Energy profile constraint"""
+
+        # CurrentMode and CurrentModeTime may be missing - skip constraint
+        if (m.P_TRADER_CURRENT_MODE[i] is None) or (m.P_TRADER_CURRENT_MODE_TIME[i] is None):
+            return pyo.Constraint.Skip
 
         if m.P_TRADER_TYPE[i] == 'GENERATOR':
             energy_offer = 'ENOF'
@@ -3051,86 +3147,87 @@ if __name__ == '__main__':
     # Directory containing model check results
     check_directory = os.path.join(os.path.dirname(__file__), 'output', 'check')
 
-    # sample_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, 'data')
-    # tmp_directory = os.path.join(os.path.dirname(__file__), 'tmp')
-    #
-    # # Define the dispatch interval to investigate
-    # di_year, di_month, di_day, di_interval = 2019, 10, 30, 149
-    # di_case_id = f'{di_year}{di_month:02}{di_day:02}{di_interval:03}'
-    #
-    # # Case data in json format
-    # case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, di_year, di_month, di_day, di_interval)
-    # save_case_json(data_directory, di_year, di_month, di_day, di_interval, overwrite=False)
-    #
-    # # Get NEMDE model data as a Python dictionary
-    # cdata = json.loads(case_data_json)
-    #
-    # # Preprocessed case data
-    # intervention_status = utils.lookup.get_intervention_status(cdata, 'physical')
-    # # intervention_status = '0'
-    # model_data = utils.data.parse_case_data_json(case_data_json, intervention_status)
-    #
-    # # Construct model
-    # model = construct_model(model_data, cdata)
+    sample_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, 'data')
+    tmp_directory = os.path.join(os.path.dirname(__file__), 'tmp')
 
-    # # Perform model checks
-    # # df_fixed_demand_check = check_region_fixed_demand_calculation_sample(data_directory, n=1000)
-    # # df_rhs = check_generic_constraint_rhs_sample(data_directory, n=1000)
-    # #
-    # # Fix variables (debugging)
-    # # model = fix_interconnector_flow_solution(model, cdata, intervention_status)
-    # # model = fix_trader_solution(model, cdata, intervention_status, ['ENOF', 'LDOF'])
-    # # model = fix_trader_solution(model, cdata, intervention_status, ['R5RE', 'L5RE'])
-    # #
-    # # offer_types = ['R6SE', 'R60S', 'R5MI', 'L6SE', 'L60S', 'L5MI', 'L5RE', 'R5RE', 'ENOF', 'LDOF']
-    # # offer_types = ['R5RE', 'R6SE', 'R60S', 'R5MI', 'L5RE', 'L6SE', 'L60S', 'L5MI']
-    # # offer_types = ['R5RE', 'L5RE', 'L6SE', 'L60S', 'L5MI']
-    # # offer_types = ['ENOF', 'LDOF']
-    # # model = fix_trader_solution(model, cdata, intervention_status, offer_types)
+    # Define the dispatch interval to investigate
+    di_year, di_month, di_day, di_interval = 2019, 10, 7, 241
+    di_case_id = f'{di_year}{di_month:02}{di_day:02}{di_interval:03}'
+
+    # Case data in json format
+    case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, di_year, di_month, di_day, di_interval)
+    save_case_json(data_directory, di_year, di_month, di_day, di_interval, overwrite=False)
+
+    # Get NEMDE model data as a Python dictionary
+    cdata = json.loads(case_data_json)
+
+    # Preprocessed case data
+    intervention_status = utils.lookup.get_intervention_status(cdata, 'physical')
+    # intervention_status = '0'
+    model_data = utils.data.parse_case_data_json(case_data_json, intervention_status)
+
+    # Construct model
+    model = construct_model(model_data, cdata)
+
+    # Perform model checks
+    # df_fixed_demand_check = check_region_fixed_demand_calculation_sample(data_directory, n=1000)
+    # df_rhs = check_generic_constraint_rhs_sample(data_directory, n=1000)
     #
-    # # Solve model
-    # model = solve_model(model)
+    # Fix variables (debugging)
+    # model = fix_interconnector_flow_solution(model, cdata, intervention_status)
+    # model = fix_trader_solution(model, cdata, intervention_status, ['ENOF', 'LDOF'])
+    # model = fix_trader_solution(model, cdata, intervention_status, ['R5RE', 'L5RE'])
     #
-    # # Extract solution
-    # model_solution = utils.solution.get_model_solution(model)
-    #
-    # # Check solution
-    # _, df_trader_solution = utils.analysis.check_trader_solution(cdata, model_solution, intervention_status)
-    # df_fcas_solution = check_fcas_solution(cdata, model_solution, intervention_status, di_case_id, sample_directory,
-    #                                        tmp_directory)
-    # utils.analysis.plot_trader_solution_difference(cdata, model_solution, intervention_status)
-    #
-    # # Get solution report
-    # get_solution_report(cdata, model, model_solution, intervention_status)
-    #
-    # # Check constraint violation
-    # check_constraint_violation(model)
+    # offer_types = ['R6SE', 'R60S', 'R5MI', 'L6SE', 'L60S', 'L5MI', 'L5RE', 'R5RE', 'ENOF', 'LDOF']
+    # offer_types = ['R5RE', 'R6SE', 'R60S', 'R5MI', 'L5RE', 'L6SE', 'L60S', 'L5MI']
+    # offer_types = ['R5RE', 'L5RE', 'L6SE', 'L60S', 'L5MI']
+    # offer_types = ['ENOF', 'LDOF']
+    # model = fix_trader_solution(model, cdata, intervention_status, offer_types)
+
+    # Solve model
+    model = solve_model(model)
+
+    # Extract solution
+    model_solution = utils.solution.get_model_solution(model)
+
+    # Check solution
+    _, df_trader_solution = utils.analysis.check_trader_solution(cdata, model_solution, intervention_status)
+    df_fcas_solution = check_fcas_solution(cdata, model_solution, intervention_status, di_case_id, sample_directory,
+                                           tmp_directory)
+    utils.analysis.plot_trader_solution_difference(cdata, model_solution, intervention_status)
+
+    # Get solution report
+    get_solution_report(cdata, model, model_solution, intervention_status)
+
+    # Check constraint violation
+    check_constraint_violation(model)
 
     # Check model for a random selection of dispatch intervals
     # interrogate_sample = (pd.read_csv(os.path.join(check_directory, 'net_export.csv'))
     #                       .apply(lambda x: (int(str(x['case_id'])[-6:-3]), int(str(x['case_id'])[-3:])), axis=1)
     #                       .unique().tolist()[:10])
     # model_output = check_model(data_directory, interrogate_sample)
-    model_output = check_model(data_directory, n=10000)
 
-    df_fixed_demand_output = model_output['fixed_demand']
-    df_net_export_output = model_output['net_export']
-    df_energy_price_output = model_output['energy_price']
-    df_dispatched_generation_output = model_output['dispatched_generation']
-    df_dispatched_load_output = model_output['dispatched_load']
-    df_interconnector_flow_output = model_output['interconnector_flow']
-    df_interconnector_losses_output = model_output['interconnector_losses']
-    df_trader_output_output = model_output['trader_output']
-    df_objective_value_output = model_output['objective_value']
-    df_unhandled_cases_output = model_output['unhandled_cases']
-
-    # Save results
-    df_fixed_demand_output.to_csv(os.path.join(check_directory, 'fixed_demand.csv'))
-    df_net_export_output.to_csv(os.path.join(check_directory, 'net_export.csv'))
-    df_dispatched_generation_output.to_csv(os.path.join(check_directory, 'dispatched_generation.csv'))
-    df_dispatched_load_output.to_csv(os.path.join(check_directory, 'dispatched_load.csv'))
-    df_interconnector_flow_output.to_csv(os.path.join(check_directory, 'interconnector_flow.csv'))
-    df_interconnector_losses_output.to_csv(os.path.join(check_directory, 'interconnector_losses.csv'))
-    df_trader_output_output.to_csv(os.path.join(check_directory, 'trader_output.csv'))
-    df_objective_value_output.to_csv(os.path.join(check_directory, 'objective_value.csv'))
-    df_unhandled_cases_output.to_csv(os.path.join(check_directory, 'unhandled_cases.csv'))
+    # model_output = check_model(data_directory, n=10000)
+    #
+    # df_fixed_demand_output = model_output['fixed_demand']
+    # df_net_export_output = model_output['net_export']
+    # df_energy_price_output = model_output['energy_price']
+    # df_dispatched_generation_output = model_output['dispatched_generation']
+    # df_dispatched_load_output = model_output['dispatched_load']
+    # df_interconnector_flow_output = model_output['interconnector_flow']
+    # df_interconnector_losses_output = model_output['interconnector_losses']
+    # df_trader_output_output = model_output['trader_output']
+    # df_objective_value_output = model_output['objective_value']
+    # df_unhandled_cases_output = model_output['unhandled_cases']
+    #
+    # # Save results
+    # df_fixed_demand_output.to_csv(os.path.join(check_directory, 'fixed_demand.csv'))
+    # df_net_export_output.to_csv(os.path.join(check_directory, 'net_export.csv'))
+    # df_dispatched_generation_output.to_csv(os.path.join(check_directory, 'dispatched_generation.csv'))
+    # df_dispatched_load_output.to_csv(os.path.join(check_directory, 'dispatched_load.csv'))
+    # df_interconnector_flow_output.to_csv(os.path.join(check_directory, 'interconnector_flow.csv'))
+    # df_interconnector_losses_output.to_csv(os.path.join(check_directory, 'interconnector_losses.csv'))
+    # df_trader_output_output.to_csv(os.path.join(check_directory, 'trader_output.csv'))
+    # df_objective_value_output.to_csv(os.path.join(check_directory, 'objective_value.csv'))
+    # df_unhandled_cases_output.to_csv(os.path.join(check_directory, 'unhandled_cases.csv'))
