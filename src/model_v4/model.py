@@ -3193,52 +3193,34 @@ if __name__ == '__main__':
     # Solve model
     model = solve_model(model)
 
-    # Extract solution
-    model_solution = utils.solution.get_model_solution(model)
-
-    # Check solution
-    _, df_trader_solution = utils.analysis.check_trader_solution(cdata, model_solution, intervention_status)
-    df_fcas_solution = check_fcas_solution(cdata, model_solution, intervention_status, di_case_id, sample_directory,
-                                           tmp_directory)
-    utils.analysis.plot_trader_solution_difference(cdata, model_solution, intervention_status)
-
-    # Get solution report
-    get_solution_report(cdata, model, model_solution, intervention_status)
-
-    # Check constraint violation
-    check_constraint_violation(model)
-
-    t0 = time.time()
+    # Extract model solution
+    t1 = time.time()
     a = utils.solution.get_model_solution2(model)
     b = utils.solution.get_model_comparison(cdata, a)
-    print('completed', time.time() - t0)
+    print('completed', time.time() - t1)
+
+    #
+    # # {(i['@TraderID'], j): i['@EnergyTarget'] for i in b['TraderSolution'] for j in i['info']['trade_types']}
+    # for i in b['TraderSolution']:
+    #     for j in i['info']['trade_types']:
+    #         print(i['@TraderID'], i['@EnergyTarget'])
+    #
+    # # Extract solution
+    # t0 = time.time()
+    # model_solution = utils.solution.get_model_solution(model)
+    #
+    # # Check solution
+    # _, df_trader_solution = utils.analysis.check_trader_solution(cdata, model_solution, intervention_status)
+    # print('Completed 1:', time.time() - t0)
+
+    # df_fcas_solution = check_fcas_solution(cdata, model_solution, intervention_status, di_case_id, sample_directory, tmp_directory)
+    # utils.analysis.plot_trader_solution_difference(cdata, model_solution, intervention_status)
+
+    # # Get solution report
+    # get_solution_report(cdata, model, model_solution, intervention_status)
+    #
+    # # Check constraint violation
+    # check_constraint_violation(model)
 
     # Check model for a random selection of dispatch intervals
-    # interrogate_sample = (pd.read_csv(os.path.join(check_directory, 'net_export.csv'))
-    #                       .apply(lambda x: (int(str(x['case_id'])[-6:-3]), int(str(x['case_id'])[-3:])), axis=1)
-    #                       .unique().tolist()[:10])
-    # model_output = check_model(data_directory, interrogate_sample)
-
     # model_output = check_model(data_directory, n=10000)
-    #
-    # df_fixed_demand_output = model_output['fixed_demand']
-    # df_net_export_output = model_output['net_export']
-    # df_energy_price_output = model_output['energy_price']
-    # df_dispatched_generation_output = model_output['dispatched_generation']
-    # df_dispatched_load_output = model_output['dispatched_load']
-    # df_interconnector_flow_output = model_output['interconnector_flow']
-    # df_interconnector_losses_output = model_output['interconnector_losses']
-    # df_trader_output_output = model_output['trader_output']
-    # df_objective_value_output = model_output['objective_value']
-    # df_unhandled_cases_output = model_output['unhandled_cases']
-    #
-    # # Save results
-    # df_fixed_demand_output.to_csv(os.path.join(check_directory, 'fixed_demand.csv'))
-    # df_net_export_output.to_csv(os.path.join(check_directory, 'net_export.csv'))
-    # df_dispatched_generation_output.to_csv(os.path.join(check_directory, 'dispatched_generation.csv'))
-    # df_dispatched_load_output.to_csv(os.path.join(check_directory, 'dispatched_load.csv'))
-    # df_interconnector_flow_output.to_csv(os.path.join(check_directory, 'interconnector_flow.csv'))
-    # df_interconnector_losses_output.to_csv(os.path.join(check_directory, 'interconnector_losses.csv'))
-    # df_trader_output_output.to_csv(os.path.join(check_directory, 'trader_output.csv'))
-    # df_objective_value_output.to_csv(os.path.join(check_directory, 'objective_value.csv'))
-    # df_unhandled_cases_output.to_csv(os.path.join(check_directory, 'unhandled_cases.csv'))

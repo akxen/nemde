@@ -199,6 +199,31 @@ def get_trader_solution2(m) -> list:
     return out
 
 
+def get_trader_solution3(m) -> list:
+    """Extract trader solution"""
+
+    trade_types = ['ENOF', 'LDOF', 'R6SE', 'R60S', 'R5MI', 'R5RE', 'L6SE', 'L60S', 'L5MI', 'L5RE']
+
+    # Container for solution
+    out = []
+    for i in m.S_TRADERS:
+        trader_output = {
+            "trader_id": i,
+            "trade_type": m.P_TRADER_TYPE[i],
+            "trader_region": m.P_TRADER_REGION[i],
+            'case_id': m.P_CASE_ID.value,
+            "intervention": m.P_INTERVENTION_STATUS.value,
+            "targets": {j: get_trader_fcas_target(m, i, j) for j in trade_types if (i, j) in m.S_TRADER_OFFERS},
+            "prices": {},
+            'violation': {j: get_trader_fcas_target(m, i, j) for j in trade_types if (i, j) in m.S_TRADER_OFFERS},
+        }
+
+        # Append to container
+        out.append(trader_output)
+
+    return out
+
+
 def get_interconnector_solution(m) -> dict:
     """Extract interconnector solution"""
 
@@ -328,7 +353,7 @@ def get_model_solution2(m) -> dict:
 
     solution = {
         'PeriodSolution': get_period_solution2(m),
-        'TraderSolution': get_trader_solution2(m),
+        'TraderSolution': get_trader_solution3(m),
         'InterconnectorSolution': get_interconnector_solution2(m),
         'RegionSolution': get_region_solution2(m),
     }
@@ -445,12 +470,18 @@ def compare_trader_solution(data, solution):
                    '@L6Target', '@L60Target', '@L5Target', '@L5RegTarget',
                    '@EnergyTarget']
 
+    # All possible offers
+    offers = [i for i in lookup.get_trader_offer_index(data)]
+
     for i in solution['TraderSolution']:
         # Container for trader output
         trader_output = {}
 
         # Extract trader ID
         trader_id = i['@TraderID']
+
+        # if trader_id == 'VSSEL1V1':
+        #     a = 10
 
         # Container for additional info
         info = {
@@ -464,11 +495,12 @@ def compare_trader_solution(data, solution):
                         'current': {},
                         'marginal': {}
                     }
-                }
+                },
+            'trade_types': [k for j, k in offers if j == trader_id]
         }
 
         for k, v in i.items():
-            if type(v) is float:
+            if (type(v) is float) or (type(v) is int):
                 # Some traders have more solution attributes than others - skip these items
                 try:
                     actual = lookup.get_trader_solution_attribute(data, trader_id, k, float, i['@Intervention'])
@@ -507,6 +539,56 @@ def compare_trader_solution(data, solution):
 
         # Append to container
         out.append(trader_output)
+
+    return out
+
+
+def compare_trader_solution2(data, solution):
+    """Compare trader solution"""
+
+    # Mapping between offer keys
+    key_map = {'ENOF': '@EnergyTarget', 'LDOF': '@EnergyTarget',
+               'R6SE': '@R6Target', 'R60S': '@R60Target', 'R5MI': '@R5Target', 'R5RE': '@R5RegTarget',
+               'L6SE': '@L6Target', 'L60S': '@L60Target', 'L5MI': '@L5Target', 'L5RE': '@L5RegTarget'}
+
+    # Container for output
+    out = []
+
+    for i in solution['TraderSolution']:
+        # Container used to handle data comparing model
+        comparison = {}
+
+        for trade_type, model_target in i['targets'].items():
+            # Actual target
+            actual = lookup.get_trader_solution_attribute(data, i['trader_id'], key_map[trade_type], float, i['intervention'])
+
+            # Compute marginal price bands
+            model_current = get_trader_marginal_price_band(data, i['trader_id'], trade_type, model_target, 'current')
+            model_marginal = get_trader_marginal_price_band(data, i['trader_id'], trade_type, model_target, 'marginal')
+
+            actual_current = get_trader_marginal_price_band(data, i['trader_id'], trade_type, actual, 'current')
+            actual_marginal = get_trader_marginal_price_band(data, i['trader_id'], trade_type, actual, 'marginal')
+
+            # Compare solution
+            info = {
+                'model': model_target,
+                'actual': actual,
+                'difference': model_target - actual,
+                'abs_difference': abs(model_target - actual),
+                'model_current_price_band': model_current,
+                'model_marginal_price_band': model_marginal,
+                'actual_current_price_band': actual_current,
+                'actual_marginal_price_band': actual_marginal,
+            }
+
+            # Append to container
+            comparison[trade_type] = info
+
+        # Append to main container
+        i['comparison'] = comparison
+
+        # Append to output container
+        out.append(i)
 
     return out
 
@@ -551,7 +633,7 @@ def get_model_comparison(data, solution) -> dict:
     comparison = {
         'PeriodSolution': compare_period_solution(data, solution),
         'RegionSolution': compare_region_solution(data, solution),
-        'TraderSolution': compare_trader_solution(data, solution),
+        'TraderSolution': compare_trader_solution2(data, solution),
         'InterconnectorSolution': compare_interconnector_solution(data, solution)
     }
 
