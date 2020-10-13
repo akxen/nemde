@@ -85,7 +85,7 @@ def initialise_tables(schema):
     """Initialise database tables"""
 
     # Tables to create
-    tables = ['run_info', 'results']
+    tables = ['run_info', 'results', 'casefiles']
 
     for t in tables:
         create_table(schema, t)
@@ -220,7 +220,7 @@ def get_case_results(schema):
 
 if __name__ == '__main__':
     # Initialise tables
-    # initialise_tables(os.environ['MYSQL_DATABASE'])
+    initialise_tables(os.environ['MYSQL_DATABASE'])
 
     # Test run info entry
     run_info_entry = {
@@ -239,4 +239,4 @@ if __name__ == '__main__':
     # post_entry(os.environ['MYSQL_DATABASE'], 'results', results_entry)
 
     # Get case results corresponding to most recent run
-    r = get_case_results(os.environ['MYSQL_DATABASE'])
+    # r = get_case_results(os.environ['MYSQL_DATABASE'])
