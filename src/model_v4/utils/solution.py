@@ -1,10 +1,12 @@
 """Extract model solution"""
 
+import simplejson
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
 import lookup
+import database
 
 
 def get_total_interconnector_violation(m) -> float:
@@ -78,12 +80,6 @@ def get_total_uigf_violation(m) -> float:
 def get_period_solution(m) -> dict:
     """Extract period solution"""
 
-    return {'TotalObjective': m.OBJECTIVE()}
-
-
-def get_period_solution2(m) -> dict:
-    """Extract period solution"""
-
     out = {
         # "@PeriodID": "2019-10-08T00:05:00+10:00",
         '@CaseID': m.P_CASE_ID.value,
@@ -141,18 +137,7 @@ def get_trader_fcas_violation(m, trader_id, trade_type):
         return 0
 
 
-def get_trader_solution(m) -> dict:
-    """Extract trader solution"""
-
-    # Container for output
-    out = {}
-    for (trader_id, trade_type), target in m.V_TRADER_TOTAL_OFFER.items():
-        out.setdefault(trader_id, {})[trade_type] = target.value
-
-    return out
-
-
-def get_trader_solution2(m) -> list:
+def get_trader_solution(m) -> list:
     """Extract trader solution"""
 
     trade_types = ['ENOF', 'LDOF', 'R6SE', 'R60S', 'R5MI', 'R5RE', 'L6SE', 'L60S', 'L5MI', 'L5RE']
@@ -177,21 +162,7 @@ def get_trader_solution2(m) -> list:
     return out
 
 
-def get_interconnector_solution(m) -> dict:
-    """Extract interconnector solution"""
-
-    # Container for output
-    out = {}
-    for k, v in m.V_GC_INTERCONNECTOR.items():
-        out.setdefault(k, {})['Flow'] = v.value
-
-    for k, v in m.V_LOSS.items():
-        out.setdefault(k, {})['Losses'] = v.value
-
-    return out
-
-
-def get_interconnector_solution2(m) -> list:
+def get_interconnector_solution(m) -> list:
     """Get interconnector solution"""
 
     # Container for output
@@ -230,27 +201,7 @@ def get_region_price(m, region_id, trade_type):
     return np.nan
 
 
-def get_region_solution(m) -> dict:
-    """Extract region solution"""
-
-    # Container for output
-    out = {}
-    for r in m.S_REGIONS:
-        # Extract energy price - use default value of -9999 if none available
-        try:
-            energy_price = m.dual[m.C_POWER_BALANCE[r]]
-        except KeyError:
-            energy_price = -9999
-
-        out[r] = {
-            'EnergyPrice': energy_price,
-            'FixedDemand': m.E_REGION_FIXED_DEMAND[r].expr(),
-        }
-
-    return out
-
-
-def get_region_solution2(m) -> list:
+def get_region_solution(m) -> list:
     """Get interconnector solution"""
 
     # Container for output
@@ -298,23 +249,10 @@ def get_model_solution(m) -> dict:
     """Extract model solution"""
 
     solution = {
-        'period': get_period_solution(m),
-        'traders': get_trader_solution(m),
-        'interconnectors': get_interconnector_solution(m),
-        'regions': get_region_solution(m),
-    }
-
-    return solution
-
-
-def get_model_solution2(m) -> dict:
-    """Extract model solution"""
-
-    solution = {
-        'PeriodSolution': get_period_solution2(m),
-        'TraderSolution': get_trader_solution2(m),
-        'InterconnectorSolution': get_interconnector_solution2(m),
-        'RegionSolution': get_region_solution2(m),
+        'PeriodSolution': get_period_solution(m),
+        'TraderSolution': get_trader_solution(m),
+        'InterconnectorSolution': get_interconnector_solution(m),
+        'RegionSolution': get_region_solution(m),
     }
 
     return solution
@@ -528,7 +466,7 @@ def inspect_trader_solution(comparison):
 
     # Container for output
     out = {
-        (i['trader_id'], j):
+        (i['trader_id'], j, i['case_id'], i['intervention']):
             {
                 **i['comparison'][j],
                 **{
@@ -540,7 +478,8 @@ def inspect_trader_solution(comparison):
     }
 
     # Convert to DataFrame
-    df = pd.DataFrame(out).T.sort_values(by='abs_difference', ascending=False).rename_axis(['trader_id', 'trade_type'])
+    df = (pd.DataFrame(out).T.sort_values(by='abs_difference', ascending=False)
+          .rename_axis(['trader_id', 'trade_type', 'case_id', 'intervention']))
 
     return df
 
@@ -549,7 +488,7 @@ def inspect_interconnector_solution(comparison):
     """Inspect interconnector solution"""
 
     # Extract values and assign unique key
-    out = {(i['@InterconnectorID'], k): {
+    out = {(i['@InterconnectorID'], k, i['@CaseID'], i['@Intervention']): {
         'abs_difference': v['abs_difference'],
         'difference': v['difference'],
         'model': v['model'],
@@ -558,7 +497,8 @@ def inspect_interconnector_solution(comparison):
         for i in comparison['InterconnectorSolution'] for k, v in i.items() if type(v) == dict}
 
     # Convert to DataFrame
-    df = pd.DataFrame(out).T.sort_values(by='abs_difference', ascending=False)
+    df = (pd.DataFrame(out).T.sort_values(by='abs_difference', ascending=False)
+          .rename_axis(['interconnector_id', 'attribute', 'case_id', 'intervention']))
 
     return df
 
@@ -567,7 +507,7 @@ def inspect_region_solution(comparison):
     """Inspect region solution"""
 
     # Extract data and assign unique key
-    out = {(i['@RegionID'], k): {
+    out = {(i['@RegionID'], k, i['@CaseID'], i['@Intervention']): {
         'abs_difference': v['abs_difference'],
         'difference': v['difference'],
         'model': v['model'],
@@ -576,7 +516,8 @@ def inspect_region_solution(comparison):
         for i in comparison['RegionSolution'] for k, v in i.items() if type(v) == dict}
 
     # Convert to DataFrame
-    df = pd.DataFrame(out).T.sort_values(by='abs_difference', ascending=False)
+    df = (pd.DataFrame(out).T.sort_values(by='abs_difference', ascending=False)
+          .rename_axis(['region_id', 'attribute', 'case_id', 'intervention']))
 
     return df
 
@@ -584,8 +525,12 @@ def inspect_region_solution(comparison):
 def inspect_period_solution(comparison):
     """Inspect period solution"""
 
+    # Case ID and intervention status to be used in key
+    case_id = comparison['PeriodSolution']['@CaseID']
+    intervention = comparison['PeriodSolution']['@Intervention']
+
     # Container use to compare period solution
-    out = {k: {
+    out = {(k, case_id, intervention): {
         'abs_difference': v['abs_difference'],
         'difference': v['difference'],
         'model': v['model'],
@@ -594,7 +539,8 @@ def inspect_period_solution(comparison):
         for k, v in comparison['PeriodSolution'].items() if type(v) == dict}
 
     # Convert to DataFrame
-    df = pd.DataFrame(out).T.sort_values(by='abs_difference', ascending=False)
+    df = (pd.DataFrame(out).T.sort_values(by='abs_difference', ascending=False)
+          .rename_axis(['attribute', 'case_id', 'intervention']))
 
     return df
 
@@ -624,7 +570,7 @@ def print_solution_report(comparison):
         print(solution[i].head())
 
 
-def get_observed_trader_solution(data):
+def get_actual_trader_solution(data):
     """Get observed dispatch targets"""
 
     # All traders
@@ -649,8 +595,8 @@ def get_observed_trader_solution(data):
 def plot_trader_solution(data, solution, intervention):
     """Plot trader model solution against observed solution"""
 
-    # Observed solution
-    observed = get_observed_trader_solution(data)
+    # Observed solution from NEMDE outputs
+    observed = get_actual_trader_solution(data)
 
     # Map between NEMDE output keys and keys used in solution dictionary
     key_map = {'ENOF': '@EnergyTarget', 'LDOF': '@EnergyTarget',
@@ -661,7 +607,6 @@ def plot_trader_solution(data, solution, intervention):
     out = {k: [] for k in key_map.keys()}
 
     # Difference between observed and model solution
-    # for trader_id, trader_solution in solution['traders'].items():
     for i in solution['TraderSolution']:
         for trade_type, target in i['targets'].items():
             # Append model value (x-axis) and observed value (y-axis) for given energy type
@@ -689,3 +634,23 @@ def plot_trader_solution(data, solution, intervention):
 
     fig.set_size_inches(5, 10)
     plt.show()
+
+
+def get_latest_run_results(schema) -> dict:
+    """Check all cases for a given run"""
+
+    # All case results for the latest run
+    results = database.get_case_results(schema)
+
+    # First pass - get results for each run as a dictionary of DataFrames
+    first_pass = [inspect_solution(simplejson.loads(i['results'])) for i in results]
+
+    # Combine results into DataFrames for each category
+    out = {
+        'traders': pd.concat([i['traders'] for i in first_pass]).sort_values(by='abs_difference', ascending=False),
+        'regions': pd.concat([i['regions'] for i in first_pass]),
+        'interconnectors': pd.concat([i['interconnectors'] for i in first_pass]),
+        'period': pd.concat([i['period'] for i in first_pass]),
+    }
+
+    return out

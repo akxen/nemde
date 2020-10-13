@@ -5,6 +5,7 @@ import csv
 import json
 import time
 
+import simplejson
 import MySQLdb
 import MySQLdb.cursors
 
@@ -73,7 +74,7 @@ def create_table(schema, table):
     conn.commit()
 
     # Execute SQL statement
-    print(sql_create_table)
+    # print(sql_create_table)
     cur.execute(sql_create_table)
 
     # Close database connections
@@ -116,6 +117,28 @@ def post_entry(schema, table, entry):
     close_connection(conn, cur)
 
 
+def get_latest_run_info(schema):
+    """Get most recent run ID"""
+
+    # Get last run information
+    sql_run_info = f"""SELECT * FROM {schema}.run_info ORDER BY row_id desc LIMIT 1"""
+
+    # Connect to database
+    conn, cur = connect_to_database()
+
+    # Get last run information
+    cur.execute(sql_run_info)
+    results = cur.fetchall()
+
+    # All case IDs corresponding to run
+    run_id = results[0]['run_id']
+
+    # Close connection
+    close_connection(conn, cur)
+
+    return run_id
+
+
 def get_remaining_case_ids(schema):
     """Get remaining case IDs for the most recent run"""
 
@@ -151,30 +174,69 @@ def get_remaining_case_ids(schema):
     return run_id, remaining_cases
 
 
-if __name__ == '__main__':
-    # db_conn, db_cur = connect_to_database()
-    initialise_tables(os.environ['MYSQL_DATABASE'])
+def get_most_recent_run_id(schema):
+    """Get the most recent run ID"""
 
-    entry = {
+    # Get last run information
+    sql = f"""SELECT * FROM {schema}.run_info ORDER BY row_id desc LIMIT 1"""
+
+    # Connect to database
+    conn, cur = connect_to_database()
+
+    # Get last run information
+    cur.execute(sql)
+    results = cur.fetchall()
+
+    # Most recent run ID
+    run_id = results[0]['run_id']
+
+    # Close SQL connection
+    close_connection(conn, cur)
+
+    return run_id
+
+
+def get_case_results(schema):
+    """Get results corresponding to the most recent run"""
+
+    # Get most recent run ID
+    run_id = get_most_recent_run_id(schema)
+
+    # Connect to database
+    conn, cur = connect_to_database()
+
+    # Cases that have already been completed
+    sql = f"""SELECT * FROM {schema}.results where run_id = {run_id}"""
+
+    # Get case IDs that have already been completed
+    cur.execute(sql)
+    results = cur.fetchall()
+
+    # Close connection
+    close_connection(conn, cur)
+
+    return results
+
+
+if __name__ == '__main__':
+    # Initialise tables
+    # initialise_tables(os.environ['MYSQL_DATABASE'])
+
+    # Test run info entry
+    run_info_entry = {
         'run_id': 20,
         'parameters': json.dumps({'case_ids': ['20191003202', '20191003210', '20191003260']})
     }
+    # post_entry(os.environ['MYSQL_DATABASE'], 'run_info', run_info_entry)
 
-    # post_entry(os.environ['MYSQL_DATABASE'], 'run_info', entry)
-
-    # "row_id",INT NOT NULL AUTO_INCREMENT
-    # "run_id","INT"
-    # "run_time","INT"
-    # "case_id","VARCHAR(20)"
-    # "results","JSON"
-
+    # Test results entry
     results_entry = {
         'run_id': 20,
         'run_time': int(time.time()),
         'case_id': '20191003210',
         'results': json.dumps({'': 'my results'})
     }
-
     # post_entry(os.environ['MYSQL_DATABASE'], 'results', results_entry)
 
-    r_id, c_ids = get_remaining_case_ids(os.environ['MYSQL_DATABASE'])
+    # Get case results corresponding to most recent run
+    r = get_case_results(os.environ['MYSQL_DATABASE'])
