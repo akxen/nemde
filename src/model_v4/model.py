@@ -5,6 +5,7 @@ import json
 import time
 import pickle
 import zipfile
+import calendar
 
 import numpy as np
 import pandas as pd
@@ -16,6 +17,7 @@ import utils.lookup
 import utils.loaders
 import utils.solution
 import utils.analysis
+import utils.database
 
 
 def define_sets(m, data):
@@ -2937,21 +2939,64 @@ def check_generic_constraint_rhs_sample(data_dir, intervention, n=5):
     return df
 
 
-def check_model(data_dir, sample=None, n=5):
-    """Run model for a random selection of dispatch intervals - compare model output with observed output"""
+def get_case_ids(year, month, n, seed=10):
+    """Get random collection of dispatch interval case IDs"""
 
-    # Random sample of dispatch intervals (with seeded random number generator for reproducible results)
-    if sample is None:
-        sample = get_dispatch_interval_sample(n, seed=10)
+    # Get days in specified month
+    _, days_in_month = calendar.monthrange(year, month)
 
-    # Container for results comparing model output with observed values
-    output = []
-    # Compute fixed demand for each interval
-    for i, (day, interval) in enumerate(sample):
-        print(f'({day}, {interval}) {i + 1}/{len(sample)}')
+    # Seed random number generator for reproducable results
+    np.random.seed(seed)
+
+    # Population of dispatch intervals for a given month
+    population = [f'{year}{month:02}{i:02}{j:03}' for i in range(1, days_in_month + 1) for j in range(1, 289)]
+
+    # Shuffle list to randomise sample (should be reproducible though because seed is set)
+    np.random.shuffle(population)
+
+    # Return Sample of case IDs
+    return population[:n]
+
+
+def check_model(data_dir, mode, case_ids=None):
+    """Run model for a set of dispatch intervals - compare model output with observed output"""
+
+    # Initialise database tables where solution will be stored
+    utils.database.initialise_tables(os.environ['MYSQL_DATABASE'])
+
+    # Start a new run
+    if mode == 'new':
+        assert case_ids is not None, f'Must supply case IDs when starting a new run: case_ids={case_ids}'
+
+        # ID for new case is the timestamp (in seconds from epoch) when case was created
+        run_id = int(time.time())
+
+        # Initialise the sample as the provided set of case IDs
+        sample = case_ids
+
+        # Record start of new run in database
+        run_info_entry = {'run_id': run_id, 'parameters': json.dumps({'case_ids': case_ids})}
+
+        # Post to database
+        utils.database.post_entry(os.environ['MYSQL_DATABASE'], 'run_info', run_info_entry)
+
+    # Continue the previous run - solve for remaining case IDs
+    elif mode == 'continue':
+        run_id, sample = utils.database.get_remaining_case_ids(os.environ['MYSQL_DATABASE'])
+
+    # Unhandled case
+    else:
+        raise Exception('Unexpected mode:', mode)
+
+    # Run model for each case ID
+    for i, case_id in enumerate(sample):
+        # Extract day and interval from string
+        year, month, day, interval = int(case_id[:4]), int(case_id[4:6]), int(case_id[6:8]), int(case_id[8:11])
+
+        print(f'{case_id} {i + 1}/{len(sample)}')
 
         # Case data in json format
-        data_json = utils.loaders.load_dispatch_interval_json(data_dir, 2019, 10, day, interval)
+        data_json = utils.loaders.load_dispatch_interval_json(data_dir, year, month, day, interval)
 
         # Get NEMDE model data as a Python dictionary
         case_data = json.loads(data_json)
@@ -2971,44 +3016,22 @@ def check_model(data_dir, sample=None, n=5):
         # Extract model solution
         solution = utils.solution.get_model_solution(m)
 
-        # Append solution report to results container
-        output.append(get_solution_report(case_data, m, solution, intervention))
+        # Compare model solution with output from NEMDE
+        comparison = utils.solution.get_model_comparison(case_data, solution)
 
-    def extract_values(results, key, sort_key):
-        """Extract data and convert to DataFrame"""
+        # Print solution report
+        utils.solution.print_solution_report(comparison)
 
-        if key in ['objective_value', 'unhandled_cases']:
-            return pd.DataFrame([r[key] for r in results]).sort_values(by=sort_key, ascending=False)
-        else:
-            return pd.DataFrame([s for r in results for s in r[key]]).sort_values(by=sort_key, ascending=False)
+        # Prepare entry for database
+        results_entry = {
+            'run_id': run_id,
+            'run_time': int(time.time()),
+            'case_id': case_id,
+            'results': json.dumps(comparison)
+        }
 
-    # Summary of results
-    summary = {
-        'fixed_demand': extract_values(output, 'fixed_demand', 'abs_difference'),
-        'net_export': extract_values(output, 'net_export', 'abs_difference'),
-        'energy_price': extract_values(output, 'energy_price', 'abs_difference'),
-        'dispatched_generation': extract_values(output, 'dispatched_generation', 'abs_difference'),
-        'dispatched_load': extract_values(output, 'dispatched_load', 'abs_difference'),
-        'interconnector_flow': extract_values(output, 'interconnector_flow', 'abs_difference'),
-        'interconnector_losses': extract_values(output, 'interconnector_losses', 'abs_difference'),
-        'trader_output': extract_values(output, 'trader_output', 'abs_difference'),
-        'objective_value': extract_values(output, 'objective_value', 'abs_difference'),
-        'unhandled_cases': extract_values(output, 'unhandled_cases', 'mnsp_flow_inverts'),
-    }
-
-    # Print summary
-    for k, v in summary.items():
-        print(k)
-        print(v.head())
-
-    # Save results
-    with open(os.path.join(os.path.dirname(__file__), 'output', 'summary.json'), 'w') as f:
-        json.dump(output, f)
-
-    with open(os.path.join(os.path.dirname(__file__), 'output', 'summary.pickle'), 'wb') as f:
-        pickle.dump(summary, f)
-
-    return summary
+        # Save case solution to database
+        utils.database.post_entry(os.environ['MYSQL_DATABASE'], 'results', results_entry)
 
 
 def save_case_json(data_dir, year, month, day, interval, overwrite=True):
@@ -3058,7 +3081,12 @@ def check_fcas_solution(data, solution, intervention, case_id, sample_dir, tmp_d
     """Check FCAS solution and compare availability with observed availability"""
 
     # Trader solution
-    _, df_trader_targets = utils.analysis.check_trader_solution(data, solution, intervention)
+    # _, df_trader_targets = utils.analysis.check_trader_solution(data, solution, intervention)
+
+    # Compare model and observed solutions
+    comparison = utils.solution.get_model_comparison(data, solution)
+
+    df_trader_targets = utils.solution.inspect_trader_solution(comparison)
 
     # Load observed FCAS data
     if use_cache:
@@ -3099,43 +3127,33 @@ def check_fcas_solution(data, solution, intervention, case_id, sample_dir, tmp_d
 def check_constraint_violation(m):
     """Check constraint violation expressions"""
 
-    print('E_CV_GC_PENALTY', pyo.value(sum(m.E_CV_GC_PENALTY[i] for i in m.S_GENERIC_CONSTRAINTS)))
-    print('E_CV_GC_LHS_PENALTY', pyo.value(sum(m.E_CV_GC_LHS_PENALTY[i] for i in m.S_GENERIC_CONSTRAINTS)))
-    print('E_CV_GC_RHS_PENALTY', pyo.value(sum(m.E_CV_GC_RHS_PENALTY[i] for i in m.S_GENERIC_CONSTRAINTS)))
-    print('E_CV_TRADER_OFFER_PENALTY',
-          pyo.value(sum(m.E_CV_TRADER_OFFER_PENALTY[i, j, k] for i, j in m.S_TRADER_OFFERS for k in m.S_BANDS)))
-    print('E_CV_TRADER_CAPACITY_PENALTY', pyo.value(sum(m.E_CV_TRADER_CAPACITY_PENALTY[i] for i in m.S_TRADER_OFFERS)))
-    print('E_CV_TRADER_RAMP_UP_PENALTY', pyo.value(sum(m.E_CV_TRADER_RAMP_UP_PENALTY[i] for i in m.S_TRADERS)))
-    print('E_CV_TRADER_RAMP_DOWN_PENALTY', pyo.value(sum(m.E_CV_TRADER_RAMP_DOWN_PENALTY[i] for i in m.S_TRADERS)))
-    print('E_CV_TRADER_FCAS_JOINT_RAMPING_UP',
-          pyo.value(sum(m.E_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, j] for i, j in m.S_TRADER_OFFERS)))
-    print('E_CV_TRADER_FCAS_JOINT_RAMPING_DOWN',
-          pyo.value(sum(m.E_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, j] for i, j in m.S_TRADER_OFFERS)))
-    print('E_CV_TRADER_FCAS_JOINT_CAPACITY_RHS',
-          pyo.value(sum(m.E_CV_TRADER_FCAS_JOINT_CAPACITY_RHS[i, j] for i, j in m.S_TRADER_OFFERS)))
-    print('E_CV_TRADER_FCAS_JOINT_CAPACITY_LHS',
-          pyo.value(sum(m.E_CV_TRADER_FCAS_JOINT_CAPACITY_LHS[i, j] for i, j in m.S_TRADER_OFFERS)))
-    print('E_CV_TRADER_FCAS_ENERGY_REGULATING_RHS',
-          pyo.value(sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_RHS[i, j] for i, j in m.S_TRADER_OFFERS)))
-    print('E_CV_TRADER_FCAS_ENERGY_REGULATING_LHS',
-          pyo.value(sum(m.E_CV_TRADER_FCAS_ENERGY_REGULATING_LHS[i, j] for i, j in m.S_TRADER_OFFERS)))
-    print('E_CV_TRADER_FCAS_MAX_AVAILABLE',
-          pyo.value(sum(m.E_CV_TRADER_FCAS_MAX_AVAILABLE[i, j] for i, j in m.S_TRADER_OFFERS)))
-    print('E_CV_TRADER_INFLEXIBILITY_PROFILE',
-          pyo.value(sum(m.E_CV_TRADER_INFLEXIBILITY_PROFILE[i] for i in m.S_TRADER_FAST_START)))
-    print('E_CV_TRADER_INFLEXIBILITY_PROFILE_LHS',
-          pyo.value(sum(m.E_CV_TRADER_INFLEXIBILITY_PROFILE_LHS[i] for i in m.S_TRADER_FAST_START)))
-    print('E_CV_TRADER_INFLEXIBILITY_PROFILE_RHS',
-          pyo.value(sum(m.E_CV_TRADER_INFLEXIBILITY_PROFILE_RHS[i] for i in m.S_TRADER_FAST_START)))
-    print('E_CV_MNSP_OFFER_PENALTY',
-          pyo.value(sum(m.E_CV_MNSP_OFFER_PENALTY[i, j, k] for i, j in m.S_MNSP_OFFERS for k in m.S_BANDS)))
-    print('E_CV_MNSP_CAPACITY_PENALTY', pyo.value(sum(m.E_CV_MNSP_CAPACITY_PENALTY[i] for i in m.S_MNSP_OFFERS)))
-    print('E_CV_MNSP_RAMP_UP_PENALTY', pyo.value(sum(m.E_CV_MNSP_RAMP_UP_PENALTY[i] for i in m.S_MNSP_OFFERS)))
-    print('E_CV_MNSP_RAMP_DOWN_PENALTY', pyo.value(sum(m.E_CV_MNSP_RAMP_DOWN_PENALTY[i] for i in m.S_MNSP_OFFERS)))
-    print('E_CV_INTERCONNECTOR_FORWARD_PENALTY',
-          pyo.value(sum(m.E_CV_INTERCONNECTOR_FORWARD_PENALTY[i] for i in m.S_INTERCONNECTORS)))
-    print('E_CV_INTERCONNECTOR_REVERSE_PENALTY',
-          pyo.value(sum(m.E_CV_INTERCONNECTOR_REVERSE_PENALTY[i] for i in m.S_INTERCONNECTORS)))
+    # Penalty terms to print
+    terms = ['E_CV_GC_PENALTY',
+             'E_CV_GC_LHS_PENALTY',
+             'E_CV_GC_RHS_PENALTY',
+             'E_CV_TRADER_OFFER_PENALTY',
+             'E_CV_TRADER_CAPACITY_PENALTY',
+             'E_CV_TRADER_RAMP_UP_PENALTY',
+             'E_CV_TRADER_RAMP_DOWN_PENALTY',
+             'E_CV_TRADER_FCAS_JOINT_RAMPING_UP',
+             'E_CV_TRADER_FCAS_JOINT_RAMPING_DOWN',
+             'E_CV_TRADER_FCAS_JOINT_CAPACITY_RHS',
+             'E_CV_TRADER_FCAS_JOINT_CAPACITY_LHS',
+             'E_CV_TRADER_FCAS_ENERGY_REGULATING_RHS',
+             'E_CV_TRADER_FCAS_ENERGY_REGULATING_LHS',
+             'E_CV_TRADER_FCAS_MAX_AVAILABLE',
+             'E_CV_TRADER_INFLEXIBILITY_PROFILE',
+             'E_CV_TRADER_INFLEXIBILITY_PROFILE_LHS',
+             'E_CV_TRADER_INFLEXIBILITY_PROFILE_RHS',
+             'E_CV_MNSP_OFFER_PENALTY',
+             'E_CV_MNSP_CAPACITY_PENALTY',
+             'E_CV_MNSP_RAMP_UP_PENALTY',
+             'E_CV_MNSP_RAMP_DOWN_PENALTY',
+             'E_CV_INTERCONNECTOR_FORWARD_PENALTY',
+             'E_CV_INTERCONNECTOR_REVERSE_PENALTY']
+
+    for i in terms:
+        print(i, sum(m.__getattribute__(i)[j].expr() for j in m.__getattribute__(i).keys()))
 
 
 def get_positive_variables(obj):
@@ -3195,32 +3213,27 @@ if __name__ == '__main__':
 
     # Extract model solution
     t1 = time.time()
-    a = utils.solution.get_model_solution2(model)
-    b = utils.solution.get_model_comparison(cdata, a)
+    model_solution = utils.solution.get_model_solution2(model)
+    solution_comparison = utils.solution.get_model_comparison(cdata, model_solution)
     print('completed', time.time() - t1)
 
-    #
-    # # {(i['@TraderID'], j): i['@EnergyTarget'] for i in b['TraderSolution'] for j in i['info']['trade_types']}
-    # for i in b['TraderSolution']:
-    #     for j in i['info']['trade_types']:
-    #         print(i['@TraderID'], i['@EnergyTarget'])
-    #
-    # # Extract solution
-    # t0 = time.time()
-    # model_solution = utils.solution.get_model_solution(model)
-    #
-    # # Check solution
-    # _, df_trader_solution = utils.analysis.check_trader_solution(cdata, model_solution, intervention_status)
-    # print('Completed 1:', time.time() - t0)
+    # Format solution - split into traders, interconnectors, regions, period
+    formatted_solution = utils.solution.inspect_solution(solution_comparison)
 
-    # df_fcas_solution = check_fcas_solution(cdata, model_solution, intervention_status, di_case_id, sample_directory, tmp_directory)
-    # utils.analysis.plot_trader_solution_difference(cdata, model_solution, intervention_status)
+    # Add additional FCAS data to check FCAS availability
+    df_fcas_solution = check_fcas_solution(cdata, model_solution, intervention_status, di_case_id, sample_directory,
+                                           tmp_directory)
 
-    # # Get solution report
-    # get_solution_report(cdata, model, model_solution, intervention_status)
-    #
-    # # Check constraint violation
-    # check_constraint_violation(model)
+    # Plot trader solution
+    utils.solution.plot_trader_solution(cdata, model_solution, intervention_status)
+
+    # Print solution report
+    utils.solution.print_solution_report(solution_comparison)
+
+    # Check constraint violation
+    check_constraint_violation(model)
 
     # Check model for a random selection of dispatch intervals
-    # model_output = check_model(data_directory, n=10000)
+    case_id_sample = get_case_ids(2019, 10, n=20)
+    # check_model(data_directory, mode='new', case_ids=case_id_sample)
+    check_model(data_directory, mode='continue')
