@@ -2547,55 +2547,61 @@ if __name__ == '__main__':
                                   os.path.pardir, os.path.pardir, 'nemweb', 'Reports', 'Data_Archive', 'NEMDE',
                                   'zipped')
 
-    # Directory containing model check results
-    check_directory = os.path.join(os.path.dirname(__file__), 'output', 'check')
+    # Root output directory
+    output_directory = os.path.join(os.path.dirname(__file__), 'output')
 
-    sample_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, 'data')
-    tmp_directory = os.path.join(os.path.dirname(__file__), 'tmp')
-
-    # Define the dispatch interval to investigate
-    di_year, di_month, di_day, di_interval = 2019, 10, 7, 241
-    di_case_id = f'{di_year}{di_month:02}{di_day:02}{di_interval:03}'
-
-    # Case data in json format
-    case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, di_year, di_month, di_day, di_interval)
-    save_case_json(data_directory, di_year, di_month, di_day, di_interval, overwrite=False)
-
-    # Get NEMDE model data as a Python dictionary
-    cdata = json.loads(case_data_json)
-
-    # Preprocessed case data
-    intervention_status = utils.lookup.get_intervention_status(cdata, 'physical')
-    model_data = utils.data.parse_case_data_json(case_data_json, intervention_status)
-
-    # Construct and solve model
-    model = construct_model(model_data, cdata)
-    model = solve_model(model)
-
-    # Extract model solution
-    model_solution = utils.solution.get_model_solution(model)
-    solution_comparison = utils.solution.get_model_comparison(cdata, model_solution)
-
-    # Format solution - split into traders, interconnectors, regions, period
-    formatted_solution = utils.solution.inspect_solution(solution_comparison)
-
-    # Add additional FCAS data to check FCAS availability
-    df_fcas_solution = utils.validate.check_fcas_solution(cdata, model_solution, intervention_status, di_case_id,
-                                                          sample_directory, tmp_directory)
-
-    # Plot trader solution
-    utils.solution.plot_trader_solution(cdata, model_solution, intervention_status)
-
-    # Print solution report
-    utils.solution.print_solution_report(solution_comparison)
-
-    # Check constraint violation
-    utils.validate.check_constraint_violation(model)
+    # # Directory containing model check results
+    # check_directory = os.path.join(os.path.dirname(__file__), 'output', 'check')
+    #
+    # sample_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, 'data')
+    # tmp_directory = os.path.join(os.path.dirname(__file__), 'tmp')
+    #
+    # # Define the dispatch interval to investigate
+    # di_year, di_month, di_day, di_interval = 2019, 10, 7, 241
+    # di_case_id = f'{di_year}{di_month:02}{di_day:02}{di_interval:03}'
+    #
+    # # Case data in json format
+    # case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, di_year, di_month, di_day, di_interval)
+    # save_case_json(data_directory, di_year, di_month, di_day, di_interval, overwrite=False)
+    #
+    # # Get NEMDE model data as a Python dictionary
+    # cdata = json.loads(case_data_json)
+    #
+    # # Preprocessed case data
+    # intervention_status = utils.lookup.get_intervention_status(cdata, 'physical')
+    # model_data = utils.data.parse_case_data_json(case_data_json, intervention_status)
+    #
+    # # Construct and solve model
+    # model = construct_model(model_data, cdata)
+    # model = solve_model(model)
+    #
+    # # Extract model solution
+    # model_solution = utils.solution.get_model_solution(model)
+    # solution_comparison = utils.solution.get_model_comparison(cdata, model_solution)
+    #
+    # # Format solution - split into traders, interconnectors, regions, period
+    # formatted_solution = utils.solution.inspect_solution(solution_comparison)
+    #
+    # # Add additional FCAS data to check FCAS availability
+    # df_fcas_solution = utils.validate.check_fcas_solution(cdata, model_solution, intervention_status, di_case_id,
+    #                                                       sample_directory, tmp_directory)
+    #
+    # # Plot trader solution
+    # utils.solution.plot_trader_solution(cdata, model_solution, intervention_status)
+    #
+    # # Print solution report
+    # utils.solution.print_solution_report(solution_comparison)
+    #
+    # # Check constraint violation
+    # utils.validate.check_constraint_violation(model)
 
     # Check model for a random selection of dispatch intervals
-    case_id_sample = get_case_ids(2019, 10, n=3)
+    # case_id_sample = get_case_ids(2019, 10, n=1000)
     # check_model(data_directory, mode='new', case_ids=case_id_sample)
-    check_model(data_directory, mode='continue')
+    # check_model(data_directory, mode='continue')
 
     # Extract latest run results from database
     # db_results = utils.solution.get_latest_run_results(os.environ['MYSQL_DATABASE'])
+
+    # Find cases where MNSP flow inverts
+    utils.analysis.find_mnsp_flow_inversion(data_directory, output_directory, 2019, 10)

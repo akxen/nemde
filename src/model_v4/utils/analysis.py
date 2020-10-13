@@ -1,10 +1,15 @@
 """Get model solution"""
 
+import os
+import json
+import pickle
+import calendar
+
 import pandas as pd
 import matplotlib.pyplot as plt
 
 import lookup
-
+import loaders
 
 def get_observed_trader_solution(data):
     """Get observed energy target solution"""
@@ -399,3 +404,44 @@ def check_region_fixed_demand(data, solution):
     df = pd.DataFrame(out).T
 
     return out, df
+
+
+def find_mnsp_flow_inversion(data_dir, output_dir, year, month):
+    """Find cases where the MNSP flow inverts over the dispatch interval"""
+
+    # Get days in specified month
+    _, days_in_month = calendar.monthrange(year, month)
+
+    # Construct cases to check - all cases in a given month
+    case_ids = [(year, month, day, i) for day in range(1, days_in_month + 1) for i in range(1, 289)]
+
+    # Container for cases where flow inverts
+    out = []
+
+    print('Checking if MNSP flow inverts:')
+    for (i, (year, month, day, interval)) in enumerate(case_ids):
+        print(f'{year}{month:02}{day:02}{interval:03}: {i+1}/{len(case_ids)}')
+
+        # Load json data
+        data_json = loaders.load_dispatch_interval_json(data_dir, year, month, day, interval)
+
+        # Get NEMDE model data as a Python dictionary
+        data = json.loads(data_json)
+
+        # Get intervention status for case
+        intervention = lookup.get_intervention_status(data, 'physical')
+
+        # Initial MW at start of dispatch interval
+        initial_mw = lookup.get_interconnector_collection_initial_condition_attribute(data, 'T-V-MNSP1', 'InitialMW',
+                                                                                      float)
+
+        # Target MW
+        flow = lookup.get_interconnector_solution_attribute(data, 'T-V-MNSP1', '@Flow', float, intervention)
+
+        # Check if flow inverts. If it does print case ID and append to container.
+        if ((initial_mw < 0) and (flow > 0)) or ((initial_mw > 0) and (flow < 0)):
+            print(f'({year}, {month}, {day}, {interval}): flow inverts - InitialMW: {initial_mw}, target_flow: {flow}')
+            out.append((year, month, day, interval))
+
+    with open(os.path.join(output_dir, 'mnsp_flow_inverts.pickle'), 'wb') as f:
+        pickle.dump(out, f)
