@@ -311,7 +311,7 @@ def get_solution_region_mnsp_loss_estimate(data, region_id, intervention) -> flo
             continue
 
         # Initial MW and solution flow
-        initial_mw = lookup.get_interconnector_collection_initial_condition_attribute(data, i, 'InitialMW', float)
+        # initial_mw = lookup.get_interconnector_collection_initial_condition_attribute(data, i, 'InitialMW', float)
         flow = lookup.get_interconnector_solution_attribute(data, i, '@Flow', float, intervention)
 
         to_lf_export = lookup.get_interconnector_period_collection_attribute(data, i, '@ToRegionLFExport', float)
@@ -357,7 +357,8 @@ def get_solution_region_mnsp_loss_estimate(data, region_id, intervention) -> flo
 
             elif to_region == region_id:
                 # Flow is negative, so subtract the allocated MNSP loss to get the total export flow
-                export_flow = flow - ((1 - mnsp_loss_share) * loss)
+                # export_flow = flow - ((1 - mnsp_loss_share) * loss)
+                export_flow = flow
 
                 # Export flow is negative. Multiply by -1 so can be considered as load at the connection point.
                 mnsp_loss = (to_lf_export - 1) * export_flow * -1
@@ -987,7 +988,7 @@ if __name__ == '__main__':
                                   'NEMDE', 'zipped')
 
     # Case data in json format
-    case_data_json = loaders.load_dispatch_interval_json(data_directory, 2019, 10, 22, 235)
+    case_data_json = loaders.load_dispatch_interval_json(data_directory, 2019, 10, 1, 74)
 
     # Get NEMDE model data as a Python dictionary
     cdata = json.loads(case_data_json)
@@ -1018,5 +1019,6 @@ if __name__ == '__main__':
     #
     # c3_df = c3_df.rename_axis(['day', 'interval', 'region'])
     # c3_df.join(c6_df).join(c7_df)
-    c10 = check_region_net_export_calculation(cdata, 'VIC1', '0')
+    c10 = check_region_net_export_calculation(cdata, 'VIC1', '1')
     # c11, c11_df, c11_max = check_trader_what_if_initial_mw_sample(data_directory, n=1000)
+    c12 = get_solution_region_mnsp_loss_estimate(cdata, 'VIC1', '1')

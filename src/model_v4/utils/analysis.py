@@ -420,7 +420,8 @@ def find_mnsp_flow_inversion(data_dir, output_dir, year, month):
 
     print('Checking if MNSP flow inverts:')
     for (i, (year, month, day, interval)) in enumerate(case_ids):
-        print(f'{year}{month:02}{day:02}{interval:03}: {i+1}/{len(case_ids)}')
+        if (i + 1) % 10 == 0:
+            print(f'{year}{month:02}{day:02}{interval:03}: {i+1}/{len(case_ids)}')
 
         # Load json data
         data_json = loaders.load_dispatch_interval_json(data_dir, year, month, day, interval)
@@ -443,5 +444,5 @@ def find_mnsp_flow_inversion(data_dir, output_dir, year, month):
             print(f'({year}, {month}, {day}, {interval}): flow inverts - InitialMW: {initial_mw}, target_flow: {flow}')
             out.append((year, month, day, interval))
 
-    with open(os.path.join(output_dir, 'mnsp_flow_inverts.pickle'), 'wb') as f:
-        pickle.dump(out, f)
+    with open(os.path.join(output_dir, 'mnsp_flow_inverts.json'), 'w') as f:
+        json.dump(out, f)
