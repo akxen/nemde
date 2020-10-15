@@ -274,6 +274,21 @@ def get_trader_offer_index(data) -> list:
     return out
 
 
+def get_trader_index(data) -> list:
+    """Get all trader IDs"""
+
+    # All traders
+    traders = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
+               .get('TraderPeriodCollection').get('TraderPeriod'))
+
+    # Trader offers
+    out = []
+    for i in traders:
+        out.append(i.get('@TraderID'))
+
+    return out
+
+
 def get_interconnector_index(data) -> list:
     """Get interconnector index"""
 

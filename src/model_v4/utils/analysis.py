@@ -440,9 +440,19 @@ def find_mnsp_flow_inversion(data_dir, output_dir, year, month):
         flow = lookup.get_interconnector_solution_attribute(data, 'T-V-MNSP1', '@Flow', float, intervention)
 
         # Check if flow inverts. If it does print case ID and append to container.
-        if ((initial_mw < 0) and (flow > 0)) or ((initial_mw > 0) and (flow < 0)):
-            print(f'({year}, {month}, {day}, {interval}): flow inverts - InitialMW: {initial_mw}, target_flow: {flow}')
+        if (initial_mw < 0) and (flow > 0):
+            print(f'({year}, {month}, {day}, {interval}): flow inverts (-+) InitialMW: {initial_mw}, flow: {flow}')
             out.append((year, month, day, interval))
+
+        elif (initial_mw > 0) and (flow < 0):
+            print(f'({year}, {month}, {day}, {interval}): flow inverts (+-) InitialMW: {initial_mw}, flow: {flow}')
+            out.append((year, month, day, interval))
+
+        elif (initial_mw > 0) and (flow > 0):
+            print(f'({year}, {month}, {day}, {interval}): forward flow - InitialMW: {initial_mw}, flow: {flow}')
+
+        elif (initial_mw < 0) and (flow < 0):
+            print(f'({year}, {month}, {day}, {interval}): reverse flow - InitialMW: {initial_mw}, flow: {flow}')
 
     with open(os.path.join(output_dir, 'mnsp_flow_inverts.json'), 'w') as f:
         json.dump(out, f)
