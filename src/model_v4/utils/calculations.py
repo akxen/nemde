@@ -2,6 +2,7 @@
 
 import os
 import json
+import pickle
 import random
 import calendar
 
@@ -220,7 +221,7 @@ def get_solution_region_interconnector_loss(data, region_id, intervention) -> fl
                 region_interconnector_loss += loss
 
             # Loss should be applied to 'from' region if flow direction is positive
-            elif (mnsp_status == '1') and (initial_mw > 0):
+            elif (mnsp_status == '1') and (initial_mw >= 0):
                 pass
 
             # Proportion loss according to LossShare if not an MNSP
@@ -916,25 +917,61 @@ def get_case_ids(year, month, n):
     return population[:n]
 
 
-def check_region_calculations(data_dir, year, month, intervention_mode, n=10) -> dict:
+def check_region_calculations(data_dir, case_ids, intervention_mode) -> dict:
     """Check region calculations"""
 
-    # Get case IDs
-    case_ids = get_case_ids(year, month, n)
-
-    # Map between keys to be used in output dictionary and functions used to check region calculations
-    func_map = {
-        'cleared_demand': check_region_cleared_demand,
-        'fixed_demand': check_region_fixed_demand,
-        'net_export': check_region_net_export,
-        'power_balance': check_region_power_balance,
-        'dispatched_generation': check_region_dispatched_generation,
-        'dispatched_load': check_region_dispatched_load
-
+    # Container for intermediate output
+    intermediate = {
+        'fixed_demand': [],
+        'cleared_demand': [],
+        'net_export': [],
+        'power_balance': [],
+        'dispatched_generation': [],
+        'dispatched_load': [],
     }
 
-    # Run model for each function
-    out = {k: check_region_calculation_sample(data_dir, v, case_ids, intervention_mode) for k, v in func_map.items()}
+    # Compute fixed demand for each interval
+    for i, case_id in enumerate(case_ids):
+        # Extract year, month, day, interval components from case ID string
+        year, month, day, interval = int(case_id[:4]), int(case_id[4:6]), int(case_id[6:8]), int(case_id[8:11])
+        print(f'{i + 1}/{len(case_ids)}')
+
+        # Case data in json format
+        try:
+            data_json = loaders.load_dispatch_interval_json(data_dir, year, month, day, interval)
+        except (FileNotFoundError, KeyError) as e:
+            print(e)
+            continue
+
+        # Get NEMDE model data as a Python dictionary
+        case_data = json.loads(data_json)
+
+        # Intervention status
+        intervention = lookup.get_intervention_status(case_data, intervention_mode)
+
+        for region_id in lookup.get_region_index(case_data):
+            intermediate['fixed_demand'].append(
+                {(region_id, case_id): check_region_fixed_demand(case_data, region_id, intervention)})
+
+            intermediate['cleared_demand'].append({
+                (region_id, case_id): check_region_cleared_demand(case_data, region_id, intervention)})
+
+            intermediate['net_export'].append(
+                {(region_id, case_id): check_region_net_export(case_data, region_id, intervention)})
+
+            intermediate['power_balance'].append(
+                {(region_id, case_id): check_region_power_balance(case_data, region_id, intervention)})
+
+            intermediate['dispatched_generation'].append(
+                {(region_id, case_id): check_region_dispatched_generation(case_data, region_id, intervention)})
+
+            intermediate['dispatched_load'].append(
+                {(region_id, case_id): check_region_dispatched_load(case_data, region_id, intervention)})
+
+    # Convert to DataFrames
+    out = {r: (pd.DataFrame({k: v for i in intermediate[r] for k, v in i.items()}).T
+               .sort_values(by='abs_difference', ascending=False))
+           for r in intermediate.keys()}
 
     return out
 
@@ -945,8 +982,16 @@ if __name__ == '__main__':
                                   os.path.pardir, os.path.pardir, os.path.pardir, 'nemweb', 'Reports', 'Data_Archive',
                                   'NEMDE', 'zipped')
 
+    # Output directory
+    output_dir = os.path.join(os.path.dirname(__file__), os.path.pardir, 'output')
+
     # Check region calculations
-    region_calculations = check_region_calculations(data_directory, 2019, 10, 'physical', n=5)
+    c_ids = get_case_ids(2019, 10, n=10000)
+
+    # Intervals to test MNSP flow reversal / missing case
+    # c_ids = ['20191001006', '20191001016', '20191001074', '20191001018', '2019103109300']
+
+    region_calculations = check_region_calculations(data_directory, c_ids, 'physical')
     df_cleared_demand = region_calculations['cleared_demand']
     df_fixed_demand = region_calculations['fixed_demand']
     df_net_export = region_calculations['net_export']
@@ -954,19 +999,16 @@ if __name__ == '__main__':
     df_dispatched_generation = region_calculations['dispatched_generation']
     df_dispatched_load = region_calculations['dispatched_load']
 
-    # Check aggregate calculations
-    aggregate_calculations = check_aggregate_calculations(data_directory, 2019, 10, 'physical', n=5)
-    df_aggregate_fixed_demand = aggregate_calculations['fixed_demand']
-    df_aggregate_cleared_demand = aggregate_calculations['cleared_demand']
+    with open(os.path.join(output_dir, 'calculations', 'regions.pickle'), 'wb') as f:
+        pickle.dump(region_calculations, f)
 
-    # # Intervals where MNSP flow reverses
-    # # c_ids = ['20191001006', '20191001016', '20191001074', '20191001018']
-    # # c_ids = get_case_ids(2019, 10, n=5)
-    #
-    # # Case data in json format
-    # case_data_json = loaders.load_dispatch_interval_json(data_directory, 2019, 10, 1, 16)
-    #
+    # Check aggregate calculations
+    # aggregate_calculations = check_aggregate_calculations(data_directory, 2019, 10, 'physical', n=1000)
+    # df_aggregate_fixed_demand = aggregate_calculations['fixed_demand']
+    # df_aggregate_cleared_demand = aggregate_calculations['cleared_demand']
+
     # # Get NEMDE model data as a Python dictionary and calculation intervention status depending on desired run mode
+    # case_data_json = loaders.load_dispatch_interval_json(data_directory, 2019, 10, 1, 16)
     # cdata = json.loads(case_data_json)
     # intervention_status = lookup.get_intervention_status(cdata, 'physical')
     #
