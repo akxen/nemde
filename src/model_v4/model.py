@@ -1022,8 +1022,62 @@ def define_aggregate_power_expressions(m):
 
         return total
 
+    def region_initial_mnsp_loss2(m, r):
+        """
+        Get estimate of MNSP loss allocated to given region
+
+        MLFs used to compute loss. MLF equation: MLF = 1 + (DeltaLoss / DeltaLoad) where load is varied at the
+        connection point. Must compute the load the connection point for the MNSP - this will be positive or negative
+        (i.e. generation) depending on the direction of flow over the interconnector.
+
+        From the MLF equation: DeltaLoss = (MLF - 1) x DeltaLoad. So need to compute the effective load at the
+        connection point in order to compute the loss. Note the loss may be positive or negative depending on the MLF
+        and the effective load at the connection point.
+        """
+
+        total = 0
+        for i in m.S_MNSPS:
+            from_region = m.P_INTERCONNECTOR_FROM_REGION[i]
+            to_region = m.P_INTERCONNECTOR_TO_REGION[i]
+
+            if r not in [from_region, to_region]:
+                continue
+
+            # Initial MW and solution flow
+            initial_mw = m.P_INTERCONNECTOR_INITIAL_MW[i]
+
+            to_lf_export = m.P_MNSP_TO_REGION_LF_EXPORT[i]
+            to_lf_import = m.P_MNSP_TO_REGION_LF_IMPORT[i]
+
+            from_lf_import = m.P_MNSP_FROM_REGION_LF_IMPORT[i]
+            from_lf_export = m.P_MNSP_FROM_REGION_LF_EXPORT[i]
+
+            # Initial loss estimate over interconnector
+            loss = m.P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE[i]
+
+            if (r == from_region) and (initial_mw >= 0):
+                export_flow = initial_mw + loss
+                total += (from_lf_export - 1) * export_flow
+
+            elif (r == from_region) and (initial_mw < 0):
+                import_flow = initial_mw
+                total += (from_lf_import - 1) * import_flow
+
+            elif (r == to_region) and (initial_mw >= 0):
+                import_flow = initial_mw
+                total += (to_lf_import - 1) * import_flow * -1
+
+            elif (r == to_region) and (initial_mw < 0):
+                export_flow = initial_mw - loss
+                total += (to_lf_export - 1) * export_flow * -1
+
+            else:
+                raise Exception('Unhandled case:', r, from_region, to_region, initial_mw)
+
+        return total
+
     # Region initial allocated MNSP losses
-    m.E_REGION_INITIAL_MNSP_LOSS = pyo.Expression(m.S_REGIONS, rule=region_initial_mnsp_loss)
+    m.E_REGION_INITIAL_MNSP_LOSS = pyo.Expression(m.S_REGIONS, rule=region_initial_mnsp_loss2)
 
     def region_mnsp_loss_rule(m, r):
         """
