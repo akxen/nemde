@@ -804,6 +804,32 @@ def get_mnsp_period_collection_attribute(data, attribute, func) -> dict:
     return values
 
 
+def get_mnsp_region_loss_indicator(data) -> dict:
+    """Get region loss indicator - =1 if from region and InitialMW >= 0, else =0"""
+
+    # MNSP and region index
+    mnsp_index = get_mnsp_index(data)
+    region_index = get_region_index(data)
+
+    # Container for output
+    out = {}
+    for i in mnsp_index:
+        # Extract InitialMW and FromRegion for given MNSP
+        initial_mw = lookup.get_interconnector_collection_initial_condition_attribute(data, i, 'InitialMW', float)
+        to_region = lookup.get_interconnector_period_collection_attribute(data, i, '@ToRegion', str)
+        from_region = lookup.get_interconnector_period_collection_attribute(data, i, '@FromRegion', str)
+
+        for j in region_index:
+            if (j == from_region) and (initial_mw >= 0):
+                out[(i, j)] = 1
+            elif (j == to_region) and (initial_mw < 0):
+                out[(i, j)] = 1
+            else:
+                out[(i, j)] = 0
+
+    return out
+
+
 def get_region_initial_condition_attribute(data, attribute, func) -> dict:
     """
     Get region initial condition attribute
@@ -1201,6 +1227,7 @@ def parse_case_data_json(data, intervention) -> dict:
         'P_MNSP_LOSS_PRICE': get_case_attribute(data_dict, '@MNSPLossesPrice', float),
         'P_MNSP_RAMP_UP_RATE': get_mnsp_quantity_band_attribute(data_dict, '@RampUpRate', float),
         'P_MNSP_RAMP_DOWN_RATE': get_mnsp_quantity_band_attribute(data_dict, '@RampDnRate', float),
+        'P_MNSP_REGION_LOSS_INDICATOR': get_mnsp_region_loss_indicator(data_dict),
         'P_REGION_INITIAL_DEMAND': get_region_initial_condition_attribute(data_dict, 'InitialDemand', float),
         'P_REGION_ADE': get_region_initial_condition_attribute(data_dict, 'ADE', float),
         'P_REGION_DF': get_region_period_collection_attribute(data_dict, '@DF', float),

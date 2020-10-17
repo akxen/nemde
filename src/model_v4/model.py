@@ -219,6 +219,9 @@ def define_parameters(m, data):
     m.P_MNSP_FROM_REGION_LF_EXPORT = pyo.Param(m.S_MNSPS, initialize=data['P_MNSP_FROM_REGION_LF_EXPORT'])
     m.P_MNSP_FROM_REGION_LF_IMPORT = pyo.Param(m.S_MNSPS, initialize=data['P_MNSP_FROM_REGION_LF_IMPORT'])
 
+    # MNSP loss indicator
+    m.P_MNSP_REGION_LOSS_INDICATOR = pyo.Param(m.S_MNSPS, m.S_REGIONS, initialize=data['P_MNSP_REGION_LOSS_INDICATOR'])
+
     # Initial region demand
     m.P_REGION_INITIAL_DEMAND = pyo.Param(m.S_REGIONS, initialize=data['P_REGION_INITIAL_DEMAND'])
 
@@ -317,6 +320,15 @@ def define_variables(m):
     m.V_GC_TRADER = pyo.Var(m.S_GC_TRADER_VARS)
     m.V_GC_INTERCONNECTOR = pyo.Var(m.S_GC_INTERCONNECTOR_VARS)
     m.V_GC_REGION = pyo.Var(m.S_GC_REGION_VARS)
+
+    # MNSP loss model variables
+    m.V_MNSP_TO_CP_FLOW = pyo.Var(m.S_MNSPS)
+    m.V_MNSP_TO_REGION_EXPORT = pyo.Var(m.S_MNSPS)
+    m.V_MNSP_TO_REGION_IMPORT = pyo.Var(m.S_MNSPS)
+    m.V_MNSP_FROM_CP_FLOW = pyo.Var(m.S_MNSPS)
+    m.V_MNSP_FROM_REGION_EXPORT = pyo.Var(m.S_MNSPS)
+    m.V_MNSP_FROM_REGION_IMPORT = pyo.Var(m.S_MNSPS)
+    m.V_MNSP_FLOW_DIRECTION = pyo.Var(m.S_MNSPS, within=pyo.Binary)
 
     # Generic constraint violation pyo.Variables
     m.V_CV = pyo.Var(m.S_GENERIC_CONSTRAINTS, within=pyo.NonNegativeReals)
@@ -1661,6 +1673,29 @@ def define_mnsp_constraints(m):
 
     # MNSP ramp down constraint
     m.C_MNSP_RAMP_DOWN = pyo.Constraint(m.S_MNSP_OFFERS, rule=mnsp_ramp_down_rule)
+
+    def mnsp_flow_direction_1_rule(m, i):
+        """Indicator constraint 1 to define MNSP flow direction"""
+
+        return m.V_GC_INTERCONNECTOR[i] >= - 1000 * (1 - m.V_MNSP_FLOW_DIRECTION[i])
+
+    # Constraint used to get flow direction for MNSP
+    m.C_MNSP_FLOW_DIRECTION_1 = pyo.Constraint(m.S_MNSPS, rule=mnsp_flow_direction_1_rule)
+
+    def mnsp_flow_direction_2_rule(m, i):
+        """Indicator constraint 2 to define MNSP flow direction"""
+
+        return m.V_GC_INTERCONNECTOR[i] <= 1000 * m.V_MNSP_FLOW_DIRECTION[i]
+
+    # Constraint used to get flow direction for MNSP
+    m.C_MNSP_FLOW_DIRECTION_2 = pyo.Constraint(m.S_MNSPS, rule=mnsp_flow_direction_2_rule)
+
+    def mnsp_from_cp_flow_rule(m, i):
+        """Net flow at FromRegion connection point for MNSP loss model"""
+
+        from_region = m.P_INTERCONNECTOR_FROM_REGION[i]
+
+        return m.V_GC_INTERCONNECTOR[i] + (m.V_LOSS[i] * m.P_MNSP_REGION_LOSS_INDICATOR[i, from_region])
 
     return m
 
