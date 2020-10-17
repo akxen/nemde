@@ -941,9 +941,6 @@ def define_aggregate_power_expressions(m):
         From the MLF equation: DeltaLoss = (MLF - 1) x DeltaLoad. So need to compute the effective load at the connection
         point in order to compute the loss. Note the loss may be positive or negative depending on the MLF and the effective
         load at the connection point.
-
-        TODO: a check must be performed to ensure InitialMW and solution Flow are in same direction - need re-run
-        otherwise
         """
 
         total = 0
@@ -954,12 +951,7 @@ def define_aggregate_power_expressions(m):
             if r not in [from_region, to_region]:
                 continue
 
-            # Initial MW and solution flow
-            # initial_mw = m.P_INTERCONNECTOR_INITIAL_MW[i]
-            # flow = lookup.get_interconnector_solution_attribute(data, i, '@Flow', float, intervention)
-
-            # TODO: if InitialMW and Flow are in different directions, then need to re-run model. not sure how abstract
-            # this. For now assume InitialMW will suffice.
+            # Extract initial and target flow
             initial_flow = m.P_INTERCONNECTOR_INITIAL_MW[i]
             flow = m.V_GC_INTERCONNECTOR[i]
 
@@ -2555,48 +2547,48 @@ if __name__ == '__main__':
     tmp_directory = os.path.join(os.path.dirname(__file__), 'tmp')
 
     # Define the dispatch interval to investigate
-    di_year, di_month, di_day, di_interval = 2019, 10, 1, 74
+    di_year, di_month, di_day, di_interval = 2019, 10, 10, 10
     di_case_id = f'{di_year}{di_month:02}{di_day:02}{di_interval:03}'
 
     # Case data in json format
     case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, di_year, di_month, di_day, di_interval)
     save_case_json(data_directory, di_year, di_month, di_day, di_interval, overwrite=False)
 
-    # # Get NEMDE model data as a Python dictionary
-    # cdata = json.loads(case_data_json)
-    #
-    # # Preprocessed case data
-    # intervention_status = utils.lookup.get_intervention_status(cdata, 'physical')
-    # model_data = utils.data.parse_case_data_json(case_data_json, intervention_status)
-    #
-    # # Construct and solve model
-    # model = construct_model(model_data, cdata)
-    # model = solve_model(model)
-    #
-    # # Extract model solution
-    # model_solution = utils.solution.get_model_solution(model)
-    # solution_comparison = utils.solution.get_model_comparison(cdata, model_solution)
-    #
-    # # Format solution - split into traders, interconnectors, regions, period
-    # formatted_solution = utils.solution.inspect_solution(solution_comparison)
-    #
-    # # Add additional FCAS data to check FCAS availability
-    # # df_fcas_solution = utils.validate.check_fcas_solution(cdata, model_solution, intervention_status, di_case_id,
-    # #                                                       sample_directory, tmp_directory)
-    #
-    # # Plot trader solution
-    # utils.solution.plot_trader_solution(cdata, model_solution, intervention_status)
-    #
-    # # Print solution report
-    # utils.solution.print_solution_report(solution_comparison)
-    #
-    # # Check constraint violation
-    # utils.validate.check_constraint_violation(model)
-    #
-    # # Extract solution
-    # regions_results = formatted_solution['regions']
-    # traders_results = formatted_solution['traders']
-    # interconnectors_results = formatted_solution['interconnectors']
+    # Get NEMDE model data as a Python dictionary
+    cdata = json.loads(case_data_json)
+
+    # Preprocessed case data
+    intervention_status = utils.lookup.get_intervention_status(cdata, 'physical')
+    model_data = utils.data.parse_case_data_json(case_data_json, intervention_status)
+
+    # Construct and solve model
+    model = construct_model(model_data, cdata)
+    model = solve_model(model)
+
+    # Extract model solution
+    model_solution = utils.solution.get_model_solution(model)
+    solution_comparison = utils.solution.get_model_comparison(cdata, model_solution)
+
+    # Format solution - split into traders, interconnectors, regions, period
+    formatted_solution = utils.solution.inspect_solution(solution_comparison)
+
+    # Add additional FCAS data to check FCAS availability
+    # df_fcas_solution = utils.validate.check_fcas_solution(cdata, model_solution, intervention_status, di_case_id,
+    #                                                       sample_directory, tmp_directory)
+
+    # Plot trader solution
+    utils.solution.plot_trader_solution(cdata, model_solution, intervention_status)
+
+    # Print solution report
+    utils.solution.print_solution_report(solution_comparison)
+
+    # Check constraint violation
+    utils.validate.check_constraint_violation(model)
+
+    # Extract solution
+    regions_results = formatted_solution['regions']
+    traders_results = formatted_solution['traders']
+    interconnectors_results = formatted_solution['interconnectors']
 
     # Check model for a random selection of dispatch intervals
     # case_id_sample = get_case_ids(2019, 10, n=1000)
