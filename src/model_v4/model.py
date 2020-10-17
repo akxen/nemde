@@ -1697,6 +1697,147 @@ def define_mnsp_constraints(m):
 
         return m.V_GC_INTERCONNECTOR[i] + (m.V_LOSS[i] * m.P_MNSP_REGION_LOSS_INDICATOR[i, from_region])
 
+    # MNSP FromRegion connection point flow
+    m.E_MNSP_FROM_CP_FLOW = pyo.Expression(m.S_MNSPS, rule=mnsp_from_cp_flow_rule)
+
+    def mnsp_from_export_flow_1_rule(m, i):
+        """From region export flow rule 1"""
+
+        return m.E_MNSP_FROM_CP_FLOW[i] - (1000 * (1 - m.V_MNSP_FLOW_DIRECTION[i])) <= m.V_MNSP_FROM_REGION_EXPORT[i]
+
+    # Constraint used to determine FromRegionExport flow
+    m.C_MNSP_FROM_REGION_EXPORT_1 = pyo.Constraint(m.S_MNSPS, rule=mnsp_from_export_flow_1_rule)
+
+    def mnsp_from_export_flow_2_rule(m, i):
+        """From region export flow rule 2"""
+
+        return m.V_MNSP_FROM_REGION_EXPORT[i] <= m.E_MNSP_FROM_CP_FLOW[i] + (1000 * (1 - m.V_MNSP_FLOW_DIRECTION[i]))
+
+    # Constraint used to determine FromRegionExport flow
+    m.C_MNSP_FROM_REGION_EXPORT_2 = pyo.Constraint(m.S_MNSPS, rule=mnsp_from_export_flow_2_rule)
+
+    def mnsp_from_export_flow_3_rule(m, i):
+        """From region export flow rule 3"""
+
+        return - 1000 * m.V_MNSP_FLOW_DIRECTION[i] <= m.V_MNSP_FROM_REGION_EXPORT[i]
+
+    # Constraint used to determine FromRegionExport flow
+    m.C_MNSP_FROM_REGION_EXPORT_3 = pyo.Constraint(m.S_MNSPS, rule=mnsp_from_export_flow_3_rule)
+
+    def mnsp_from_export_flow_4_rule(m, i):
+        """From region export flow rule 4"""
+
+        return m.V_MNSP_FROM_REGION_EXPORT[i] <= 1000 * m.V_MNSP_FLOW_DIRECTION[i]
+
+    # Constraint used to determine FromRegionExport flow
+    m.C_MNSP_FROM_REGION_EXPORT_4 = pyo.Constraint(m.S_MNSPS, rule=mnsp_from_export_flow_4_rule)
+
+    def mnsp_from_import_flow_1_rule(m, i):
+        """From region import flow 1"""
+
+        return m.E_MNSP_FROM_CP_FLOW[i] - (1000 * m.V_MNSP_FLOW_DIRECTION[i]) <= m.V_MNSP_FROM_REGION_IMPORT[i]
+
+    # Constraint used to determine FromRegionImport flow
+    m.C_MNSP_FROM_REGION_IMPORT_1 = pyo.Constraint(m.S_MNSPS, rule=mnsp_from_import_flow_1_rule)
+
+    def mnsp_from_import_flow_2_rule(m, i):
+        """From region import flow 2"""
+
+        return m.V_MNSP_FROM_REGION_IMPORT[i] <= m.E_MNSP_FROM_CP_FLOW[i] + (1000 * m.V_MNSP_FLOW_DIRECTION[i])
+
+    # Constraint used to determine FromRegionImport flow
+    m.C_MNSP_FROM_REGION_IMPORT_2 = pyo.Constraint(m.S_MNSPS, rule=mnsp_from_import_flow_2_rule)
+
+    def mnsp_from_import_flow_3_rule(m, i):
+        """From region import flow 3"""
+
+        return -1000 * (1 - m.V_MNSP_FLOW_DIRECTION[i]) <= m.V_MNSP_FROM_REGION_IMPORT[i]
+
+    # Constraint used to determine FromRegionImport flow
+    m.C_MNSP_FROM_REGION_IMPORT_3 = pyo.Constraint(m.S_MNSPS, rule=mnsp_from_import_flow_3_rule)
+
+    def mnsp_from_import_flow_4_rule(m, i):
+        """From region import flow 4"""
+
+        return m.V_MNSP_FROM_REGION_IMPORT[i] <= 1000 * (1 - m.V_MNSP_FLOW_DIRECTION[i])
+
+    # Constraint used to determine FromRegionImport flow
+    m.C_MNSP_FROM_REGION_IMPORT_4 = pyo.Constraint(m.S_MNSPS, rule=mnsp_from_import_flow_4_rule)
+
+    def mnsp_to_cp_flow_rule(m, i):
+        """Net flow at ToRegion connection point for MNSP loss model"""
+
+        to_region = m.P_INTERCONNECTOR_TO_REGION[i]
+
+        return m.V_GC_INTERCONNECTOR[i] - (m.V_LOSS[i] * m.P_MNSP_REGION_LOSS_INDICATOR[i, to_region])
+
+    # MNSP ToRegion connection point flow
+    m.E_MNSP_TO_CP_FLOW = pyo.Expression(m.S_MNSPS, rule=mnsp_to_cp_flow_rule)
+
+    def mnsp_to_export_flow_1_rule(m, i):
+        """ToRegion Export flow 1"""
+
+        return m.E_MNSP_TO_CP_FLOW[i] - (1000 * m.V_MNSP_FLOW_DIRECTION[i]) <= m.V_MNSP_TO_REGION_EXPORT[i]
+
+    # MNSP ToRegion export flow condition 1
+    m.C_MNSP_TO_REGION_EXPORT_1 = pyo.Constraint(m.S_MNSPS, rule=mnsp_to_export_flow_1_rule)
+
+    def mnsp_to_export_flow_2_rule(m, i):
+        """ToRegion Export flow 2"""
+
+        return m.V_MNSP_TO_REGION_EXPORT[i] <= m.E_MNSP_TO_CP_FLOW[i] + (1000 * m.V_MNSP_FLOW_DIRECTION[i])
+
+    # MNSP ToRegion export flow condition 2
+    m.C_MNSP_TO_REGION_EXPORT_2 = pyo.Constraint(m.S_MNSPS, rule=mnsp_to_export_flow_2_rule)
+
+    def mnsp_to_export_flow_3_rule(m, i):
+        """ToRegion Export flow 3"""
+
+        return -1000 * (1 - m.V_MNSP_FLOW_DIRECTION[i]) <= m.V_MNSP_TO_REGION_EXPORT[i]
+
+    # MNSP ToRegion export flow condition 3
+    m.C_MNSP_TO_REGION_EXPORT_3 = pyo.Constraint(m.S_MNSPS, rule=mnsp_to_export_flow_3_rule)
+
+    def mnsp_to_export_flow_4_rule(m, i):
+        """ToRegion Export flow 4"""
+
+        return m.V_MNSP_TO_REGION_EXPORT[i] <= 1000 * (1 - m.V_MNSP_FLOW_DIRECTION[i])
+
+    # MNSP ToRegion export flow condition 4
+    m.C_MNSP_TO_REGION_EXPORT_4 = pyo.Constraint(m.S_MNSPS, rule=mnsp_to_export_flow_4_rule)
+
+    def mnsp_to_import_flow_1_rule(m, i):
+        """ToRegion import flow 1"""
+
+        return m.E_MNSP_TO_CP_FLOW[i] - (1000 * (1 - m.V_MNSP_FLOW_DIRECTION[i])) <= m.V_MNSP_TO_REGION_IMPORT[i]
+
+    # MNSP ToRegion import flow condition 1
+    m.C_MNSP_TO_REGION_IMPORT_1 = pyo.Constraint(m.S_MNSPS, rule=mnsp_to_import_flow_1_rule)
+
+    def mnsp_to_import_flow_2_rule(m, i):
+        """ToRegion import flow 2"""
+
+        return m.V_MNSP_TO_REGION_IMPORT[i] <= m.E_MNSP_TO_CP_FLOW[i] + (1000 * (1 - m.V_MNSP_FLOW_DIRECTION[i]))
+
+    # MNSP ToRegion import flow condition 2
+    m.C_MNSP_TO_REGION_IMPORT_2 = pyo.Constraint(m.S_MNSPS, rule=mnsp_to_import_flow_2_rule)
+
+    def mnsp_to_import_flow_3_rule(m, i):
+        """ToRegion import flow 3"""
+
+        return -1000 * m.V_MNSP_FLOW_DIRECTION[i] <= m.V_MNSP_TO_REGION_IMPORT[i]
+
+    # MNSP ToRegion import flow condition 3
+    m.C_MNSP_TO_REGION_IMPORT_3 = pyo.Constraint(m.S_MNSPS, rule=mnsp_to_import_flow_3_rule)
+
+    def mnsp_to_import_flow_4_rule(m, i):
+        """ToRegion import flow 4"""
+
+        return m.V_MNSP_TO_REGION_IMPORT[i] <= 1000 * m.V_MNSP_FLOW_DIRECTION[i]
+
+    # MNSP ToRegion import flow condition 4
+    m.C_MNSP_TO_REGION_IMPORT_4 = pyo.Constraint(m.S_MNSPS, rule=mnsp_to_import_flow_4_rule)
+
     return m
 
 
