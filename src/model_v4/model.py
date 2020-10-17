@@ -1067,6 +1067,19 @@ def define_aggregate_power_expressions(m):
             # Initial loss estimate over interconnector
             loss = m.P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE[i]
 
+            # if r == from_region:
+            #     export_loss = (from_lf_export - 1) * m.V_MNSP_FROM_REGION_EXPORT[i]
+            #     import_loss = (from_lf_import - 1) * m.V_MNSP_FROM_REGION_IMPORT[i] * -1
+            #     total += export_loss + import_loss
+            #
+            # elif r == to_region:
+            #     export_loss = (to_lf_export - 1) * m.V_MNSP_TO_REGION_EXPORT[i]
+            #     import_loss = (to_lf_import - 1) * m.V_MNSP_TO_REGION_IMPORT[i] * -1
+            #     total += export_loss + import_loss
+            #
+            # else:
+            #     raise Exception('Unhandled case:', r, to_region, from_region)
+
             if (r == from_region) and (initial_mw >= 0):
                 export_flow = initial_mw + loss
                 total += (from_lf_export - 1) * export_flow
