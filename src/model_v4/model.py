@@ -844,8 +844,55 @@ def define_aggregate_power_expressions(m):
 
         return region_interconnector_loss
 
+    def region_allocated_loss_rule2(m, r):
+        """Interconnector loss allocated to given region"""
+
+        # Allocated interconnector losses
+        region_interconnector_loss = 0
+        for i in m.S_INTERCONNECTORS:
+            from_region = m.P_INTERCONNECTOR_FROM_REGION[i]
+            to_region = m.P_INTERCONNECTOR_TO_REGION[i]
+            mnsp_status = m.P_INTERCONNECTOR_MNSP_STATUS[i]
+
+            if r not in [from_region, to_region]:
+                continue
+
+            # Interconnector flow from solution
+            loss = m.V_LOSS[i]
+            loss_share = m.P_INTERCONNECTOR_LOSS_SHARE[i]
+            initial_mw = m.P_INTERCONNECTOR_INITIAL_MW[i]
+
+            # Loss applied to sending end
+            if (r == from_region) and (mnsp_status == '1') and (initial_mw >= 0):
+                region_interconnector_loss += loss
+
+            # Loss applied to sending end - negative flow means no loss allocated to FromRegion
+            elif (r == from_region) and (mnsp_status == '1') and (initial_mw < 0):
+                pass
+
+            # Non-MNSP interconnector has loss allocated according to LossShare
+            elif (r == from_region) and (mnsp_status == '0'):
+                region_interconnector_loss += loss * loss_share
+
+            # Flow is positive so loss applied to FromRegion
+            elif (r == to_region) and (mnsp_status == '1') and (initial_mw >= 0):
+                pass
+
+            # Flow is negative so loss applied to ToRegion
+            elif (r == to_region) and (mnsp_status == '1') and (initial_mw < 0):
+                region_interconnector_loss += loss
+
+            # Non-MNSP interconnector has loss allocated according to LossShare
+            elif (r == to_region) and (mnsp_status == '0'):
+                region_interconnector_loss += loss * (1 - loss_share)
+
+            else:
+                raise Exception('Unhandled case:', r, from_region, to_region)
+
+        return region_interconnector_loss
+
     # Region allocated loss at end of dispatch interval
-    m.E_REGION_ALLOCATED_LOSS = pyo.Expression(m.S_REGIONS, rule=region_allocated_loss_rule)
+    m.E_REGION_ALLOCATED_LOSS = pyo.Expression(m.S_REGIONS, rule=region_allocated_loss_rule2)
 
     def region_initial_mnsp_loss(m, r):
         """
@@ -933,11 +980,9 @@ def define_aggregate_power_expressions(m):
     def region_mnsp_loss_rule(m, r):
         """
         Get estimate of MNSP loss allocated to given region
-
         MLFs used to compute loss. MLF equation: MLF = 1 + (DeltaLoss / DeltaLoad) where load is varied at the connection
         point. Must compute the load the connection point for the MNSP - this will be positive or negative (i.e. generation)
         depending on the direction of flow over the interconnector.
-
         From the MLF equation: DeltaLoss = (MLF - 1) x DeltaLoad. So need to compute the effective load at the connection
         point in order to compute the loss. Note the loss may be positive or negative depending on the MLF and the effective
         load at the connection point.
@@ -1008,6 +1053,55 @@ def define_aggregate_power_expressions(m):
 
             # Add to total MNSP loss allocated to a given region
             total += mnsp_loss
+
+        return total
+
+    def region_mnsp_loss_rule2(m, r):
+        """
+        Get estimate of MNSP loss allocated to given region
+
+        MLFs used to compute loss. MLF equation: MLF = 1 + (DeltaLoss / DeltaLoad) where load is varied at the connection
+        point. Must compute the load the connection point for the MNSP - this will be positive or negative (i.e. generation)
+        depending on the direction of flow over the interconnector.
+
+        From the MLF equation: DeltaLoss = (MLF - 1) x DeltaLoad. So need to compute the effective load at the connection
+        point in order to compute the loss. Note the loss may be positive or negative depending on the MLF and the effective
+        load at the connection point.
+        """
+
+        total = 0
+        for i in m.S_MNSPS:
+            from_region = m.P_INTERCONNECTOR_FROM_REGION[i]
+            to_region = m.P_INTERCONNECTOR_TO_REGION[i]
+
+            if r not in [from_region, to_region]:
+                continue
+
+            # Extract initial and target flow
+            initial_flow = m.P_INTERCONNECTOR_INITIAL_MW[i]
+            flow = m.V_GC_INTERCONNECTOR[i]
+
+            to_lf_export = m.P_MNSP_TO_REGION_LF_EXPORT[i]
+            to_lf_import = m.P_MNSP_TO_REGION_LF_IMPORT[i]
+
+            from_lf_import = m.P_MNSP_FROM_REGION_LF_IMPORT[i]
+            from_lf_export = m.P_MNSP_FROM_REGION_LF_EXPORT[i]
+
+            # Loss over interconnector
+            loss = m.V_LOSS[i]
+
+            if r == from_region:
+                export_loss = (from_lf_export - 1) * from_region_export_flow
+                import_loss = (from_lf_import - 1) * from_region_import_flow
+                total += export_loss + import_loss
+
+            elif r == to_region:
+                export_loss = (to_lf_export - 1) * to_region_export_flow
+                import_loss = (to_lf_import - 1) * to_region_import_flow
+                total += export_loss + import_loss
+
+            else:
+                raise Exception('Unexpected region:', r)
 
         return total
 
