@@ -795,8 +795,56 @@ def define_aggregate_power_expressions(m):
 
         return region_interconnector_loss
 
+    def region_initial_allocated_loss2(m, r):
+        """Losses allocated to region due to interconnector flow"""
+
+        # Allocated interconnector losses
+        region_interconnector_loss = 0
+
+        for i in m.S_INTERCONNECTORS:
+            from_region = m.P_INTERCONNECTOR_FROM_REGION[i]
+            to_region = m.P_INTERCONNECTOR_TO_REGION[i]
+            mnsp_status = m.P_INTERCONNECTOR_MNSP_STATUS[i]
+
+            if r not in [from_region, to_region]:
+                continue
+
+            # Initial loss estimate over interconnector
+            loss = m.P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE[i]
+            loss_share = m.P_INTERCONNECTOR_LOSS_SHARE[i]
+            initial_mw = m.P_INTERCONNECTOR_INITIAL_MW[i]
+
+            # Loss applied to sending end
+            if (r == from_region) and (mnsp_status == '1') and (initial_mw >= 0):
+                region_interconnector_loss += loss
+
+            # Loss applied to sending end - negative flow means no loss allocated to FromRegion
+            elif (r == from_region) and (mnsp_status == '1') and (initial_mw < 0):
+                pass
+
+            # Non-MNSP interconnector has loss allocated according to LossShare
+            elif (r == from_region) and (mnsp_status == '0'):
+                region_interconnector_loss += loss * loss_share
+
+            # Flow is positive so loss applied to FromRegion
+            elif (r == to_region) and (mnsp_status == '1') and (initial_mw >= 0):
+                pass
+
+            # Flow is negative so loss applied to ToRegion
+            elif (r == to_region) and (mnsp_status == '1') and (initial_mw < 0):
+                region_interconnector_loss += loss
+
+            # Non-MNSP interconnector has loss allocated according to LossShare
+            elif (r == to_region) and (mnsp_status == '0'):
+                region_interconnector_loss += loss * (1 - loss_share)
+
+            else:
+                raise Exception('Unhandled case:', r, from_region, to_region)
+
+        return region_interconnector_loss
+
     # Region initial allocated losses
-    m.E_REGION_INITIAL_ALLOCATED_LOSS = pyo.Expression(m.S_REGIONS, rule=region_initial_allocated_loss)
+    m.E_REGION_INITIAL_ALLOCATED_LOSS = pyo.Expression(m.S_REGIONS, rule=region_initial_allocated_loss2)
 
     def region_allocated_loss_rule(m, r):
         """Interconnector loss allocated to given region"""
