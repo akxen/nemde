@@ -733,6 +733,50 @@ def define_constraint_violation_penalty_expressions(m):
     return m
 
 
+def define_mnsp_expressions(m):
+    """Expressions for MNSP loss model"""
+
+    def mnsp_from_cp_flow_rule(m, i):
+        """Net flow at FromRegion connection point for MNSP loss model"""
+
+        from_region = m.P_INTERCONNECTOR_FROM_REGION[i]
+
+        return m.V_GC_INTERCONNECTOR[i] + (m.V_LOSS[i] * m.P_MNSP_REGION_LOSS_INDICATOR[i, from_region])
+
+    # MNSP FromRegion connection point flow
+    m.E_MNSP_FROM_CP_FLOW = pyo.Expression(m.S_MNSPS, rule=mnsp_from_cp_flow_rule)
+
+    def mnsp_to_cp_flow_rule(m, i):
+        """Net flow at ToRegion connection point for MNSP loss model"""
+
+        to_region = m.P_INTERCONNECTOR_TO_REGION[i]
+
+        return m.V_GC_INTERCONNECTOR[i] - (m.V_LOSS[i] * m.P_MNSP_REGION_LOSS_INDICATOR[i, to_region])
+
+    # MNSP ToRegion connection point flow
+    m.E_MNSP_TO_CP_FLOW = pyo.Expression(m.S_MNSPS, rule=mnsp_to_cp_flow_rule)
+
+    def mnsp_from_region_loss_rule(m, i):
+        """MNSP loss allocated to given region"""
+
+        return (((m.P_MNSP_FROM_REGION_LF_EXPORT[i] - 1) * m.V_MNSP_FROM_REGION_EXPORT[i])
+                + (m.P_MNSP_FROM_REGION_LF_IMPORT[i] - 1) * m.V_MNSP_FROM_REGION_IMPORT[i])
+
+    # MNSP from region loss
+    m.E_MNSP_FROM_REGION_LOSS = pyo.Expression(m.S_MNSPS, rule=mnsp_from_region_loss_rule)
+
+    def mnsp_to_region_loss_rule(m, i):
+        """MNSP loss allocated to given region"""
+
+        return (((m.P_MNSP_TO_REGION_LF_EXPORT[i] - 1) * m.V_MNSP_TO_REGION_EXPORT[i] * -1)
+                + (m.P_MNSP_TO_REGION_LF_IMPORT[i] - 1) * m.V_MNSP_TO_REGION_IMPORT[i] * -1)
+
+    # MNSP from region loss
+    m.E_MNSP_TO_REGION_LOSS = pyo.Expression(m.S_MNSPS, rule=mnsp_to_region_loss_rule)
+
+    return m
+
+
 def define_aggregate_power_expressions(m):
     """Compute aggregate demand and generation in each NEM region"""
 
@@ -1232,7 +1276,7 @@ def define_aggregate_power_expressions(m):
         return total
 
     # Region MNSP loss at end of dispatch interval
-    m.E_REGION_MNSP_LOSS = pyo.Expression(m.S_REGIONS, rule=region_mnsp_loss_rule)
+    m.E_REGION_MNSP_LOSS = pyo.Expression(m.S_REGIONS, rule=region_mnsp_loss_rule2)
 
     def region_fixed_demand_rule(m, r):
         """Check region fixed demand calculation - demand at start of dispatch interval"""
@@ -1393,6 +1437,9 @@ def define_expressions(m, data):
 
     # Constraint violation penalties
     m = define_constraint_violation_penalty_expressions(m)
+
+    # MNSP loss model expressions
+    m = define_mnsp_expressions(m)
 
     # Aggregate power expressions
     m = define_aggregate_power_expressions(m)
@@ -1702,16 +1749,6 @@ def define_mnsp_constraints(m):
     # Constraint used to get flow direction for MNSP
     m.C_MNSP_FLOW_DIRECTION_2 = pyo.Constraint(m.S_MNSPS, rule=mnsp_flow_direction_2_rule)
 
-    def mnsp_from_cp_flow_rule(m, i):
-        """Net flow at FromRegion connection point for MNSP loss model"""
-
-        from_region = m.P_INTERCONNECTOR_FROM_REGION[i]
-
-        return m.V_GC_INTERCONNECTOR[i] + (m.V_LOSS[i] * m.P_MNSP_REGION_LOSS_INDICATOR[i, from_region])
-
-    # MNSP FromRegion connection point flow
-    m.E_MNSP_FROM_CP_FLOW = pyo.Expression(m.S_MNSPS, rule=mnsp_from_cp_flow_rule)
-
     def mnsp_from_export_flow_1_rule(m, i):
         """From region export flow rule 1"""
 
@@ -1776,16 +1813,6 @@ def define_mnsp_constraints(m):
     # Constraint used to determine FromRegionImport flow
     m.C_MNSP_FROM_REGION_IMPORT_4 = pyo.Constraint(m.S_MNSPS, rule=mnsp_from_import_flow_4_rule)
 
-    def mnsp_to_cp_flow_rule(m, i):
-        """Net flow at ToRegion connection point for MNSP loss model"""
-
-        to_region = m.P_INTERCONNECTOR_TO_REGION[i]
-
-        return m.V_GC_INTERCONNECTOR[i] - (m.V_LOSS[i] * m.P_MNSP_REGION_LOSS_INDICATOR[i, to_region])
-
-    # MNSP ToRegion connection point flow
-    m.E_MNSP_TO_CP_FLOW = pyo.Expression(m.S_MNSPS, rule=mnsp_to_cp_flow_rule)
-
     def mnsp_to_export_flow_1_rule(m, i):
         """ToRegion Export flow 1"""
 
@@ -1849,24 +1876,6 @@ def define_mnsp_constraints(m):
 
     # MNSP ToRegion import flow condition 4
     m.C_MNSP_TO_REGION_IMPORT_4 = pyo.Constraint(m.S_MNSPS, rule=mnsp_to_import_flow_4_rule)
-
-    def mnsp_from_region_loss_rule(m, i):
-        """MNSP loss allocated to given region"""
-
-        return (((m.P_MNSP_FROM_REGION_LF_EXPORT[i] - 1) * m.V_MNSP_FROM_REGION_EXPORT[i])
-                + (m.P_MNSP_FROM_REGION_LF_IMPORT[i] - 1) * m.V_MNSP_FROM_REGION_IMPORT[i])
-
-    # MNSP from region loss
-    m.E_MNSP_FROM_REGION_LOSS = pyo.Expression(m.S_MNSPS, rule=mnsp_from_region_loss_rule)
-
-    def mnsp_to_region_loss_rule(m, i):
-        """MNSP loss allocated to given region"""
-
-        return (((m.P_MNSP_TO_REGION_LF_EXPORT[i] - 1) * m.V_MNSP_TO_REGION_EXPORT[i] * -1)
-                + (m.P_MNSP_TO_REGION_LF_IMPORT[i] - 1) * m.V_MNSP_TO_REGION_IMPORT[i] * -1)
-
-    # MNSP from region loss
-    m.E_MNSP_TO_REGION_LOSS = pyo.Expression(m.S_MNSPS, rule=mnsp_to_region_loss_rule)
 
     def mnsp_region_loss_allocation_1_rule(m, i):
         """Condition ensures either From or To region loss is non-zero"""
