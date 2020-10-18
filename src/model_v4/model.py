@@ -330,6 +330,9 @@ def define_variables(m):
     m.V_MNSP_FROM_REGION_IMPORT = pyo.Var(m.S_MNSPS)
     m.V_MNSP_FLOW_DIRECTION = pyo.Var(m.S_MNSPS, within=pyo.Binary)
 
+    m.V_MNSP_TO_REGION_LOSS = pyo.Var(m.S_MNSPS)
+    m.V_MNSP_FROM_REGION_LOSS = pyo.Var(m.S_MNSPS)
+
     # Generic constraint violation pyo.Variables
     m.V_CV = pyo.Var(m.S_GENERIC_CONSTRAINTS, within=pyo.NonNegativeReals)
     m.V_CV_LHS = pyo.Var(m.S_GENERIC_CONSTRAINTS, within=pyo.NonNegativeReals)
@@ -1218,14 +1221,10 @@ def define_aggregate_power_expressions(m):
             loss = m.V_LOSS[i]
 
             if r == from_region:
-                export_loss = (from_lf_export - 1) * from_region_export_flow
-                import_loss = (from_lf_import - 1) * from_region_import_flow
-                total += export_loss + import_loss
+                total += m.E_MNSP_FROM_REGION_LOSS[i]
 
             elif r == to_region:
-                export_loss = (to_lf_export - 1) * to_region_export_flow
-                import_loss = (to_lf_import - 1) * to_region_import_flow
-                total += export_loss + import_loss
+                total += m.E_MNSP_TO_REGION_LOSS[i]
 
             else:
                 raise Exception('Unexpected region:', r)
@@ -1850,6 +1849,56 @@ def define_mnsp_constraints(m):
 
     # MNSP ToRegion import flow condition 4
     m.C_MNSP_TO_REGION_IMPORT_4 = pyo.Constraint(m.S_MNSPS, rule=mnsp_to_import_flow_4_rule)
+
+    def mnsp_from_region_loss_rule(m, i):
+        """MNSP loss allocated to given region"""
+
+        return (((m.P_MNSP_FROM_REGION_LF_EXPORT[i] - 1) * m.V_MNSP_FROM_REGION_EXPORT[i])
+                + (m.P_MNSP_FROM_REGION_LF_IMPORT[i] - 1) * m.V_MNSP_FROM_REGION_IMPORT[i])
+
+    # MNSP from region loss
+    m.E_MNSP_FROM_REGION_LOSS = pyo.Expression(m.S_MNSPS, rule=mnsp_from_region_loss_rule)
+
+    def mnsp_to_region_loss_rule(m, i):
+        """MNSP loss allocated to given region"""
+
+        return (((m.P_MNSP_TO_REGION_LF_EXPORT[i] - 1) * m.V_MNSP_TO_REGION_EXPORT[i] * -1)
+                + (m.P_MNSP_TO_REGION_LF_IMPORT[i] - 1) * m.V_MNSP_TO_REGION_IMPORT[i] * -1)
+
+    # MNSP from region loss
+    m.E_MNSP_TO_REGION_LOSS = pyo.Expression(m.S_MNSPS, rule=mnsp_to_region_loss_rule)
+
+    def mnsp_region_loss_allocation_1_rule(m, i):
+        """Condition ensures either From or To region loss is non-zero"""
+
+        return -1000 * m.V_MNSP_FLOW_DIRECTION[i] <= m.E_MNSP_FROM_REGION_LOSS[i]
+
+    # MNSP loss allocation rule 1
+    m.C_MNSP_REGION_LOSS_ALLOCATION_1 = pyo.Constraint(m.S_MNSPS, rule=mnsp_region_loss_allocation_1_rule)
+
+    def mnsp_region_loss_allocation_2_rule(m, i):
+        """Condition ensures either From or To region loss is non-zero"""
+
+        return m.E_MNSP_FROM_REGION_LOSS[i] <= 1000 * m.V_MNSP_FLOW_DIRECTION[i]
+
+    # MNSP loss allocation rule 2
+    m.C_MNSP_REGION_LOSS_ALLOCATION_2 = pyo.Constraint(m.S_MNSPS, rule=mnsp_region_loss_allocation_2_rule)
+
+    def mnsp_region_loss_allocation_3_rule(m, i):
+        """Condition ensures either From or To region loss is non-zero"""
+
+        return -1000 * (1 - m.V_MNSP_FLOW_DIRECTION[i]) <= m.E_MNSP_TO_REGION_LOSS[i]
+
+    # MNSP loss allocation rule 3
+    m.C_MNSP_REGION_LOSS_ALLOCATION_3 = pyo.Constraint(m.S_MNSPS, rule=mnsp_region_loss_allocation_3_rule)
+
+    def mnsp_region_loss_allocation_4_rule(m, i):
+        """Condition ensures either From or To region loss is non-zero"""
+
+        return m.E_MNSP_TO_REGION_LOSS[i] <= 1000 * (1 - m.V_MNSP_FLOW_DIRECTION[i])
+
+    # MNSP loss allocation rule 2
+    m.C_MNSP_REGION_LOSS_ALLOCATION_4 = pyo.Constraint(m.S_MNSPS, rule=mnsp_region_loss_allocation_4_rule)
 
     return m
 
