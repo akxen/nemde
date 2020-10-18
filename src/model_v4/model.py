@@ -1276,7 +1276,7 @@ def define_aggregate_power_expressions(m):
         return total
 
     # Region MNSP loss at end of dispatch interval
-    m.E_REGION_MNSP_LOSS = pyo.Expression(m.S_REGIONS, rule=region_mnsp_loss_rule2)
+    m.E_REGION_MNSP_LOSS = pyo.Expression(m.S_REGIONS, rule=region_mnsp_loss_rule)
 
     def region_fixed_demand_rule(m, r):
         """Check region fixed demand calculation - demand at start of dispatch interval"""
@@ -2990,7 +2990,7 @@ if __name__ == '__main__':
     tmp_directory = os.path.join(os.path.dirname(__file__), 'tmp')
 
     # Define the dispatch interval to investigate
-    di_year, di_month, di_day, di_interval = 2019, 10, 10, 10
+    di_year, di_month, di_day, di_interval = 2019, 10, 1, 16
     di_case_id = f'{di_year}{di_month:02}{di_day:02}{di_interval:03}'
 
     # Case data in json format
