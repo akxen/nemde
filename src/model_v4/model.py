@@ -1276,7 +1276,7 @@ def define_aggregate_power_expressions(m):
         return total
 
     # Region MNSP loss at end of dispatch interval
-    m.E_REGION_MNSP_LOSS = pyo.Expression(m.S_REGIONS, rule=region_mnsp_loss_rule)
+    m.E_REGION_MNSP_LOSS = pyo.Expression(m.S_REGIONS, rule=region_mnsp_loss_rule2)
 
     def region_fixed_demand_rule(m, r):
         """Check region fixed demand calculation - demand at start of dispatch interval"""
@@ -1883,7 +1883,7 @@ def define_mnsp_constraints(m):
         return -1000 * m.V_MNSP_FLOW_DIRECTION[i] <= m.E_MNSP_FROM_REGION_LOSS[i]
 
     # MNSP loss allocation rule 1
-    m.C_MNSP_REGION_LOSS_ALLOCATION_1 = pyo.Constraint(m.S_MNSPS, rule=mnsp_region_loss_allocation_1_rule)
+    # m.C_MNSP_REGION_LOSS_ALLOCATION_1 = pyo.Constraint(m.S_MNSPS, rule=mnsp_region_loss_allocation_1_rule)
 
     def mnsp_region_loss_allocation_2_rule(m, i):
         """Condition ensures either From or To region loss is non-zero"""
@@ -1891,7 +1891,7 @@ def define_mnsp_constraints(m):
         return m.E_MNSP_FROM_REGION_LOSS[i] <= 1000 * m.V_MNSP_FLOW_DIRECTION[i]
 
     # MNSP loss allocation rule 2
-    m.C_MNSP_REGION_LOSS_ALLOCATION_2 = pyo.Constraint(m.S_MNSPS, rule=mnsp_region_loss_allocation_2_rule)
+    # m.C_MNSP_REGION_LOSS_ALLOCATION_2 = pyo.Constraint(m.S_MNSPS, rule=mnsp_region_loss_allocation_2_rule)
 
     def mnsp_region_loss_allocation_3_rule(m, i):
         """Condition ensures either From or To region loss is non-zero"""
@@ -1899,7 +1899,7 @@ def define_mnsp_constraints(m):
         return -1000 * (1 - m.V_MNSP_FLOW_DIRECTION[i]) <= m.E_MNSP_TO_REGION_LOSS[i]
 
     # MNSP loss allocation rule 3
-    m.C_MNSP_REGION_LOSS_ALLOCATION_3 = pyo.Constraint(m.S_MNSPS, rule=mnsp_region_loss_allocation_3_rule)
+    # m.C_MNSP_REGION_LOSS_ALLOCATION_3 = pyo.Constraint(m.S_MNSPS, rule=mnsp_region_loss_allocation_3_rule)
 
     def mnsp_region_loss_allocation_4_rule(m, i):
         """Condition ensures either From or To region loss is non-zero"""
@@ -1907,7 +1907,7 @@ def define_mnsp_constraints(m):
         return m.E_MNSP_TO_REGION_LOSS[i] <= 1000 * (1 - m.V_MNSP_FLOW_DIRECTION[i])
 
     # MNSP loss allocation rule 2
-    m.C_MNSP_REGION_LOSS_ALLOCATION_4 = pyo.Constraint(m.S_MNSPS, rule=mnsp_region_loss_allocation_4_rule)
+    # m.C_MNSP_REGION_LOSS_ALLOCATION_4 = pyo.Constraint(m.S_MNSPS, rule=mnsp_region_loss_allocation_4_rule)
 
     return m
 
@@ -2990,7 +2990,8 @@ if __name__ == '__main__':
     tmp_directory = os.path.join(os.path.dirname(__file__), 'tmp')
 
     # Define the dispatch interval to investigate
-    di_year, di_month, di_day, di_interval = 2019, 10, 1, 16
+    # c_ids = ['20191001006', '20191001016', '20191001074', '20191001018', '2019103109300']
+    di_year, di_month, di_day, di_interval = 2019, 10, 1, 18
     di_case_id = f'{di_year}{di_month:02}{di_day:02}{di_interval:03}'
 
     # Case data in json format
@@ -3029,6 +3030,7 @@ if __name__ == '__main__':
     utils.validate.check_constraint_violation(model)
 
     # Extract solution
+    period_results = formatted_solution['period']
     regions_results = formatted_solution['regions']
     traders_results = formatted_solution['traders']
     interconnectors_results = formatted_solution['interconnectors']
