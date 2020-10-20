@@ -167,8 +167,8 @@ def parse_trader(data, trader_id) -> dict:
     # Trader initial conditions
     initial_condition_str_keys = ['AGCStatus']
     initial_conditions = {
-        i['@InitialConditionID']: i['@Value'] if i in initial_condition_str_keys else float(i['@Value'])
-        for i in collection['TraderInitialConditionCollection']['TraderInitialCondition']}
+        i['@InitialConditionID']: i['@Value'] if i['@InitialConditionID'] in initial_condition_str_keys
+        else float(i['@Value']) for i in collection['TraderInitialConditionCollection']['TraderInitialCondition']}
 
     # Trader price bands
     price_band_trade_types = convert_to_list(collection.get('TradePriceStructureCollection').get('TradePriceStructure')
@@ -251,7 +251,7 @@ def parse_interconnector(data, interconnector_id) -> dict:
     out = {
         'Info': info,
         'InitialConditions': initial_conditions,
-        'LossModel': {**loss_model_attributes, **{'Segments': loss_model_segments}}
+        'LossModel': {**loss_model_attributes, **{'Segment': loss_model_segments}}
     }
 
     # Regular interconnector (no market offer)
@@ -282,7 +282,8 @@ def parse_mnsp_offer(data, interconnector_id) -> dict:
     price_band_region_str_keys = ['@RegionID', '@Offer_SettlementDate', '@Offer_EffectiveDate', '@Offer_VersionNo',
                                   '@LinkID', '@ParticipantID']
 
-    price_bands = {i['@RegionID']: {k: v if k in price_band_region_str_keys else float(v) for k, v in i.items()}
+    price_bands = {i['@RegionID']:
+                       {k.replace('@', ''): v if k in price_band_region_str_keys else float(v) for k, v in i.items()}
                    for i in price_band_regions}
 
     # Quantity bands
@@ -290,7 +291,8 @@ def parse_mnsp_offer(data, interconnector_id) -> dict:
 
     quantity_band_region_str_keys = ['@RegionID']
 
-    quantity_bands = {i['@RegionID']: {k: v if k in quantity_band_region_str_keys else float(v) for k, v in i.items()}
+    quantity_bands = {i['@RegionID']:
+                          {k.replace('@', ''): v if k in quantity_band_region_str_keys else float(v) for k, v in i.items()}
                       for i in quantity_band_regions}
 
     return {'PriceBands': price_bands, 'QuantityBands': quantity_bands}
