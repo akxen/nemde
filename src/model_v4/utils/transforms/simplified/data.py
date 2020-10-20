@@ -4,9 +4,12 @@ import os
 import json
 import time
 
-import context
+try:
+    import context
+    import case
+except ModuleNotFoundError:
+    pass
 
-import case
 import loaders
 from lookup import convert_to_list, get_intervention_status
 
@@ -217,6 +220,22 @@ def get_trader_initial_condition_attribute(data, attribute, func) -> dict:
             if j['InitialConditions'].get(attribute) is not None}
 
 
+def get_trader_fcas_trapezium(data) -> dict:
+    """Get FCAS trapeziums"""
+
+    # FCAS offer trade types
+    fcas_offers = ['R6SE', 'R60S', 'R5MI', 'R5RE', 'L6SE', 'L60S', 'L5MI', 'L5RE']
+
+    return {(i, k): {
+        'EnablementMin': v['EnablementMin'],
+        'LowBreakpoint': v['LowBreakpoint'],
+        'HighBreakpoint': v['HighBreakpoint'],
+        'EnablementMax': v['EnablementMax'],
+        'MaxAvail': v['MaxAvail'],
+    }
+        for i, j in data['Data']['Traders'].items() for k, v in j['QuantityBands'].items() if k in fcas_offers}
+
+
 def get_interconnector_initial_condition_attribute(data, attribute, func) -> dict:
     """Get interconnector initial condition attribute"""
 
@@ -251,21 +270,29 @@ def get_interconnector_loss_model_segment_attribute(data, attribute, func) -> di
     return values
 
 
-def get_interconnector_loss_model_breakpoints_x(data) -> dict:
-    """Get interconnector loss model breakpoints - x-coordinate (power output)"""
+def get_standardised_interconnector_loss_model_segments(data) -> dict:
+    """Use breakpoints and segment factors to construct a new start-end representation for the MLF curve"""
 
-    # Get loss model segments
-    limit = get_interconnector_loss_model_segment_attribute(data, 'Limit', float)
-    lower_limit = get_interconnector_loss_model_attribute(data, 'LossLowerLimit', float)
+    # Container for output
+    out = {}
+    for interconnector_id, params in data['Data']['Interconnectors'].items():
+        # Check loss model
+        segments = params['LossModel']['Segment']
 
-    # Container for break point values - offset segment ID - first segment should be loss lower limit
-    values = {(interconnector_id, segment_id + 1): v for (interconnector_id, segment_id), v in limit.items()}
+        # First segment
+        start = -params['LossModel']['LossLowerLimit']
 
-    # Add loss lower limit with zero index (corresponds to first segment)
-    for i in get_interconnector_index(data):
-        values[(i, 0)] = -lower_limit[i]
+        # Format segments with start, end, and factor
+        new_segments = []
+        for s in segments:
+            segment = {'start': start, 'end': s['Limit'], 'factor': s['Factor']}
+            start = s['Limit']
+            new_segments.append(segment)
 
-    return values
+        # Append new segments to container
+        out[interconnector_id] = new_segments
+
+    return out
 
 
 def get_mnsp_price_bands(data) -> dict:
@@ -322,6 +349,38 @@ def get_generic_constraint_info_attribute(data, attribute, func):
     return {i: func(j['Info'][attribute]) for i, j in data['Data']['GenericConstraints'].items()}
 
 
+def parse_constraint(constraint_data):
+    """Constraint data"""
+
+    lhs = constraint_data['LHSTerms']
+
+    # if lhs is None:
+    #     return {}
+
+    # Trader factors
+    traders = {(i['TraderID'], i['TradeType']): float(i['Factor'])
+               for i in convert_to_list(lhs.get('TraderFactor', []))}
+
+    # Interconnector factors
+    interconnectors = {(i['InterconnectorID']): float(i['Factor'])
+                       for i in convert_to_list(lhs.get('InterconnectorFactor', []))}
+
+    # Region factors
+    regions = {(i['RegionID'], i['TradeType']): float(i['Factor'])
+               for i in convert_to_list(lhs.get('RegionFactor', []))}
+
+    # Combine constraint terms into single dictionary
+    terms = {'traders': traders, 'interconnectors': interconnectors, 'regions': regions}
+
+    return terms
+
+
+def get_generic_constraint_lhs_terms(data) -> dict:
+    """Generic constraint LHS terms"""
+
+    return {i: parse_constraint(j) for i, j in data['Data']['GenericConstraints'].items()}
+
+
 def parse_case_data(data, intervention) -> dict:
     """
     Parse json data
@@ -361,7 +420,7 @@ def parse_case_data(data, intervention) -> dict:
         'P_INTERVENTION_STATUS': intervention,
         'P_TRADER_PRICE_BAND': get_trader_price_bands(data),
         'P_TRADER_QUANTITY_BAND': get_trader_quantity_bands(data),
-        'P_TRADER_MAX_AVAILABLE': get_trader_quantity_band_attribute(data, 'MaxAvail', float),
+        'P_TRADER_MAX_AVAIL': get_trader_quantity_band_attribute(data, 'MaxAvail', float),
         'P_TRADER_UIGF': get_trader_info_attribute(data, 'UIGF', float),
         'P_TRADER_INITIAL_MW': get_trader_initial_condition_attribute(data, 'InitialMW', float),
         'P_TRADER_WHAT_IF_INITIAL_MW': get_trader_initial_condition_attribute(data, 'WhatIfInitialMW', float),
@@ -371,10 +430,10 @@ def parse_case_data(data, intervention) -> dict:
         'P_TRADER_SEMI_DISPATCH_STATUS': get_trader_info_attribute(data, 'SemiDispatch', str),
         'P_TRADER_REGION': get_trader_info_attribute(data, 'RegionID', str),
         'P_TRADER_PERIOD_RAMP_UP_RATE': get_trader_quantity_band_attribute(data, 'RampUpRate', float),
-        'P_TRADER_PERIOD_RAMP_DOWN_RATE': get_trader_quantity_band_attribute(data, 'RampDnRate', float),
+        'P_TRADER_PERIOD_RAMP_DN_RATE': get_trader_quantity_band_attribute(data, 'RampDnRate', float),
         'P_TRADER_TYPE': get_trader_info_attribute(data, 'TraderType', str),
         'P_TRADER_SCADA_RAMP_UP_RATE': get_trader_initial_condition_attribute(data, 'SCADARampUpRate', float),
-        'P_TRADER_SCADA_RAMP_DOWN_RATE': get_trader_initial_condition_attribute(data, 'SCADARampDnRate', float),
+        'P_TRADER_SCADA_RAMP_DN_RATE': get_trader_initial_condition_attribute(data, 'SCADARampDnRate', float),
         'P_TRADER_MIN_LOADING_MW': get_trader_info_attribute(data, 'MinLoadingMW', float),
         'P_TRADER_CURRENT_MODE': get_trader_info_attribute(data, 'CurrentMode', str),
         'P_TRADER_CURRENT_MODE_TIME': get_trader_info_attribute(data, 'CurrentModeTime', float),
@@ -382,6 +441,10 @@ def parse_case_data(data, intervention) -> dict:
         'P_TRADER_T2': get_trader_info_attribute(data, 'T2', float),
         'P_TRADER_T3': get_trader_info_attribute(data, 'T3', float),
         'P_TRADER_T4': get_trader_info_attribute(data, 'T4', float),
+        'P_TRADER_ENABLEMENT_MIN': get_trader_quantity_band_attribute(data, 'EnablementMin', float),
+        'P_TRADER_LOW_BREAKPOINT': get_trader_quantity_band_attribute(data, 'LowBreakpoint', float),
+        'P_TRADER_HIGH_BREAKPOINT': get_trader_quantity_band_attribute(data, 'HighBreakpoint', float),
+        'P_TRADER_ENABLEMENT_MAX': get_trader_quantity_band_attribute(data, 'EnablementMax', float),
         'P_INTERCONNECTOR_INITIAL_MW': get_interconnector_initial_condition_attribute(data, 'InitialMW', float),
         'P_INTERCONNECTOR_TO_REGION': get_interconnector_info_attribute(data, 'ToRegion', str),
         'P_INTERCONNECTOR_FROM_REGION': get_interconnector_info_attribute(data, 'FromRegion', str),
@@ -389,6 +452,9 @@ def parse_case_data(data, intervention) -> dict:
         'P_INTERCONNECTOR_UPPER_LIMIT': get_interconnector_info_attribute(data, 'UpperLimit', float),
         'P_INTERCONNECTOR_MNSP_STATUS': get_interconnector_info_attribute(data, 'MNSP', str),
         'P_INTERCONNECTOR_LOSS_SHARE': get_interconnector_loss_model_attribute(data, 'LossShare', float),
+        'P_INTERCONNECTOR_LOSS_LOWER_LIMIT': get_interconnector_loss_model_attribute(data, 'LossLowerLimit', float),
+        'P_INTERCONNECTOR_LOSS_SEGMENT_LIMIT': get_interconnector_loss_model_segment_attribute(data, 'Limit', float),
+        'P_INTERCONNECTOR_LOSS_SEGMENT_FACTOR': get_interconnector_loss_model_segment_attribute(data, 'Factor', float),
         'P_MNSP_PRICE_BAND': get_mnsp_price_bands(data),
         'P_MNSP_QUANTITY_BAND': get_mnsp_quantity_bands(data),
         'P_MNSP_MAX_AVAILABLE': get_mnsp_quantity_band_attribute(data, 'MaxAvail', float),
@@ -426,16 +492,10 @@ def parse_case_data(data, intervention) -> dict:
         'P_CVF_GENERIC_CONSTRAINT_PRICE': get_case_attribute(data, 'GenericConstraintPrice', float),
         'P_CVF_SATISFACTORY_NETWORK_PRICE': get_case_attribute(data, 'Satisfactory_Network_Price', float),
         'P_TIE_BREAK_PRICE': get_case_attribute(data, 'TieBreakPrice', float),
-        # 'preprocessed': {
-        # 'S_TRADER_PRICE_TIED': get_trader_price_tied_bands(data),
-        #     'GC_LHS_TERMS': get_generic_constraint_lhs_terms(data),
-        #     'FCAS_TRAPEZIUM': get_trader_fcas_trapezium(data),
-        #     'FCAS_AVAILABILITY_STATUS': get_trader_fcas_availability_status(data)
-        # 'P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_X': get_interconnector_loss_model_breakpoints_x(data),
-        # 'P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y': get_interconnector_loss_model_breakpoints_y(data),
-        # 'P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE': get_interconnector_initial_loss_estimate(data),
-        # 'P_MNSP_REGION_LOSS_INDICATOR': get_mnsp_region_loss_indicator(data),
-        # },
+        'preprocessed': {
+            'generic_constraint_lhs_terms': get_generic_constraint_lhs_terms(data),
+            'loss_model_segments': get_standardised_interconnector_loss_model_segments(data),
+        }
     }
 
     return case_data
