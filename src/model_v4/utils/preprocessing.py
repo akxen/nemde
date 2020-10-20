@@ -6,6 +6,7 @@ import time
 
 import fcas2
 import loaders
+import transforms.original.data
 import transforms.simplified.case
 import transforms.simplified.data
 from lookup import get_intervention_status
@@ -331,13 +332,18 @@ if __name__ == '__main__':
     # (Apply user changes)
 
     # Transform into format that will be ingested by model
-    case = transforms.simplified.data.parse_case_data(formatted_case, intervention_status)
+    case_1 = transforms.simplified.data.parse_case_data(formatted_case, intervention_status)
+    case_2 = transforms.original.data.parse_case_data(cdata, intervention_status)
     print(time.time() - t0)
 
     # Pre-process case file - data now ready to be ingested by model
-    preprocessed_case = preprocess_case_file(case)
+    preprocessed_case_1 = preprocess_case_file(case_1)
+    preprocessed_case_2 = preprocess_case_file(case_2)
     print(time.time() - t0)
 
     # Combine case data and pre-processed information
-    case_model = {**case, **preprocessed_case}
+    case_model_1 = {**case_1, **preprocessed_case_1}
+    case_model_2 = {**case_2, **preprocessed_case_2}
     print(time.time() - t0)
+
+    assert case_model_1 == case_model_2, 'Case files do not match'
