@@ -310,6 +310,17 @@ def preprocess_case_file(data) -> dict:
     return out
 
 
+def get_preprocessed_case_file(case_data, intervention, func) -> dict:
+    """Get pre-processed case file"""
+
+    # Pre-processed outputs
+    preprocessing_outputs = func(data)
+
+    preprocessed_case_file = {**data, **preprocessing_outputs}
+
+    return
+
+
 if __name__ == '__main__':
     # Directory containing case data
     data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,

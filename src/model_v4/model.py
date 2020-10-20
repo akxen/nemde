@@ -2951,7 +2951,7 @@ def check_model(data_dir, mode, case_ids=None):
         utils.database.post_entry(os.environ['MYSQL_DATABASE'], 'results', results_entry)
 
 
-def save_case_json(data_dir, year, month, day, interval, overwrite=True):
+def save_case_json(data_dir, output_dir, year, month, day, interval, overwrite=True):
     """Save casefile in JSON format for inspection"""
 
     # Case data in json format
@@ -2961,12 +2961,12 @@ def save_case_json(data_dir, year, month, day, interval, overwrite=True):
     data = json.loads(data_json)
 
     # Filename for JSON data
-    filename = f'example-{year}-{month:02}-{day:02}-{interval:03}.json'
+    filename = f'case-{year}-{month:02}-{day:02}-{interval:03}.json'
 
-    if filename in os.listdir(os.path.dirname(__file__)) and not overwrite:
+    if filename in os.listdir(output_dir) and not overwrite:
         pass
     else:
-        with open(filename, 'w') as f:
+        with open(os.path.join(output_dir, filename), 'w') as f:
             json.dump(data, f)
 
 
@@ -2996,14 +2996,15 @@ if __name__ == '__main__':
 
     # Case data in json format
     case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, di_year, di_month, di_day, di_interval)
-    save_case_json(data_directory, di_year, di_month, di_day, di_interval, overwrite=False)
+    save_case_json(data_directory, os.path.join(output_directory, 'cases'), di_year, di_month, di_day, di_interval,
+                   overwrite=False)
 
     # Get NEMDE model data as a Python dictionary
     cdata = json.loads(case_data_json)
 
-    # Preprocessed case data
+    # Extract data from case file into a standardised format
     intervention_status = utils.lookup.get_intervention_status(cdata, 'physical')
-    model_data = utils.data.parse_case_data_json(case_data_json, intervention_status)
+    model_data = utils.transforms.original.data(cdata, intervention_status)
 
     # Construct and solve model
     model = construct_model(model_data, cdata)
