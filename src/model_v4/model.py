@@ -20,6 +20,7 @@ import utils.solution
 import utils.analysis
 import utils.database
 import utils.validate
+import utils.transforms.original.data
 
 
 def define_sets(m, data):
@@ -2833,7 +2834,9 @@ def solve_model(m):
     # }
 
     # solver_options = {}
-    opt = pyo.SolverFactory('cplex', solver_io='mps')
+
+    # solver_options = {}
+    opt = pyo.SolverFactory('cplex', solver_io='lp')
 
     # Solve model
     t0 = time.time()
@@ -3004,7 +3007,8 @@ if __name__ == '__main__':
 
     # Extract data from case file into a standardised format
     intervention_status = utils.lookup.get_intervention_status(cdata, 'physical')
-    model_data = utils.transforms.original.data(cdata, intervention_status)
+    # model_data = utils.transforms.original.data.parse_case_data(cdata, intervention_status)
+    model_data = utils.data.parse_case_data_json(case_data_json, intervention_status)
 
     # Construct and solve model
     model = construct_model(model_data, cdata)
