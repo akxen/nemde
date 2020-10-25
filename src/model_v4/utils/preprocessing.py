@@ -264,7 +264,7 @@ def get_interconnector_loss_model_breakpoints_y(data) -> dict:
     interconnectors = data['S_INTERCONNECTORS']
     limit = data['P_INTERCONNECTOR_LOSS_SEGMENT_LIMIT']
     lower_limit = data['P_INTERCONNECTOR_LOSS_LOWER_LIMIT']
-    segments = data['preprocessed']['loss_model_segments']
+    segments = data['intermediate']['loss_model_segments']
 
     # Container for break point values - offset segment ID - first segment should be loss lower limit
     values = {(interconnector_id, segment_id + 1): get_interconnector_loss_estimate(segments[interconnector_id], v)
@@ -283,7 +283,7 @@ def get_interconnector_initial_loss_estimate(data) -> dict:
     # Initial MW for all interconnectors
     interconnectors = data['S_INTERCONNECTORS']
     initial_mw = data['P_INTERCONNECTOR_INITIAL_MW']  # TODO: will need to change if considering intervention pricing
-    segments = data['preprocessed']['loss_model_segments']
+    segments = data['intermediate']['loss_model_segments']
 
     # Loss estimate
     loss_estimate = {}
@@ -310,15 +310,16 @@ def preprocess_case_file(data) -> dict:
     return out
 
 
-def get_preprocessed_case_file(case_data, intervention, func) -> dict:
-    """Get pre-processed case file"""
+def get_preprocessed_case_file(data) -> dict:
+    """Apply preprocessing and append to input dictionary"""
 
-    # Pre-processed outputs
-    preprocessing_outputs = func(data)
+    # Preprocessed inputs
+    preprocessed = {'preprocessed': preprocess_case_file(data)}
 
-    preprocessed_case_file = {**data, **preprocessing_outputs}
+    # Output
+    out = {**data, **preprocessed}
 
-    return
+    return out
 
 
 if __name__ == '__main__':
@@ -358,3 +359,8 @@ if __name__ == '__main__':
     print(time.time() - t0)
 
     assert case_model_1 == case_model_2, 'Case files do not match'
+
+    check_case_1 = preprocess_case_file(case_1)
+    check_case_2 = preprocess_case_file(case_2)
+
+    assert check_case_1 == check_case_2, 'Case files do not match'

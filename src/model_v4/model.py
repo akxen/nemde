@@ -20,7 +20,10 @@ import utils.solution
 import utils.analysis
 import utils.database
 import utils.validate
+import utils.preprocessing
 import utils.transforms.original.data
+import utils.transforms.simplified.data
+import utils.transforms.simplified.case
 
 
 def define_sets(m, data):
@@ -48,7 +51,7 @@ def define_sets(m, data):
     m.S_TRADER_FAST_START = pyo.Set(initialize=data['S_TRADER_FAST_START'])
 
     # Price tied bands
-    m.S_TRADER_PRICE_TIED = pyo.Set(initialize=data['S_TRADER_PRICE_TIED'])
+    m.S_TRADER_PRICE_TIED = pyo.Set(initialize=data.get('preprocessed').get('S_TRADER_PRICE_TIED'))
 
     # Generic constraints
     m.S_GENERIC_CONSTRAINTS = pyo.Set(initialize=data['S_GENERIC_CONSTRAINTS'])
@@ -99,7 +102,7 @@ def define_parameters(m, data):
     m.P_TRADER_QUANTITY_BAND = pyo.Param(m.S_TRADER_OFFERS, m.S_BANDS, initialize=data['P_TRADER_QUANTITY_BAND'])
 
     # Max available output for given trader
-    m.P_TRADER_MAX_AVAILABLE = pyo.Param(m.S_TRADER_OFFERS, initialize=data['P_TRADER_MAX_AVAILABLE'])
+    m.P_TRADER_MAX_AVAILABLE = pyo.Param(m.S_TRADER_OFFERS, initialize=data['P_TRADER_MAX_AVAIL'])
 
     # Initial MW output for generators / loads
     m.P_TRADER_INITIAL_MW = pyo.Param(m.S_TRADERS, initialize=data['P_TRADER_INITIAL_MW'])
@@ -125,36 +128,27 @@ def define_parameters(m, data):
     m.P_TRADER_PERIOD_RAMP_UP_RATE = pyo.Param(m.S_TRADER_ENERGY_OFFERS,
                                                initialize=data['P_TRADER_PERIOD_RAMP_UP_RATE'])
     m.P_TRADER_PERIOD_RAMP_DOWN_RATE = pyo.Param(m.S_TRADER_ENERGY_OFFERS,
-                                                 initialize=data['P_TRADER_PERIOD_RAMP_DOWN_RATE'])
+                                                 initialize=data['P_TRADER_PERIOD_RAMP_DN_RATE'])
 
     # Trader FCAS enablement min
-    m.P_TRADER_FCAS_ENABLEMENT_MIN = pyo.Param(m.S_TRADER_FCAS_OFFERS,
-                                               initialize={k: v['EnablementMin'] for k, v in
-                                                           data['preprocessed']['FCAS_TRAPEZIUM'].items()})
+    m.P_TRADER_FCAS_ENABLEMENT_MIN = pyo.Param(m.S_TRADER_FCAS_OFFERS, initialize=data['P_TRADER_ENABLEMENT_MIN'])
 
     # Trader FCAS low breakpoint
-    m.P_TRADER_FCAS_LOW_BREAKPOINT = pyo.Param(m.S_TRADER_FCAS_OFFERS,
-                                               initialize={k: v['LowBreakpoint'] for k, v in
-                                                           data['preprocessed']['FCAS_TRAPEZIUM'].items()})
+    m.P_TRADER_FCAS_LOW_BREAKPOINT = pyo.Param(m.S_TRADER_FCAS_OFFERS, initialize=data['P_TRADER_LOW_BREAKPOINT'])
 
     # Trader FCAS high breakpoint
-    m.P_TRADER_FCAS_HIGH_BREAKPOINT = pyo.Param(m.S_TRADER_FCAS_OFFERS,
-                                                initialize={k: v['HighBreakpoint'] for k, v in
-                                                            data['preprocessed']['FCAS_TRAPEZIUM'].items()})
+    m.P_TRADER_FCAS_HIGH_BREAKPOINT = pyo.Param(m.S_TRADER_FCAS_OFFERS, initialize=data['P_TRADER_HIGH_BREAKPOINT'])
 
     # Trader FCAS enablement max
-    m.P_TRADER_FCAS_ENABLEMENT_MAX = pyo.Param(m.S_TRADER_FCAS_OFFERS,
-                                               initialize={k: v['EnablementMax'] for k, v in
-                                                           data['preprocessed']['FCAS_TRAPEZIUM'].items()})
+    m.P_TRADER_FCAS_ENABLEMENT_MAX = pyo.Param(m.S_TRADER_FCAS_OFFERS, initialize=data['P_TRADER_ENABLEMENT_MAX'])
 
     # Trader FCAS max available
-    m.P_TRADER_FCAS_MAX_AVAILABLE = pyo.Param(m.S_TRADER_FCAS_OFFERS,
-                                              initialize={k: v['MaxAvail'] for k, v in
-                                                          data['preprocessed']['FCAS_TRAPEZIUM'].items()})
+    # m.P_TRADER_MAX_AVAILABLE = pyo.Param(m.S_TRADER_FCAS_OFFERS, initialize=data['P_TRADER_MAX_AVAIL'])
 
     # Trader FCAS availability
     m.P_TRADER_FCAS_AVAILABILITY_STATUS = pyo.Param(m.S_TRADER_FCAS_OFFERS,
-                                                    initialize=data['preprocessed']['FCAS_AVAILABILITY_STATUS'])
+                                                    initialize=(data.get('preprocessed')
+                                                                .get('P_TRADER_FCAS_AVAILABILITY_STATUS')))
 
     # Trader type
     m.P_TRADER_TYPE = pyo.Param(m.S_TRADERS, initialize=data['P_TRADER_TYPE'])
@@ -170,7 +164,7 @@ def define_parameters(m, data):
 
     # Trader SCADA ramp up and down rates
     m.P_TRADER_SCADA_RAMP_UP_RATE = pyo.Param(m.S_TRADERS, initialize=data['P_TRADER_SCADA_RAMP_UP_RATE'])
-    m.P_TRADER_SCADA_RAMP_DOWN_RATE = pyo.Param(m.S_TRADERS, initialize=data['P_TRADER_SCADA_RAMP_DOWN_RATE'])
+    m.P_TRADER_SCADA_RAMP_DOWN_RATE = pyo.Param(m.S_TRADERS, initialize=data['P_TRADER_SCADA_RAMP_DN_RATE'])
 
     # Interconnector initial MW
     m.P_INTERCONNECTOR_INITIAL_MW = pyo.Param(m.S_INTERCONNECTORS, initialize=data['P_INTERCONNECTOR_INITIAL_MW'])
@@ -191,15 +185,18 @@ def define_parameters(m, data):
 
     # Interconnector initial loss estimate
     m.P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE = pyo.Param(m.S_INTERCONNECTORS,
-                                                         initialize=data['P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE'])
+                                                         initialize=(data.get('preprocessed')
+                                                                     .get('P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE')))
 
     # Interconnector loss model segment limit
     m.P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_X = pyo.Param(
-        m.S_INTERCONNECTOR_LOSS_MODEL_BREAKPOINTS, initialize=data['P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_X'])
+        m.S_INTERCONNECTOR_LOSS_MODEL_BREAKPOINTS, initialize=(data.get('preprocessed')
+                                                               .get('P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_X')))
 
     # Interconnector loss model segment factor
     m.P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y = pyo.Param(
-        m.S_INTERCONNECTOR_LOSS_MODEL_BREAKPOINTS, initialize=data['P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y'])
+        m.S_INTERCONNECTOR_LOSS_MODEL_BREAKPOINTS, initialize=(data.get('preprocessed')
+                                                               .get('P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y')))
 
     # Price bands for MNSPs
     m.P_MNSP_PRICE_BAND = pyo.Param(m.S_MNSP_OFFERS, m.S_BANDS, initialize=data['P_MNSP_PRICE_BAND'])
@@ -221,7 +218,9 @@ def define_parameters(m, data):
     m.P_MNSP_FROM_REGION_LF_IMPORT = pyo.Param(m.S_MNSPS, initialize=data['P_MNSP_FROM_REGION_LF_IMPORT'])
 
     # MNSP loss indicator
-    m.P_MNSP_REGION_LOSS_INDICATOR = pyo.Param(m.S_MNSPS, m.S_REGIONS, initialize=data['P_MNSP_REGION_LOSS_INDICATOR'])
+    m.P_MNSP_REGION_LOSS_INDICATOR = pyo.Param(m.S_MNSPS, m.S_REGIONS,
+                                               initialize=(data.get('preprocessed')
+                                                           .get('P_MNSP_REGION_LOSS_INDICATOR')))
 
     # Initial region demand
     m.P_REGION_INITIAL_DEMAND = pyo.Param(m.S_REGIONS, initialize=data['P_REGION_INITIAL_DEMAND'])
@@ -434,7 +433,7 @@ def define_generic_constraint_expressions(m, data):
     """Define generic constraint expressions"""
 
     # LHS terms in generic constraints
-    terms = data['preprocessed']['GC_LHS_TERMS']
+    terms = data['intermediate']['generic_constraint_lhs_terms']
 
     def generic_constraint_lhs_terms_rule(m, i):
         """Get LHS expression for a given Generic Constraint"""
@@ -2121,24 +2120,24 @@ def define_fcas_constraints(m, data):
         elif j == 'R5RE':
             # No AGC ramp scaling applied if SCADA ramp rate missing (from FCAS docs)
             if i not in m.P_TRADER_SCADA_RAMP_UP_RATE.keys():
-                effective_max_avail = m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]
+                effective_max_avail = m.P_TRADER_MAX_AVAILABLE[i, j]
             else:
                 effective_max_avail = min(
-                    [(m.P_TRADER_SCADA_RAMP_UP_RATE[i] / 12), m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]])
+                    [(m.P_TRADER_SCADA_RAMP_UP_RATE[i] / 12), m.P_TRADER_MAX_AVAILABLE[i, j]])
             return m.V_TRADER_TOTAL_OFFER[i, j] <= effective_max_avail + m.V_CV_TRADER_FCAS_MAX_AVAILABLE[i, j]
 
         elif j == 'L5RE':
             # No AGC ramp scaling applied if SCADA ramp rate missing (from FCAS docs)
             if i not in m.P_TRADER_SCADA_RAMP_DOWN_RATE.keys():
-                effective_max_avail = m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]
+                effective_max_avail = m.P_TRADER_MAX_AVAILABLE[i, j]
             else:
                 effective_max_avail = min(
-                    [(m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] / 12), m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]])
+                    [(m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] / 12), m.P_TRADER_MAX_AVAILABLE[i, j]])
             return m.V_TRADER_TOTAL_OFFER[i, j] <= effective_max_avail + m.V_CV_TRADER_FCAS_MAX_AVAILABLE[i, j]
 
         else:
             return (m.V_TRADER_TOTAL_OFFER[i, j]
-                    <= m.P_TRADER_FCAS_MAX_AVAILABLE[i, j] + m.V_CV_TRADER_FCAS_MAX_AVAILABLE[i, j])
+                    <= m.P_TRADER_MAX_AVAILABLE[i, j] + m.V_CV_TRADER_FCAS_MAX_AVAILABLE[i, j])
 
     # Effective max available FCAS
     m.C_FCAS_GENERATOR_MAX_AVAILABLE = pyo.Constraint(m.S_TRADER_OFFERS, rule=generator_fcas_max_available_rule)
@@ -2347,24 +2346,24 @@ def define_fcas_constraints(m, data):
         elif j == 'R5RE':
             # No AGC ramp scaling applied if SCADA ramp rate missing (from FCAS docs)
             if i not in m.P_TRADER_SCADA_RAMP_DOWN_RATE.keys():
-                effective_max_avail = m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]
+                effective_max_avail = m.P_TRADER_MAX_AVAILABLE[i, j]
             else:
                 effective_max_avail = min(
-                    [(m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] / 12), m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]])
+                    [(m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] / 12), m.P_TRADER_MAX_AVAILABLE[i, j]])
             return m.V_TRADER_TOTAL_OFFER[i, j] <= effective_max_avail + m.V_CV_TRADER_FCAS_MAX_AVAILABLE[i, j]
 
         elif j == 'L5RE':
             # No AGC ramp scaling applied if SCADA ramp rate missing (from FCAS docs)
             if i not in m.P_TRADER_SCADA_RAMP_UP_RATE.keys():
-                effective_max_avail = m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]
+                effective_max_avail = m.P_TRADER_MAX_AVAILABLE[i, j]
             else:
                 effective_max_avail = min(
-                    [(m.P_TRADER_SCADA_RAMP_UP_RATE[i] / 12), m.P_TRADER_FCAS_MAX_AVAILABLE[i, j]])
+                    [(m.P_TRADER_SCADA_RAMP_UP_RATE[i] / 12), m.P_TRADER_MAX_AVAILABLE[i, j]])
             return m.V_TRADER_TOTAL_OFFER[i, j] <= effective_max_avail + m.V_CV_TRADER_FCAS_MAX_AVAILABLE[i, j]
 
         else:
             return (m.V_TRADER_TOTAL_OFFER[i, j]
-                    <= m.P_TRADER_FCAS_MAX_AVAILABLE[i, j] + m.V_CV_TRADER_FCAS_MAX_AVAILABLE[i, j])
+                    <= m.P_TRADER_MAX_AVAILABLE[i, j] + m.V_CV_TRADER_FCAS_MAX_AVAILABLE[i, j])
 
     # Effective max available FCAS
     m.C_FCAS_LOAD_MAX_AVAILABLE = pyo.Constraint(m.S_TRADER_OFFERS, rule=load_fcas_max_available_rule)
@@ -3007,11 +3006,20 @@ if __name__ == '__main__':
 
     # Extract data from case file into a standardised format
     intervention_status = utils.lookup.get_intervention_status(cdata, 'physical')
-    # model_data = utils.transforms.original.data.parse_case_data(cdata, intervention_status)
-    model_data = utils.data.parse_case_data_json(case_data_json, intervention_status)
+
+    # Case data presented in a simplified format - constructed from NEMDE case file
+    simplified_case = utils.transforms.simplified.case.construct_case(cdata, intervention_status)
+
+    # Case constructed from data structure which closely resembles NEMDE input case file
+    model_data = utils.transforms.original.data.parse_case_data(cdata, intervention_status)
+    # model_data = utils.transforms.simplified.data.parse_case_data(simplified_case, intervention_status)
+
+    # Apply preprocessing logic
+    # model_data_preprocessed = utils.data.parse_case_data_json(case_data_json, intervention_status)
+    model_data_preprocessed = utils.preprocessing.get_preprocessed_case_file(model_data)
 
     # Construct and solve model
-    model = construct_model(model_data, cdata)
+    model = construct_model(model_data_preprocessed, cdata)
     model = solve_model(model)
 
     # Extract model solution

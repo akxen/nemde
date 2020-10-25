@@ -973,7 +973,8 @@ def get_generic_constraint_lhs_terms(data) -> dict:
     constraints = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('GenericConstraintCollection')
                    .get('GenericConstraint'))
 
-    return {i.get('@ConstraintID'): parse_constraint(i) for i in constraints}
+    return {i.get('@ConstraintID'): parse_constraint(i) for i in constraints
+            if i.get('LHSFactorCollection') is not None}
 
 
 def get_case_attribute(data, attribute, func):
@@ -1170,7 +1171,6 @@ def parse_case_data_json(data, intervention) -> dict:
         'S_TRADER_ENERGY_OFFERS': get_trader_energy_offer_index(data_dict),
         'S_TRADER_FCAS_OFFERS': get_trader_fcas_offer_index(data_dict),
         'S_TRADER_FAST_START': get_trader_fast_start_index(data_dict),
-        'S_TRADER_PRICE_TIED': get_price_tied_bands(data_dict),
         'S_GENERIC_CONSTRAINTS': get_generic_constraint_index(data_dict),
         'S_GC_TRADER_VARS': get_generic_constraint_trader_variable_index(data_dict),
         'S_GC_INTERCONNECTOR_VARS': get_generic_constraint_interconnector_variable_index(data_dict),
@@ -1184,7 +1184,7 @@ def parse_case_data_json(data, intervention) -> dict:
         'P_INTERVENTION_STATUS': intervention,
         'P_TRADER_PRICE_BAND': get_trader_price_bands(data_dict),
         'P_TRADER_QUANTITY_BAND': get_trader_quantity_bands(data_dict),
-        'P_TRADER_MAX_AVAILABLE': get_trader_period_trade_attribute(data_dict, '@MaxAvail', float),
+        'P_TRADER_MAX_AVAIL': get_trader_period_trade_attribute(data_dict, '@MaxAvail', float),
         'P_TRADER_UIGF': get_trader_period_attribute(data_dict, '@UIGF', float),
         'P_TRADER_INITIAL_MW': get_trader_initial_condition_attribute(data_dict, 'InitialMW', float),
         'P_TRADER_WHAT_IF_INITIAL_MW': get_trader_initial_condition_attribute(data_dict, 'WhatIfInitialMW', float),
@@ -1194,10 +1194,10 @@ def parse_case_data_json(data, intervention) -> dict:
         'P_TRADER_SEMI_DISPATCH_STATUS': get_trader_collection_attribute(data_dict, '@SemiDispatch', str),
         'P_TRADER_REGION': get_trader_period_attribute(data_dict, '@RegionID', str),
         'P_TRADER_PERIOD_RAMP_UP_RATE': get_trader_period_trade_attribute(data_dict, '@RampUpRate', float),
-        'P_TRADER_PERIOD_RAMP_DOWN_RATE': get_trader_period_trade_attribute(data_dict, '@RampDnRate', float),
+        'P_TRADER_PERIOD_RAMP_DN_RATE': get_trader_period_trade_attribute(data_dict, '@RampDnRate', float),
         'P_TRADER_TYPE': get_trader_collection_attribute(data_dict, '@TraderType', str),
         'P_TRADER_SCADA_RAMP_UP_RATE': get_trader_initial_condition_attribute(data_dict, 'SCADARampUpRate', float),
-        'P_TRADER_SCADA_RAMP_DOWN_RATE': get_trader_initial_condition_attribute(data_dict, 'SCADARampDnRate', float),
+        'P_TRADER_SCADA_RAMP_DN_RATE': get_trader_initial_condition_attribute(data_dict, 'SCADARampDnRate', float),
         'P_TRADER_MIN_LOADING_MW': get_trader_fast_start_attribute(data_dict, '@MinLoadingMW', float),
         'P_TRADER_CURRENT_MODE': get_trader_fast_start_attribute(data_dict, '@CurrentMode', str),
         'P_TRADER_CURRENT_MODE_TIME': get_trader_fast_start_attribute(data_dict, '@CurrentModeTime', float),
@@ -1205,6 +1205,10 @@ def parse_case_data_json(data, intervention) -> dict:
         'P_TRADER_T2': get_trader_fast_start_attribute(data_dict, '@T2', float),
         'P_TRADER_T3': get_trader_fast_start_attribute(data_dict, '@T3', float),
         'P_TRADER_T4': get_trader_fast_start_attribute(data_dict, '@T4', float),
+        'P_TRADER_ENABLEMENT_MIN': get_trader_period_trade_attribute(data_dict, '@EnablementMin', float),
+        'P_TRADER_LOW_BREAKPOINT': get_trader_period_trade_attribute(data_dict, '@LowBreakpoint', float),
+        'P_TRADER_HIGH_BREAKPOINT': get_trader_period_trade_attribute(data_dict, '@HighBreakpoint', float),
+        'P_TRADER_ENABLEMENT_MAX': get_trader_period_trade_attribute(data_dict, '@EnablementMax', float),
         'P_INTERCONNECTOR_INITIAL_MW': get_interconnector_collection_attribute(data_dict, 'InitialMW', float),
         'P_INTERCONNECTOR_TO_REGION': get_interconnector_period_collection_attribute(data_dict, '@ToRegion', str),
         'P_INTERCONNECTOR_FROM_REGION': get_interconnector_period_collection_attribute(data_dict, '@FromRegion', str),
@@ -1212,9 +1216,6 @@ def parse_case_data_json(data, intervention) -> dict:
         'P_INTERCONNECTOR_UPPER_LIMIT': get_interconnector_period_collection_attribute(data_dict, '@UpperLimit', float),
         'P_INTERCONNECTOR_MNSP_STATUS': get_interconnector_period_collection_attribute(data_dict, '@MNSP', str),
         'P_INTERCONNECTOR_LOSS_SHARE': get_interconnector_loss_model_attribute(data_dict, '@LossShare', float),
-        'P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_X': get_interconnector_loss_model_breakpoints_x(data_dict),
-        'P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y': get_interconnector_loss_model_breakpoints_y(data_dict),
-        'P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE': get_interconnector_initial_loss_estimate(data_dict),
         'P_MNSP_PRICE_BAND': get_mnsp_price_bands(data_dict),
         'P_MNSP_QUANTITY_BAND': get_mnsp_quantity_bands(data_dict),
         'P_MNSP_MAX_AVAILABLE': get_mnsp_quantity_band_attribute(data_dict, '@MaxAvail', float),
@@ -1227,7 +1228,6 @@ def parse_case_data_json(data, intervention) -> dict:
         'P_MNSP_LOSS_PRICE': get_case_attribute(data_dict, '@MNSPLossesPrice', float),
         'P_MNSP_RAMP_UP_RATE': get_mnsp_quantity_band_attribute(data_dict, '@RampUpRate', float),
         'P_MNSP_RAMP_DOWN_RATE': get_mnsp_quantity_band_attribute(data_dict, '@RampDnRate', float),
-        'P_MNSP_REGION_LOSS_INDICATOR': get_mnsp_region_loss_indicator(data_dict),
         'P_REGION_INITIAL_DEMAND': get_region_initial_condition_attribute(data_dict, 'InitialDemand', float),
         'P_REGION_ADE': get_region_initial_condition_attribute(data_dict, 'ADE', float),
         'P_REGION_DF': get_region_period_collection_attribute(data_dict, '@DF', float),
@@ -1253,10 +1253,17 @@ def parse_case_data_json(data, intervention) -> dict:
         'P_CVF_GENERIC_CONSTRAINT_PRICE': get_case_attribute(data_dict, '@GenericConstraintPrice', float),
         'P_CVF_SATISFACTORY_NETWORK_PRICE': get_case_attribute(data_dict, '@Satisfactory_Network_Price', float),
         'P_TIE_BREAK_PRICE': get_case_attribute(data_dict, '@TieBreakPrice', float),
+        'intermediate': {
+            'generic_constraint_lhs_terms': get_generic_constraint_lhs_terms(data_dict),
+        },
         'preprocessed': {
-            'GC_LHS_TERMS': get_generic_constraint_lhs_terms(data_dict),
-            'FCAS_TRAPEZIUM': get_trader_fcas_trapezium(data_dict),
-            'FCAS_AVAILABILITY_STATUS': get_trader_fcas_availability_status(data_dict)
+            'S_TRADER_PRICE_TIED': get_price_tied_bands(data_dict),
+            # 'FCAS_TRAPEZIUM': get_trader_fcas_trapezium(data_dict),
+            'P_TRADER_FCAS_AVAILABILITY_STATUS': get_trader_fcas_availability_status(data_dict),
+            'P_MNSP_REGION_LOSS_INDICATOR': get_mnsp_region_loss_indicator(data_dict),
+            'P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_X': get_interconnector_loss_model_breakpoints_x(data_dict),
+            'P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y': get_interconnector_loss_model_breakpoints_y(data_dict),
+            'P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE': get_interconnector_initial_loss_estimate(data_dict),
         },
         'solution': {
             'traders': get_trader_solution(data_dict, intervention),
