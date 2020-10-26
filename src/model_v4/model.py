@@ -6,6 +6,7 @@ import time
 import pickle
 import zipfile
 import calendar
+from typing import Union
 
 import simplejson
 import numpy as np
@@ -1912,8 +1913,29 @@ def define_mnsp_constraints(m):
     return m
 
 
-def define_fcas_constraints(m, data):
+def define_fcas_constraints(m):
     """Define FCAS constraints"""
+
+    def get_upper_slope_coefficient(m, trader_id, trade_type) -> Union[float, None]:
+        """Get upper slope coefficient"""
+
+        # FCAS trapezium parameters
+        enablement_max = m.P_TRADER_FCAS_ENABLEMENT_MAX[trader_id, trade_type]
+        high_breakpoint = m.P_TRADER_FCAS_HIGH_BREAKPOINT[trader_id, trade_type]
+        max_avail = m.P_TRADER_MAX_AVAILABLE[trader_id, trade_type]
+
+        return None if max_avail == 0 else (enablement_max - high_breakpoint) / max_avail
+
+    def get_lower_slope_coefficient(m, trader_id, trade_type) -> Union[float, None]:
+        """Get lower slope coefficient"""
+
+        # FCAS trapezium parameters
+        enablement_min = m.P_TRADER_FCAS_ENABLEMENT_MIN[trader_id, trade_type]
+        low_breakpoint = m.P_TRADER_FCAS_LOW_BREAKPOINT[trader_id, trade_type]
+        max_avail = m.P_TRADER_MAX_AVAILABLE[trader_id, trade_type]
+
+        # If MaxAvail is 0 then lower slope coefficient is undefined - return None
+        return None if max_avail == 0 else (low_breakpoint - enablement_min) / max_avail
 
     def generator_joint_ramping_up_rule(m, i, j):
         """Generator joint ramp up constraints"""
@@ -1997,14 +2019,16 @@ def define_fcas_constraints(m, data):
             return pyo.Constraint.Skip
 
         elif (i, 'R5RE') in m.S_TRADER_OFFERS:
-            usc = utils.fcas.get_upper_slope_coefficient(data, i, j)
+            # usc = utils.fcas.get_upper_slope_coefficient(data, i, j)
+            usc = get_upper_slope_coefficient(m, i, j)
             return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + (usc * m.V_TRADER_TOTAL_OFFER[i, j])
                     + m.V_TRADER_TOTAL_OFFER[i, 'R5RE']
                     <= m.P_TRADER_FCAS_ENABLEMENT_MAX[i, j]
                     + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RHS[i, j]
                     )
         else:
-            usc = utils.fcas.get_upper_slope_coefficient(data, i, j)
+            # usc = utils.fcas.get_upper_slope_coefficient(data, i, j)
+            usc = get_upper_slope_coefficient(m, i, j)
             return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + (usc * m.V_TRADER_TOTAL_OFFER[i, j])
                     <= m.P_TRADER_FCAS_ENABLEMENT_MAX[i, j] + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RHS[i, j])
 
@@ -2031,13 +2055,15 @@ def define_fcas_constraints(m, data):
             return pyo.Constraint.Skip
 
         elif (i, 'L5RE') in m.S_TRADER_OFFERS:
-            lsc = utils.fcas.get_lower_slope_coefficient(data, i, j)
+            # lsc = utils.fcas.get_lower_slope_coefficient(data, i, j)
+            lsc = get_lower_slope_coefficient(m, i, j)
             return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] - (lsc * m.V_TRADER_TOTAL_OFFER[i, j])
                     - m.V_TRADER_TOTAL_OFFER[i, 'L5RE'] + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LHS[i, j]
                     >= m.P_TRADER_FCAS_ENABLEMENT_MIN[i, j])
 
         else:
-            lsc = utils.fcas.get_lower_slope_coefficient(data, i, j)
+            # lsc = utils.fcas.get_lower_slope_coefficient(data, i, j)
+            lsc = get_lower_slope_coefficient(m, i, j)
             return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] - (lsc * m.V_TRADER_TOTAL_OFFER[i, j])
                     + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LHS[i, j]
                     >= m.P_TRADER_FCAS_ENABLEMENT_MIN[i, j])
@@ -2065,7 +2091,8 @@ def define_fcas_constraints(m, data):
             return pyo.Constraint.Skip
 
         else:
-            usc = utils.fcas.get_upper_slope_coefficient(data, i, j)
+            # usc = utils.fcas.get_upper_slope_coefficient(data, i, j)
+            usc = get_upper_slope_coefficient(m, i, j)
             return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + (usc * m.V_TRADER_TOTAL_OFFER[i, j])
                     <= m.E_TRADER_FCAS_EFFECTIVE_ENABLEMENT_MAX[i, j] + m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RHS[i, j])
 
@@ -2093,7 +2120,8 @@ def define_fcas_constraints(m, data):
             return pyo.Constraint.Skip
 
         else:
-            lsc = utils.fcas.get_lower_slope_coefficient(data, i, j)
+            # lsc = utils.fcas.get_lower_slope_coefficient(data, i, j)
+            lsc = get_lower_slope_coefficient(m, i, j)
             return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] - (lsc * m.V_TRADER_TOTAL_OFFER[i, j])
                     + m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LHS[i, j]
                     >= m.E_TRADER_FCAS_EFFECTIVE_ENABLEMENT_MIN[i, j])
@@ -2224,13 +2252,15 @@ def define_fcas_constraints(m, data):
             return pyo.Constraint.Skip
 
         elif (i, 'L5RE') in m.S_TRADER_OFFERS:
-            usc = utils.fcas.get_upper_slope_coefficient(data, i, j)
+            # usc = utils.fcas.get_upper_slope_coefficient(data, i, j)
+            usc = get_upper_slope_coefficient(m, i, j)
             return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] + (usc * m.V_TRADER_TOTAL_OFFER[i, j])
                     + m.V_TRADER_TOTAL_OFFER[i, 'L5RE']
                     <= m.P_TRADER_FCAS_ENABLEMENT_MAX[i, j] + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RHS[i, j])
 
         else:
-            usc = utils.fcas.get_upper_slope_coefficient(data, i, j)
+            # usc = utils.fcas.get_upper_slope_coefficient(data, i, j)
+            usc = get_upper_slope_coefficient(m, i, j)
             return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] + (usc * m.V_TRADER_TOTAL_OFFER[i, j])
                     <= m.P_TRADER_FCAS_ENABLEMENT_MAX[i, j] + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_RHS[i, j])
 
@@ -2257,13 +2287,15 @@ def define_fcas_constraints(m, data):
             return pyo.Constraint.Skip
 
         elif (i, 'R5RE') in m.S_TRADER_OFFERS:
-            lsc = utils.fcas.get_lower_slope_coefficient(data, i, j)
+            # lsc = utils.fcas.get_lower_slope_coefficient(data, i, j)
+            lsc = get_lower_slope_coefficient(m, i, j)
             return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] - (lsc * m.V_TRADER_TOTAL_OFFER[i, j])
                     - m.V_TRADER_TOTAL_OFFER[i, 'R5RE'] + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LHS[i, j]
                     >= m.P_TRADER_FCAS_ENABLEMENT_MIN[i, j])
 
         else:
-            lsc = utils.fcas.get_lower_slope_coefficient(data, i, j)
+            # lsc = utils.fcas.get_lower_slope_coefficient(data, i, j)
+            lsc = get_lower_slope_coefficient(m, i, j)
             return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] - (lsc * m.V_TRADER_TOTAL_OFFER[i, j])
                     + m.V_CV_TRADER_FCAS_JOINT_CAPACITY_LHS[i, j]
                     >= m.P_TRADER_FCAS_ENABLEMENT_MIN[i, j])
@@ -2291,7 +2323,8 @@ def define_fcas_constraints(m, data):
             return pyo.Constraint.Skip
 
         else:
-            usc = utils.fcas.get_upper_slope_coefficient(data, i, j)
+            # usc = utils.fcas.get_upper_slope_coefficient(data, i, j)
+            usc = get_upper_slope_coefficient(m, i, j)
             return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] + (usc * m.V_TRADER_TOTAL_OFFER[i, j])
                     <= m.E_TRADER_FCAS_EFFECTIVE_ENABLEMENT_MAX[i, j] + m.V_CV_TRADER_FCAS_ENERGY_REGULATING_RHS[i, j])
 
@@ -2319,7 +2352,8 @@ def define_fcas_constraints(m, data):
             return pyo.Constraint.Skip
 
         else:
-            lsc = utils.fcas.get_lower_slope_coefficient(data, i, j)
+            # lsc = utils.fcas.get_lower_slope_coefficient(data, i, j)
+            lsc = get_lower_slope_coefficient(m, i, j)
             return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] - (lsc * m.V_TRADER_TOTAL_OFFER[i, j])
                     + m.V_CV_TRADER_FCAS_ENERGY_REGULATING_LHS[i, j]
                     >= m.E_TRADER_FCAS_EFFECTIVE_ENABLEMENT_MIN[i, j])
@@ -2682,7 +2716,7 @@ def define_tie_breaking_constraints(m):
     return m
 
 
-def define_constraints(m, case_data):
+def define_constraints(m):
     """Define model constraints"""
 
     t0 = time.time()
@@ -2713,7 +2747,7 @@ def define_constraints(m, case_data):
     print('Defined MNSP constraints:', time.time() - t0)
 
     # Construct FCAS constraints
-    m = define_fcas_constraints(m, case_data)
+    m = define_fcas_constraints(m)
     print('Defined FCAS constraints:', time.time() - t0)
 
     # SOS2 interconnector loss model constraints
@@ -2745,7 +2779,7 @@ def define_objective(m):
     return m
 
 
-def construct_model(data, case_data):
+def construct_model(data):
     """Create model object"""
 
     # Initialise model
@@ -2757,7 +2791,7 @@ def construct_model(data, case_data):
     m = define_parameters(m, data)
     m = define_variables(m)
     m = define_expressions(m, data)
-    m = define_constraints(m, case_data)
+    m = define_constraints(m)
     m = define_objective(m)
 
     # Add component allowing dual variables to be imported
@@ -2927,7 +2961,7 @@ def check_model(data_dir, mode, case_ids=None):
         processed_data = utils.data.parse_case_data_json(data_json, intervention)
 
         # Construct model
-        m = construct_model(processed_data, case_data)
+        m = construct_model(processed_data)
 
         # Solve model
         m = solve_model(m)
@@ -3019,7 +3053,7 @@ if __name__ == '__main__':
     model_data_preprocessed = utils.preprocessing.get_preprocessed_case_file(model_data)
 
     # Construct and solve model
-    model = construct_model(model_data_preprocessed, cdata)
+    model = construct_model(model_data_preprocessed)
     model = solve_model(model)
 
     # Extract model solution
