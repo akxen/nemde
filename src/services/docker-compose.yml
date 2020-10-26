@@ -2,6 +2,7 @@ version: '3.3'
 services:
   db:
     image: kubedb/mysql:5.7.25
+    command: --max_allowed_packet=32505856
     restart: always
     env_file:
       - .env

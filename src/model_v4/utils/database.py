@@ -206,7 +206,7 @@ def get_case_results(schema):
     conn, cur = connect_to_database()
 
     # Cases that have already been completed
-    sql = f"""SELECT * FROM {schema}.results where run_id = {run_id}"""
+    sql = f"""SELECT * FROM {schema}.results WHERE run_id = {run_id}"""
 
     # Get case IDs that have already been completed
     cur.execute(sql)
@@ -216,6 +216,31 @@ def get_case_results(schema):
     close_connection(conn, cur)
 
     return results
+
+
+def get_preprocessed_case_data(schema, case_id):
+    """Get preprocessed case data"""
+
+    # Connect to database
+    conn, cur = connect_to_database()
+
+    # Cases that have already been completed
+    sql = f"""SELECT * FROM {schema}.casefiles WHERE case_id = {case_id}"""
+
+    # Get case IDs that have already been completed
+    cur.execute(sql)
+    results = cur.fetchall()
+
+    # Close connection
+    close_connection(conn, cur)
+
+    # Get preprocessed json data
+    data_json = results[0]['preprocessed_case_data']
+
+    # Convert to dictionary
+    data_dict = simplejson.loads(data_json)
+
+    return data_dict
 
 
 if __name__ == '__main__':
@@ -240,3 +265,5 @@ if __name__ == '__main__':
 
     # Get case results corresponding to most recent run
     # r = get_case_results(os.environ['MYSQL_DATABASE'])
+
+    d = get_preprocessed_case_data(os.environ['MYSQL_DATABASE'], '20191001001')

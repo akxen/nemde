@@ -6,7 +6,11 @@ import time
 import pickle
 import zipfile
 import calendar
+import collections.abc
 from typing import Union
+
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(__file__), 'utils', '.env'))
 
 import simplejson
 import numpy as np
@@ -3012,6 +3016,15 @@ def get_positive_variables(obj):
     return [(i, obj[i].value) for i in obj.keys() if obj[i].value > 0]
 
 
+def update(d, u):
+    for k, v in u.items():
+        if isinstance(v, collections.abc.Mapping):
+            d[k] = update(d.get(k, {}), v)
+        else:
+            d[k] = v
+    return d
+
+
 if __name__ == '__main__':
     # Directory containing case data
     data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
@@ -3038,15 +3051,36 @@ if __name__ == '__main__':
     # Get NEMDE model data as a Python dictionary
     cdata = json.loads(case_data_json)
 
-    # Extract data from case file into a standardised format
-    intervention_status = utils.lookup.get_intervention_status(cdata, 'physical')
+    # Run mode - either 'physical' or 'pricing'
+    run_mode = 'physical'
 
     # Case data presented in a simplified format - constructed from NEMDE case file
-    simplified_case = utils.transforms.simplified.case.construct_case(cdata, intervention_status)
+    # simplified_case = utils.transforms.simplified.case.construct_case(cdata, run_mode)
+    simplified_case = utils.database.get_preprocessed_case_data(os.environ['MYSQL_DATABASE'], di_case_id)
+
+    # User update
+    user_update = {
+        'CaseID': di_case_id,
+        'Data': {
+            'Traders': {
+                'AGLHAL': {
+                    'QuantityBands': {
+                        'ENOF':
+                            {'BandAvail1': 100}
+                    }
+                }
+            }
+        }
+    }
+
+    # user_update = {}
+
+    new_simplified_case = update(simplified_case, user_update)
+    # new_simplified_case['Data']['Traders']['AGLHAL']['QuantityBands']['ENOF']
 
     # Case constructed from data structure which closely resembles NEMDE input case file
-    model_data = utils.transforms.original.data.parse_case_data(cdata, intervention_status)
-    # model_data = utils.transforms.simplified.data.parse_case_data(simplified_case, intervention_status)
+    # model_data = utils.transforms.original.data.parse_case_data(cdata, run_mode)
+    model_data = utils.transforms.simplified.data.parse_case_data(new_simplified_case, run_mode)
 
     # Apply preprocessing logic
     # model_data_preprocessed = utils.data.parse_case_data_json(case_data_json, intervention_status)
@@ -3066,6 +3100,9 @@ if __name__ == '__main__':
     # Add additional FCAS data to check FCAS availability
     # df_fcas_solution = utils.validate.check_fcas_solution(cdata, model_solution, intervention_status, di_case_id,
     #                                                       sample_directory, tmp_directory)
+
+    # Extract data from case file into a standardised format
+    intervention_status = utils.lookup.get_intervention_status(cdata, run_mode)
 
     # Plot trader solution
     utils.solution.plot_trader_solution(cdata, model_solution, intervention_status)

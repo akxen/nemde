@@ -7,7 +7,7 @@ import time
 # import context
 
 import loaders
-from lookup import convert_to_list, get_intervention_status
+from lookup import convert_to_list
 
 
 def parse_case_attributes(data) -> dict:
@@ -426,8 +426,29 @@ def parse_generic_constraints(data, intervention) -> dict:
     return out
 
 
-def construct_case(data, intervention) -> dict:
+def get_intervention_status(data, mode) -> str:
+    """Check if intervention pricing run occurred - trying to model physical run if intervention occurred"""
+
+    # Intervention flag
+    intervention_flag = data['NEMSPDCaseFile']['NemSpdInputs']['Case']['@Intervention']
+
+    if (intervention_flag == 'False') and (mode == 'physical'):
+        return '0'
+    elif (intervention_flag == 'False') and (mode == 'pricing'):
+        return '0'
+    elif (intervention_flag == 'True') and (mode == 'physical'):
+        return '1'
+    elif (intervention_flag == 'True') and (mode == 'pricing'):
+        return '0'
+    else:
+        raise Exception('Unhandled case:', mode)
+
+
+def construct_case(data, mode) -> dict:
     """Construct case"""
+
+    # Get intervention status
+    intervention = get_intervention_status(data, mode)
 
     # Parse case attributes
     case_attributes = parse_case_attributes(data)

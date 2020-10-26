@@ -939,7 +939,7 @@ def get_price_tied_bands(data):
     return price_tied_flattened
 
 
-def parse_case_data(data, intervention) -> dict:
+def parse_case_data(data, mode) -> dict:
     """
     Parse json data
 
@@ -948,14 +948,17 @@ def parse_case_data(data, intervention) -> dict:
     data : dict
         NEM case file
 
-    intervention : str
-        Intervention status
+    mode : str
+        Run mode. Either 'physical' or 'pricing'.
 
     Returns
     -------
     case_data : dict
         Dictionary containing case data to be read into model
     """
+
+    # Get intervention status
+    intervention = get_intervention_status(data, mode)
 
     case_data = {
         'S_REGIONS': get_region_index(data),

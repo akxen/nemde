@@ -11,7 +11,7 @@ except ModuleNotFoundError:
     pass
 
 import loaders
-from lookup import convert_to_list, get_intervention_status
+from lookup import convert_to_list
 
 
 def get_region_index(data) -> list:
@@ -352,10 +352,8 @@ def get_generic_constraint_info_attribute(data, attribute, func):
 def parse_constraint(constraint_data):
     """Constraint data"""
 
+    # LHS terms
     lhs = constraint_data['LHSTerms']
-
-    # if lhs is None:
-    #     return {}
 
     # Trader factors
     traders = {(i['TraderID'], i['TradeType']): float(i['Factor'])
@@ -381,7 +379,25 @@ def get_generic_constraint_lhs_terms(data) -> dict:
     return {i: parse_constraint(j) for i, j in data['Data']['GenericConstraints'].items()}
 
 
-def parse_case_data(data, intervention) -> dict:
+def get_intervention_status(data, mode):
+    """Intervention status"""
+
+    # Intervention flag
+    intervention_flag = data['Data']['Case']['Intervention']
+
+    if (intervention_flag == 'False') and (mode == 'physical'):
+        return '0'
+    elif (intervention_flag == 'False') and (mode == 'pricing'):
+        return '0'
+    elif (intervention_flag == 'True') and (mode == 'physical'):
+        return '1'
+    elif (intervention_flag == 'True') and (mode == 'pricing'):
+        return '0'
+    else:
+        raise Exception('Unhandled case:', mode)
+
+
+def parse_case_data(data, mode) -> dict:
     """
     Parse json data
 
@@ -390,14 +406,17 @@ def parse_case_data(data, intervention) -> dict:
     data : dict
         NEM case file data
 
-    intervention : str
-        Intervention status
+    mode : str
+        Run mode. Either 'physical' or 'pricing'.
 
     Returns
     -------
     case_data : dict
         Dictionary containing case data to be read into model
     """
+
+    # Intervention status
+    intervention = get_intervention_status(data, mode)
 
     case_data = {
         'S_REGIONS': get_region_index(data),
