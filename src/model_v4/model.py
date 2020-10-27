@@ -3031,10 +3031,7 @@ def get_model_data_online(case_id):
     # Load case data
     base_case = utils.database.get_preprocessed_case_data(os.environ['MYSQL_DATABASE'], case_id)
 
-    # Pre-process case file to be ingested by model
-    transformed_case = utils.transforms.simplified.data.parse_case_data(base_case, 'physical')
-
-    return transformed_case
+    return base_case
 
 
 def solve_model_online(user_data):
