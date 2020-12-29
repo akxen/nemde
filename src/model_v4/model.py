@@ -10,6 +10,7 @@ import collections.abc
 from typing import Union
 
 from dotenv import load_dotenv
+
 load_dotenv(os.path.join(os.path.dirname(__file__), 'utils', '.env'))
 
 import simplejson
@@ -3061,50 +3062,60 @@ def solve_model_online(user_data):
 
 
 if __name__ == '__main__':
-    # # Directory containing case data
-    # data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
-    #                               os.path.pardir, os.path.pardir, 'nemweb', 'Reports', 'Data_Archive', 'NEMDE',
-    #                               'zipped')
-    #
-    # # Root output directory
-    # output_directory = os.path.join(os.path.dirname(__file__), 'output')
-    #
-    # # Directory containing model data, and directory where temporary files are stored
-    # sample_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, 'data')
-    # tmp_directory = os.path.join(os.path.dirname(__file__), 'tmp')
+    # Directory containing case data
+    data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, os.path.pardir,
+                                  os.path.pardir, os.path.pardir, 'nemweb', 'Reports', 'Data_Archive', 'NEMDE',
+                                  'zipped')
+
+    # Root output directory
+    output_directory = os.path.join(os.path.dirname(__file__), 'output')
+
+    # Directory containing model data, and directory where temporary files are stored
+    sample_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, os.path.pardir, 'data')
+    tmp_directory = os.path.join(os.path.dirname(__file__), 'tmp')
 
     # Define the dispatch interval to investigate
-    # c_ids = ['20191001006', '20191001016', '20191001074', '20191001018', '2019103109300']
+    c_ids = ['20191001006', '20191001016', '20191001074', '20191001018', '2019103109300']
     di_year, di_month, di_day, di_interval = 2019, 10, 1, 18
     di_case_id = f'{di_year}{di_month:02}{di_day:02}{di_interval:03}'
 
-    # # Case data in json format
-    # case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, di_year, di_month, di_day, di_interval)
-    # save_case_json(data_directory, os.path.join(output_directory, 'cases'), di_year, di_month, di_day, di_interval,
-    #                overwrite=False)
-    #
-    # # Get NEMDE model data as a Python dictionary
-    # cdata = json.loads(case_data_json)
-    #
-    # # Run mode - either 'physical' or 'pricing'
-    # run_mode = 'physical'
-    #
+    # Case data in json format
+    case_data_json = utils.loaders.load_dispatch_interval_json(data_directory, di_year, di_month, di_day, di_interval)
+    save_case_json(data_directory, os.path.join(output_directory, 'cases'), di_year, di_month, di_day, di_interval,
+                   overwrite=False)
+
+    # Get NEMDE model data as a Python dictionary
+    cdata = json.loads(case_data_json)
+
+    # Run mode - either 'physical' or 'pricing'
+    run_mode = 'physical'
+
     # # Case data presented in a simplified format - constructed from NEMDE case file
     # # simplified_case = utils.transforms.simplified.case.construct_case(cdata, run_mode)
     # simplified_case = utils.database.get_preprocessed_case_data(os.environ['MYSQL_DATABASE'], di_case_id)
-    #
+
     # # Case constructed from data structure which closely resembles NEMDE input case file
     # # model_data = utils.transforms.original.data.parse_case_data(cdata, run_mode)
     # model_data = utils.transforms.simplified.data.parse_case_data(simplified_case, run_mode)
-    #
+
     # # Apply preprocessing logic
     # # model_data_preprocessed = utils.data.parse_case_data_json(case_data_json, intervention_status)
     # model_data_preprocessed = utils.preprocessing.get_preprocessed_case_file(model_data)
-    #
+
     # # Construct and solve model
     # model = construct_model(model_data_preprocessed)
-    # model = solve_model(model)
+    # # model = solve_model(model)
+
+    # (pd.Series({k: v for k, v in model.P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_X.items()}, name='value')
+    #     .rename_axis(['interconnector_id', 'breakpoint_id']).reset_index()
+    #     .sort_values(by=['interconnector_id', 'breakpoint_id']).reset_index().drop('index', axis=1)
+    #     .to_csv('loss_model_breakpoints_x.csv'))
     #
+    # (pd.Series({k: v for k, v in model.P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y.items()}, name='value')
+    #     .rename_axis(['interconnector_id', 'breakpoint_id']).reset_index()
+    #     .sort_values(by=['interconnector_id', 'breakpoint_id']).reset_index().drop('index', axis=1)
+    #     .to_csv('loss_model_breakpoints_y.csv'))
+
     # # Extract model solution
     # model_solution = utils.solution.get_model_solution(model)
     # solution_comparison = utils.solution.get_model_comparison(cdata, model_solution)
@@ -3134,11 +3145,11 @@ if __name__ == '__main__':
     # traders_results = formatted_solution['traders']
     # interconnectors_results = formatted_solution['interconnectors']
     #
-    # # Check model for a random selection of dispatch intervals
-    # # case_id_sample = get_case_ids(2019, 10, n=1000)
-    # # check_model(data_directory, mode='new', case_ids=case_id_sample)
-    # # check_model(data_directory, mode='continue')
-    #
+    # Check model for a random selection of dispatch intervals
+    # case_id_sample = get_case_ids(2019, 10, n=1000)
+    # check_model(data_directory, mode='new', case_ids=case_id_sample)
+    # check_model(data_directory, mode='continue')
+
     # # Extract latest run results from database
     # # db_results = utils.solution.get_latest_run_results(os.environ['MYSQL_DATABASE'])
     #
@@ -3160,9 +3171,9 @@ if __name__ == '__main__':
     #     }
     # }
 
-    user_request = {
-        'CaseID': di_case_id,
-    }
-
-    # Solve model
-    model_solution = solve_model_online(user_request)
+    # user_request = {
+    #     'CaseID': di_case_id,
+    # }
+    #
+    # # Solve model
+    # model_solution = solve_model_online(user_request)
