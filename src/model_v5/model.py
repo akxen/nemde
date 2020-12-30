@@ -21,7 +21,7 @@ import pyomo.environ as pyo
 
 sys.path.append(os.path.join(__file__, 'utils'))
 
-import .utils.fcas
+from .utils import fcas
 import utils.data
 import utils.lookup
 import utils.loaders
