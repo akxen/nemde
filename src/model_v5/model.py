@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 import pyomo.environ as pyo
 
-sys.path.append(os.path.join(__file__))
+sys.path.append(os.path.join(__file__, 'utils'))
 
 import utils.fcas
 import utils.data
