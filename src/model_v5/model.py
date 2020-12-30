@@ -1,6 +1,7 @@
 """Model used to construct and solve NEMDE approximation"""
 
 import os
+import sys
 import json
 import time
 import pickle
@@ -17,6 +18,8 @@ import simplejson
 import numpy as np
 import pandas as pd
 import pyomo.environ as pyo
+
+sys.path.append(os.path.join(__file__))
 
 import utils.fcas
 import utils.data
