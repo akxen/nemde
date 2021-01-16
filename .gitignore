@@ -1,4 +1,4 @@
-.idea/*
+.vscode/*
 *.pyc
 data/MMSDM_2019_10/*
 *.xlsx
