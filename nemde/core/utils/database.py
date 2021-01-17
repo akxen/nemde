@@ -9,15 +9,12 @@ import simplejson
 import MySQLdb
 import MySQLdb.cursors
 
-from dotenv import load_dotenv
-load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
-
 
 def connect_to_database():
     """Connect to MySQL database"""
 
     # MySQL connection object
-    conn = MySQLdb.connect(host=os.environ['MYSQL_DOCKER_HOST'],
+    conn = MySQLdb.connect(host=os.environ['MYSQL_HOST'],
                            user=os.environ['MYSQL_USER'],
                            passwd=os.environ['MYSQL_PASSWORD'],
                            cursorclass=MySQLdb.cursors.DictCursor)

@@ -1,8 +1,2 @@
-# import os
-# import sys
-
-# sys.path.append(os.path.dirname(__file__))
-
-# import core
-
+import nemde.config.setup_variables
 import nemde.core.model

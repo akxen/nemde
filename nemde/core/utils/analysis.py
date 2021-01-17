@@ -11,11 +11,13 @@ import matplotlib.pyplot as plt
 import lookup
 import loaders
 
+
 def get_observed_trader_solution(data):
     """Get observed energy target solution"""
 
     # All traders
-    traders = data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('TraderSolution')
+    traders = data.get('NEMSPDCaseFile').get(
+        'NemSpdOutputs').get('TraderSolution')
 
     # Keys to be treated as strings
     str_keys = ['@TraderID', '@PeriodID', '@SemiDispatchCap']
@@ -37,7 +39,8 @@ def get_observed_region_solution(data):
     """Get observed region solution"""
 
     # All regions
-    regions = data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('RegionSolution')
+    regions = data.get('NEMSPDCaseFile').get(
+        'NemSpdOutputs').get('RegionSolution')
 
     # Keys to be treated as strings
     str_keys = ['@RegionID', '@PeriodID', '@Intervention']
@@ -118,22 +121,28 @@ def check_trader_solution(data, solution, intervention):
         out.setdefault(trader_id, {})
         for trade_type, target in trader_solution.items():
             # Compute difference between target and observed value
-            region_id = lookup.get_trader_period_collection_attribute(data, trader_id, '@RegionID', str)
+            region_id = lookup.get_trader_period_collection_attribute(
+                data, trader_id, '@RegionID', str)
 
             # Get region price for given trade type
             region_price = lookup.get_region_solution_attribute(data, region_id, price_key_map[trade_type], float,
                                                                 intervention)
 
             # Observed output
-            observed_output = observed[(trader_id, intervention)][key_map[trade_type]]
+            observed_output = observed[(
+                trader_id, intervention)][key_map[trade_type]]
 
             # Model and observed marginal price bands - cost to produce an incremental additional unit
-            mod_marginal_p = get_trader_marginal_price_band(data, trader_id, trade_type, target, 'marginal')
-            obs_marginal_p = get_trader_marginal_price_band(data, trader_id, trade_type, observed_output, 'marginal')
+            mod_marginal_p = get_trader_marginal_price_band(
+                data, trader_id, trade_type, target, 'marginal')
+            obs_marginal_p = get_trader_marginal_price_band(
+                data, trader_id, trade_type, observed_output, 'marginal')
 
             # Price corresponding to dispatch band
-            mod_current_p = get_trader_marginal_price_band(data, trader_id, trade_type, target, 'current')
-            obs_current_p = get_trader_marginal_price_band(data, trader_id, trade_type, observed_output, 'current')
+            mod_current_p = get_trader_marginal_price_band(
+                data, trader_id, trade_type, target, 'current')
+            obs_current_p = get_trader_marginal_price_band(
+                data, trader_id, trade_type, observed_output, 'current')
 
             # Observed marginal price band
             out[trader_id][trade_type] = {
@@ -151,7 +160,8 @@ def check_trader_solution(data, solution, intervention):
             }
 
     # Convert to DataFrame and sort by error corresponding to each unit
-    df_out = {(k_1, k_2): v_2 for k_1, v_1 in out.items() for k_2, v_2 in v_1.items()}
+    df_out = {(k_1, k_2): v_2 for k_1, v_1 in out.items()
+              for k_2, v_2 in v_1.items()}
     df = (pd.DataFrame(df_out).T.sort_values(by='abs_difference', ascending=False)
           .rename_axis(['trader_id', 'trade_type']))
 
@@ -176,10 +186,12 @@ def plot_trader_solution_difference(data, solution, intervention):
     for trader_id, trader_solution in solution['traders'].items():
         for trade_type, target in trader_solution.items():
             # Append model value (x-axis) and observed value (y-axis) for given energy type
-            out[trade_type].append((target, observed[(trader_id, intervention)][key_map[trade_type]]))
+            out[trade_type].append(
+                (target, observed[(trader_id, intervention)][key_map[trade_type]]))
 
     # Initialise figure
-    fig, ((ax1, ax2), (ax3, ax4), (ax5, ax6), (ax7, ax8), (ax9, ax10)) = plt.subplots(nrows=5, ncols=2)
+    fig, ((ax1, ax2), (ax3, ax4), (ax5, ax6), (ax7, ax8),
+          (ax9, ax10)) = plt.subplots(nrows=5, ncols=2)
 
     # Mapping between trade types and axes
     ax_map = {'ENOF': ax1, 'LDOF': ax2,
@@ -206,12 +218,14 @@ def get_observed_interconnector_solution(data):
     """Get observed interconnector solution"""
 
     # All interconnectors
-    interconnectors = data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('InterconnectorSolution')
+    interconnectors = data.get('NEMSPDCaseFile').get(
+        'NemSpdOutputs').get('InterconnectorSolution')
 
     # Container for output
     out = {}
     for i in interconnectors:
-        out[i['@InterconnectorID']] = {'Flow': float(i['@Flow']), 'Losses': float(i['@Losses'])}
+        out[i['@InterconnectorID']
+            ] = {'Flow': float(i['@Flow']), 'Losses': float(i['@Losses'])}
 
     return out
 
@@ -233,7 +247,8 @@ def check_interconnector_solution(data, solution, attribute):
         }
 
     # Convert to DataFrame
-    df = pd.DataFrame(out).T.sort_values(by='abs_difference', ascending=False).round(4)
+    df = pd.DataFrame(out).T.sort_values(
+        by='abs_difference', ascending=False).round(4)
 
     return out, df
 
@@ -262,7 +277,8 @@ def plot_interconnector_solution(data, solution):
 
         ax.scatter(x=x, y=y, alpha=0.7, s=10, color='r')
         smallest, largest = min(min_x, min_y), max(max_x, max_y)
-        ax.plot([smallest, largest], [smallest, largest], color='k', linestyle='--', linewidth=0.7, alpha=0.7)
+        ax.plot([smallest, largest], [smallest, largest],
+                color='k', linestyle='--', linewidth=0.7, alpha=0.7)
         ax.set_xlabel('Model (MW)')
         ax.set_ylabel('Observed (MW)')
         ax.set_title(attribute)
@@ -278,7 +294,8 @@ def plot_interconnector_solution(data, solution):
 def plot_trapezium(trapezium, ax):
     """Plot FCAS trapezium on a given axis"""
 
-    x = [trapezium[i] for i in ['EnablementMin', 'LowBreakpoint', 'HighBreakpoint', 'EnablementMax']]
+    x = [trapezium[i] for i in ['EnablementMin',
+                                'LowBreakpoint', 'HighBreakpoint', 'EnablementMax']]
     y = [0, trapezium['MaxAvail'], trapezium['MaxAvail'], 0]
 
     ax.plot(x, y)
@@ -318,13 +335,16 @@ def get_fcas_solution_comparison_data(preprocessed_data, trader_solutions, trade
     """Get data required for solution comparison"""
 
     # Original FCAS trapezium
-    unscaled = preprocessed_data['preprocessed']['FCAS_TRAPEZIUM'].get((trader_id, trade_type))
+    unscaled = preprocessed_data['preprocessed']['FCAS_TRAPEZIUM'].get(
+        (trader_id, trade_type))
 
     # Scaled FCAS trapezium
-    scaled = preprocessed_data['preprocessed']['FCAS_TRAPEZIUM_SCALED'].get((trader_id, trade_type))
+    scaled = preprocessed_data['preprocessed']['FCAS_TRAPEZIUM_SCALED'].get(
+        (trader_id, trade_type))
 
     # FCAS availability
-    availability = preprocessed_data['preprocessed']['FCAS_AVAILABILITY'].get((trader_id, trade_type))
+    availability = preprocessed_data['preprocessed']['FCAS_AVAILABILITY'].get(
+        (trader_id, trade_type))
 
     # Extract model and observed energy target
     if 'ENOF' in trader_solutions[trader_id].keys():
@@ -361,9 +381,12 @@ def plot_fcas_solution_comparison(comparison_data, ax):
 
     ax = plot_trapezium(comparison_data['unscaled_fcas_trapezium'], ax)
     ax = plot_trapezium(comparison_data['scaled_fcas_trapezium'], ax)
-    ax = plot_observed_energy_target(comparison_data['observed_energy_target'], max_avail, ax)
-    ax = plot_observed_fcas_target(enablement_min, enablement_max, observed_fcas_target, ax)
-    ax = plot_model_energy_fcas_target(comparison_data['model_energy_target'], model_fcas_target, ax)
+    ax = plot_observed_energy_target(
+        comparison_data['observed_energy_target'], max_avail, ax)
+    ax = plot_observed_fcas_target(
+        enablement_min, enablement_max, observed_fcas_target, ax)
+    ax = plot_model_energy_fcas_target(
+        comparison_data['model_energy_target'], model_fcas_target, ax)
 
     ax.set_title(f"{comparison_data['trade_type']} - {fcas_available}")
     ax.set_xlabel('Energy (MW)')
@@ -391,14 +414,14 @@ def check_region_fixed_demand(data, solution):
 
     # Output container
     out = {i:
-        {
-            'observed': observed[i]['@FixedDemand'],
-            'model': solution['regions'][i]['FixedDemand'],
-            'difference': solution['regions'][i]['FixedDemand'] - observed[i]['@FixedDemand'],
-            'abs_difference': abs(solution['regions'][i]['FixedDemand'] - observed[i]['@FixedDemand']),
-        }
-        for i in observed.keys()
-    }
+           {
+               'observed': observed[i]['@FixedDemand'],
+               'model': solution['regions'][i]['FixedDemand'],
+               'difference': solution['regions'][i]['FixedDemand'] - observed[i]['@FixedDemand'],
+               'abs_difference': abs(solution['regions'][i]['FixedDemand'] - observed[i]['@FixedDemand']),
+           }
+           for i in observed.keys()
+           }
 
     # Convert to DataFrame
     df = pd.DataFrame(out).T
@@ -413,7 +436,8 @@ def find_mnsp_flow_inversion(data_dir, output_dir, year, month):
     _, days_in_month = calendar.monthrange(year, month)
 
     # Construct cases to check - all cases in a given month
-    case_ids = [(year, month, day, i) for day in range(1, days_in_month + 1) for i in range(1, 289)]
+    case_ids = [(year, month, day, i)
+                for day in range(1, days_in_month + 1) for i in range(1, 289)]
 
     # Container for cases where flow inverts
     out = []
@@ -424,7 +448,8 @@ def find_mnsp_flow_inversion(data_dir, output_dir, year, month):
             print(f'{year}{month:02}{day:02}{interval:03}: {i+1}/{len(case_ids)}')
 
         # Load json data
-        data_json = loaders.load_dispatch_interval_json(data_dir, year, month, day, interval)
+        data_json = loaders.load_dispatch_interval_json(
+            data_dir, year, month, day, interval)
 
         # Get NEMDE model data as a Python dictionary
         data = json.loads(data_json)
@@ -437,22 +462,27 @@ def find_mnsp_flow_inversion(data_dir, output_dir, year, month):
                                                                                       float)
 
         # Target MW
-        flow = lookup.get_interconnector_solution_attribute(data, 'T-V-MNSP1', '@Flow', float, intervention)
+        flow = lookup.get_interconnector_solution_attribute(
+            data, 'T-V-MNSP1', '@Flow', float, intervention)
 
         # Check if flow inverts. If it does print case ID and append to container.
         if (initial_mw < 0) and (flow > 0):
-            print(f'({year}, {month}, {day}, {interval}): flow inverts (-+) InitialMW: {initial_mw}, flow: {flow}')
+            print(
+                f'({year}, {month}, {day}, {interval}): flow inverts (-+) InitialMW: {initial_mw}, flow: {flow}')
             out.append((year, month, day, interval))
 
         elif (initial_mw > 0) and (flow < 0):
-            print(f'({year}, {month}, {day}, {interval}): flow inverts (+-) InitialMW: {initial_mw}, flow: {flow}')
+            print(
+                f'({year}, {month}, {day}, {interval}): flow inverts (+-) InitialMW: {initial_mw}, flow: {flow}')
             out.append((year, month, day, interval))
 
         elif (initial_mw > 0) and (flow > 0):
-            print(f'({year}, {month}, {day}, {interval}): forward flow - InitialMW: {initial_mw}, flow: {flow}')
+            print(
+                f'({year}, {month}, {day}, {interval}): forward flow - InitialMW: {initial_mw}, flow: {flow}')
 
         elif (initial_mw < 0) and (flow < 0):
-            print(f'({year}, {month}, {day}, {interval}): reverse flow - InitialMW: {initial_mw}, flow: {flow}')
+            print(
+                f'({year}, {month}, {day}, {interval}): reverse flow - InitialMW: {initial_mw}, flow: {flow}')
 
     with open(os.path.join(output_dir, 'mnsp_flow_inverts.json'), 'w') as f:
         json.dump(out, f)

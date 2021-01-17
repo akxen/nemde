@@ -10,16 +10,10 @@ import calendar
 import collections.abc
 from typing import Union
 
-from dotenv import load_dotenv
-
-load_dotenv(os.path.join(os.path.dirname(__file__), 'utils', '.env'))
-
 import simplejson
 import numpy as np
 import pandas as pd
 import pyomo.environ as pyo
-
-sys.path.append(os.path.join(__file__, 'utils'))
 
 import nemde.core.utils.fcas
 import nemde.core.utils.data
@@ -3183,5 +3177,3 @@ if __name__ == '__main__':
 
     u_data = {"CaseID": "20191010011"}
     resp = solve_model_online(u_data)
-
-    test = 10
