@@ -1,0 +1,4 @@
+"row_id",INT NOT NULL AUTO_INCREMENT
+"upload_timestamp","DECIMAL(20,10)"
+"case_id","VARCHAR(20) UNIQUE"
+"casefile","MEDIUMTEXT"

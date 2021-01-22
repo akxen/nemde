@@ -1,0 +1,1 @@
+from nemde.core.solve.solve import solve_model
