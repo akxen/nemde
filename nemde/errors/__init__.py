@@ -20,3 +20,15 @@ class CasefileValueError(ValueError):
     """
     Raised if casefile is not a string
     """
+
+
+class CasefileLookupError(LookupError):
+    """
+    Raised if casefile attribute is not found
+    """
+
+
+class CasefileRunModeError(ValueError):
+    """
+    Raised if intervention run mode is not 'physical' or 'pricing'
+    """

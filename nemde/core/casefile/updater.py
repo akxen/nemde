@@ -1,4 +1,8 @@
-"""Update casefile with user information"""
+"""
+Update casefile with user information
+"""
+
+from nemde.core.casefile import lookup
 
 
 def update_casefile(base, update):
