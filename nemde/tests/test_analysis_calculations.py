@@ -54,7 +54,7 @@ def get_casefile_ids(year, month, n):
 
 
 # Get sample of casefile IDs for a given year and month
-casefile_ids = get_casefile_ids(year=2020, month=11, n=100)
+casefile_ids = get_casefile_ids(year=2020, month=11, n=1)
 
 
 @pytest.fixture(scope='module', params=casefile_ids)
@@ -182,3 +182,18 @@ def test_check_generic_constraint_ids_are_unique(casefile):
     constraint_ids = [i['@ConstraintID'] for i in constraints]
 
     assert len(constraint_ids) == len(set(constraint_ids))
+
+
+@pytest.mark.skip(reason='Dynamic RHS will cause inputs to differ from solution RHS')
+def test_check_generic_constraint_rhs_calculation(casefile):
+    """Check NEMDE input constraint RHS matches NEMDE solution RHS"""
+
+    constraints = (casefile.get('NEMSPDCaseFile').get('NemSpdInputs')
+                   .get('GenericConstraintCollection')
+                   .get('GenericConstraint'))
+
+    for i in constraints:
+        comparison = calculations.check_generic_constraint_rhs_calculation(
+            data=casefile, constraint_id=i['@ConstraintID'], intervention='0')
+
+        assert comparison['abs_difference'] < 0.1

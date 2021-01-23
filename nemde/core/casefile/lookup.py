@@ -272,6 +272,38 @@ def get_interconnector_solution_attribute(data, interconnector_id, attribute, fu
     raise CasefileLookupError(message)
 
 
+def get_generic_constraint_collection_attribute(data, constraint_id, attribute, func):
+    """Get generic constraint collection attribute"""
+
+    constraints = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                   .get('GenericConstraintCollection')
+                   .get('GenericConstraint'))
+
+    for i in constraints:
+        if i['@ConstraintID'] == constraint_id:
+            return func(i[attribute])
+
+    message = f'Attribute not found: {constraint_id} {attribute}'
+    raise CasefileLookupError(message)
+
+
+def get_generic_constraint_trk_collection_attribute(data, constraint_id, attribute, func):
+    """
+    Get generic constraint trk collection attribute (inner key within
+    generic constraint collection attribute)
+    """
+
+    # Trk collection for generic constraint
+    trk_collection = get_generic_constraint_collection_attribute(
+        data=data, constraint_id=constraint_id,
+        attribute='s:ConstraintTrkCollection', func=dict)
+
+    # Get items corresponding to the collection
+    trk_items = trk_collection['ConstraintTrkItem']
+
+    return func(trk_items[attribute])
+
+
 def get_generic_constraint_solution_attribute(data, constraint_id, attribute, func, intervention):
     """Get generic constraint solution attribute"""
 

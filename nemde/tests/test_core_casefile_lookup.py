@@ -102,7 +102,7 @@ def test_get_interconnector_period_collection_attribute(casefile):
 def test_get_interconnector_loss_model_segments(casefile):
     segments = lookup.get_interconnector_loss_model_segments(
         data=casefile, interconnector_id='V-SA')
-    
+
     assert isinstance(segments, list)
     assert len(segments) > 0
 
@@ -118,6 +118,18 @@ def test_get_interconnector_solution_attribute(casefile):
         data=casefile, interconnector_id='N-Q-MNSP1',
         attribute='@InterconnectorID', func=str,
         intervention='0') == 'N-Q-MNSP1')
+
+
+def test_get_generic_constraint_collection_attribute(casefile):
+    assert (lookup.get_generic_constraint_collection_attribute(
+        data=casefile, constraint_id='#BBTHREE3_E', attribute='@ConstraintID',
+        func=str) == '#BBTHREE3_E')
+
+
+def test_get_generic_constraint_trk_collection_attribute(casefile):
+    assert (lookup.get_generic_constraint_trk_collection_attribute(
+        data=casefile, constraint_id='#BBTHREE3_E', attribute='@DynamicRHS',
+        func=str) == '0')
 
 
 def test_get_generic_constraint_solution_attribute(casefile):

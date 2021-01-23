@@ -6,6 +6,7 @@ import calendar
 import numpy as np
 import pandas as pd
 
+from nemde.errors import CasefileLookupError
 from nemde.core.casefile import lookup
 from nemde.core.casefile import algorithms
 
@@ -1042,339 +1043,52 @@ def check_region_dispatched_load(data, region_id, intervention) -> dict:
     return out
 
 
-def check_unique_generic_constraint_id_sample(data_dir, func, n=5):
-    """Check generic constraint IDs are unique for a random sample of dispatch intervals"""
-
-    print('Checking:', func.__name__)
-
-    # Seed random number generator to get reproducable results
-    np.random.seed(10)
-
-    # Population of dispatch intervals for a given month
-    population = [(i, j) for i in range(1, 30) for j in range(1, 289)]
-    population_map = {i: j for i, j in enumerate(population)}
-
-    # Random sample of dispatch intervals
-    sample_keys = np.random.choice(list(population_map.keys()), n, replace=False)
-    sample = [population_map[i] for i in sample_keys]
-
-    # Compute fixed demand for each interval
-    for i, (day, interval) in enumerate(sample):
-        print(f'({day}, {interval}): {i + 1}/{len(sample)}')
-
-        # Case data in json format
-        data_json = loaders.load_dispatch_interval_json(data_dir, 2019, 10, day, interval)
-
-        # Get NEMDE model data as a Python dictionary
-        case_data = json.loads(data_json)
-
-        # Check generic constraint IDs are unique
-        check_unique_generic_constraint_id(case_data)
-
-
 def check_generic_constraint_rhs_calculation(data, constraint_id, intervention) -> float:
-    """Check generic constraint RHS calculation"""
+    """
+    Check generic constraint RHS calculation
+
+    Parameters
+    ----------
+    data : dict
+        NEMDE casefile
+
+    constraint_id : str
+        Generic constraint ID
+
+    intervention : str
+        Intervention flag. '1'=intervention constraints included, '0'=no
+        inverention constraints.
+
+    Returns
+    -------
+    out : dict
+        Difference between RHS defined in NEMDE inputs and RHS given in NEMDE
+        constraint solution
+    """
 
     # Generic constraints
-    constraints = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('GenericConstraintCollection')
+    constraints = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                   .get('GenericConstraintCollection')
                    .get('GenericConstraint'))
 
     for i in constraints:
         if i['@ConstraintID'] == constraint_id:
             # NEMDE input
             nemde_input = lookup.get_generic_constraint_collection_attribute(
-                data, i['@ConstraintID'], '@RHS', float)
-
-            # Solution
-            solution = lookup.get_constraint_solution_attribute(
-                data, constraint_id, '@RHS', float, intervention)
-
-            return nemde_input - solution
-
-    raise Exception('Unable to find constraint:', constraint_id, intervention)
-
-
-def check_generic_constraint_calculation_sample(data_dir, func, n=5):
-    """Check generic constraint RHS sample"""
-
-    print('Checking:', func.__name__)
-
-    # Seed random number generator to get reproducable results
-    np.random.seed(10)
-
-    # Population of dispatch intervals for a given month
-    population = [(i, j) for i in range(1, 30) for j in range(1, 289)]
-    population_map = {i: j for i, j in enumerate(population)}
-
-    # Random sample of dispatch intervals
-    sample_keys = np.random.choice(list(population_map.keys()), n, replace=False)
-    sample = [population_map[i] for i in sample_keys]
-
-    # Container for model output
-    out = {}
-
-    # Placeholder for max absolute difference observed
-    max_abs_difference = 0
-    max_abs_difference_interval = None
-
-    # Compute fixed demand for each interval
-    for i, (day, interval) in enumerate(sample):
-        print(f'({day}, {interval}): {i + 1}/{len(sample)}')
-
-        # Case data in json format
-        data_json = loaders.load_dispatch_interval_json(data_dir, 2019, 10, day, interval)
-
-        # Get NEMDE model data as a Python dictionary
-        case_data = json.loads(data_json)
-
-        # Intervention status - '1' if intervention occurred, '0' if no intervention
-        # intervention = lookup.get_intervention_status(case_data)
-        intervention = '0'
-
-        # Generic constraint index
-        constraints = lookup.get_generic_constraint_index(case_data, intervention)
-
-        # Check net export calculation for each region
-        for j in constraints:
-
-            # Check difference between calculated region fixed demand and fixed demand from NEMDE solution
-            difference = func(case_data, j, intervention)
-
-            # Add date to keys
-            out[(day, interval, j)] = {'difference': difference,
-                                       'abs_difference': abs(difference)}
-
-            if abs(difference) > max_abs_difference:
-                max_abs_difference = abs(difference)
-                max_abs_difference_interval = (day, interval, j)
-
-        # Periodically print max absolute difference observed
-        if (i + 1) % 10 == 0:
-            print('Max absolute difference:', max_abs_difference_interval, max_abs_difference)
-
-    # Convert to DataFrame
-    df = pd.DataFrame(out).T
-    df = df.sort_values(by='abs_difference', ascending=False)
-
-    # Max absolute discrepancy
-    max_abs_difference = df['abs_difference'].max()
-
-    return out, df, max_abs_difference
-
-
-def get_case_ids(year, month, n):
-    """Get case IDs"""
-
-    # Get days in specified month
-    _, days_in_month = calendar.monthrange(year, month)
-
-    # Seed random number generator for reproducable results
-    np.random.seed(10)
-
-    # Population of dispatch intervals for a given month
-    population = [f'{year}{month:02}{i:02}{j:03}'
-                  for i in range(1, days_in_month + 1) for j in range(1, 289)]
-
-    # Shuffle list to randomise sample (should be reproducible though because seed is set)
-    np.random.shuffle(population)
-
-    return population[:n]
-
-
-def check_region_calculations(data_dir, case_ids, intervention_mode) -> dict:
-    """Check region calculations"""
-
-    # Container for intermediate output
-    intermediate = {
-        'fixed_demand': [],
-        'cleared_demand': [],
-        'net_export': [],
-        'power_balance': [],
-        'dispatched_generation': [],
-        'dispatched_load': [],
-    }
-
-    # Compute fixed demand for each interval
-    for i, case_id in enumerate(case_ids):
-        # Extract year, month, day, interval components from case ID string
-        year, month, day, interval = int(case_id[:4]), int(
-            case_id[4:6]), int(case_id[6:8]), int(case_id[8:11])
-        print(f'{i + 1}/{len(case_ids)}')
-
-        # Case data in json format
-        try:
-            data_json = loaders.load_dispatch_interval_json(
-                data_dir, year, month, day, interval)
-        except (FileNotFoundError, KeyError) as e:
-            print(e)
-            continue
-
-        # Get NEMDE model data as a Python dictionary
-        case_data = json.loads(data_json)
-
-        # Intervention status
-        intervention = lookup.get_intervention_status(case_data, intervention_mode)
-
-        for region_id in lookup.get_region_index(case_data):
-            intermediate['fixed_demand'].append(
-                {(region_id, case_id): check_region_fixed_demand(case_data, region_id, intervention)})
-
-            intermediate['cleared_demand'].append({
-                (region_id, case_id): check_region_cleared_demand(case_data, region_id, intervention)})
-
-            intermediate['net_export'].append(
-                {(region_id, case_id): check_region_net_export(case_data, region_id, intervention)})
-
-            intermediate['power_balance'].append(
-                {(region_id, case_id): check_region_power_balance(case_data, region_id, intervention)})
-
-            intermediate['dispatched_generation'].append(
-                {(region_id, case_id): check_region_dispatched_generation(case_data, region_id, intervention)})
-
-            intermediate['dispatched_load'].append(
-                {(region_id, case_id): check_region_dispatched_load(case_data, region_id, intervention)})
-
-    # Convert to DataFrames
-    out = {r: (pd.DataFrame({k: v for i in intermediate[r] for k, v in i.items()}).T
-               .sort_values(by='abs_difference', ascending=False))
-           for r in intermediate.keys()}
-
-    return out
-
-
-def check_aggregate_calculation_sample(data_dir, func, case_ids, intervention_mode):
-    """Get calculation for a random sample of dispatch intervals"""
-
-    print('Checking:', func.__name__)
-
-    # Container for model output
-    out = {}
-
-    # Max absolute difference
-    max_abs_difference = 0
-    max_abs_difference_interval = None
-
-    # Compute fixed demand for each interval
-    for i, case_id in enumerate(case_ids):
-        # Extract year, month, day, interval components from case ID string
-        year, month, day, interval = int(case_id[:4]), int(
-            case_id[4:6]), int(case_id[6:8]), int(case_id[8:11])
-        print(f'{i + 1}/{len(case_ids)}')
-
-        # Case data in json format
-        try:
-            data_json = loaders.load_dispatch_interval_json(
-                data_dir, year, month, day, interval)
-        except FileNotFoundError as e:
-            print(e)
-            continue
-
-        # Get NEMDE model data as a Python dictionary
-        case_data = json.loads(data_json)
-
-        # Intervention status
-        intervention = lookup.get_intervention_status(case_data, intervention_mode)
-
-        # Compare actual and calculated values
-        comparison = func(case_data, intervention)
-
-        # Add date to keys
-        calculated = {case_id: comparison}
-
-        if comparison['abs_difference'] > max_abs_difference:
-            max_abs_difference = comparison['abs_difference']
-            max_abs_difference_interval = case_id
-
-        # Periodically print max abs difference and the corresponding interval
-        if (i + 1) % 10 == 0:
-            print('Max absolute difference:', max_abs_difference_interval, max_abs_difference)
-
-        # Append to main container
-        out = {**out, **calculated}
-
-    # Convert to DataFrame
-    df = pd.DataFrame(out).T
-    df = df.sort_values(by='abs_difference', ascending=False)
-
-    return df
-
-
-def check_aggregate_calculations(data_dir, year, month, intervention_mode, n=10) -> dict:
-    """Check region calculations"""
-
-    # Get case IDs
-    case_ids = get_case_ids(year, month, n)
-
-    # Map between keys to be used in output dictionary and functions used to check region calculations
-    func_map = {
-        'fixed_demand': check_aggregate_fixed_demand,
-        'cleared_demand': check_aggregate_cleared_demand,
-    }
-
-    # Run model for each function
-    out = {k: check_aggregate_calculation_sample(
-        data_dir, v, case_ids, intervention_mode) for k, v in func_map.items()}
-
-    return out
-
-
-def check_region_calculation_sample(data_dir, func, case_ids, intervention_mode):
-    """Check region calculations for a random sample of dispatch intervals"""
-
-    print('Checking:', func.__name__)
-
-    # Container for model output
-    out = {}
-
-    # Placeholder for max absolute difference observed
-    max_abs_difference = 0
-    max_abs_difference_interval = None
-
-    # Compute fixed demand for each interval
-    for i, case_id in enumerate(case_ids):
-        # Extract year, month, day, interval components from case ID string
-        year, month, day, interval = int(case_id[:4]), int(
-            case_id[4:6]), int(case_id[6:8]), int(case_id[8:11])
-        print(f'{i + 1}/{len(case_ids)}')
-
-        # Case data in json format
-        try:
-            data_json = loaders.load_dispatch_interval_json(
-                data_dir, year, month, day, interval)
-        except FileNotFoundError as e:
-            print(e)
-            continue
-
-        # Get NEMDE model data as a Python dictionary
-        case_data = json.loads(data_json)
-
-        # Intervention status
-        intervention = lookup.get_intervention_status(case_data, intervention_mode)
-
-        # All regions
-        regions = lookup.get_region_index(case_data)
-
-        # Check net export calculation for each region
-        for j in regions:
-            # Check difference between calculated region fixed demand and fixed demand from NEMDE solution
-            comparison = func(case_data, j, intervention)
-
-            # Add date to keys
-            calculated = {(case_id, j): comparison}
-
-            if comparison['abs_difference'] > max_abs_difference:
-                max_abs_difference = comparison['abs_difference']
-                max_abs_difference_interval = case_id
-
-            # Append to main container
-            out = {**out, **calculated}
-
-        # Periodically print max absolute difference observed
-        if (i + 1) % 10 == 0:
-            print('Max absolute difference:', max_abs_difference_interval, max_abs_difference)
-
-    # Convert to DataFrame
-    df = pd.DataFrame(out).T
-    df = df.sort_values(by='abs_difference', ascending=False)
-
-    return df
+                data=data, constraint_id=constraint_id, attribute='@RHS', func=float)
+
+            # Constraint solution
+            solution = lookup.get_generic_constraint_solution_attribute(
+                data=data, constraint_id=constraint_id, attribute='@RHS',
+                func=float, intervention=intervention)
+
+            # Difference between input and RHS value in NEMDE solution
+            difference = nemde_input - solution
+
+            out = {
+                'difference': difference,
+                'abs_difference': abs(difference)
+            }
+            return out
+
+    raise CasefileLookupError('Unable to find constraint:', constraint_id, intervention)
