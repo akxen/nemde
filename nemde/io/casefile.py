@@ -118,4 +118,7 @@ def load_base_case(case_id):
     # Load XML and convert to dictionary
     base = load_xml_from_database(year=year, month=month, day=day, interval=interval)
 
-    return xmltodict.parse(base)
+    # Force some nodes to always have lists
+    force_list = ('Trade', 'TradeTypePriceStructure',)
+
+    return xmltodict.parse(base, force_list=force_list)

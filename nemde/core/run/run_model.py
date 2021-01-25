@@ -5,7 +5,7 @@ Run model with user specified inputs
 import json
 
 from nemde.io.casefile import load_base_case
-from nemde.core.casefile.updater import update_casefile
+# from nemde.core.casefile.updater import update_casefile
 from nemde.core.model.serializers import casefile_serializer
 # from nemde.core.model.serializers import solution_serializer
 # from nemde.core.model.preprocessing import preprocess_serialized_casefile
@@ -66,12 +66,12 @@ def run_model(user_data):
     else:
         base_case = load_base_case(case_id=case_id)
 
-    # Update base case with case data specified by user
-    updated_case = update_casefile(base=base_case, update=user_case_data)
+    # # Update base case with case data specified by user
+    # updated_case = update_casefile(base=base_case, update=user_case_data)
 
-    # Construct serialized casefile and model object
-    serialized_case = casefile_serializer.construct_case(data=updated_case)
-    print(serialized_case)
+    # # Construct serialized casefile and model object
+    # serialized_case = casefile_serializer.construct_case(data=updated_case)
+    # print(serialized_case)
 
     # # Apply preprocessing to serialized casefile
     # preprocessed_case = preprocess_serialized_casefile(data=serialized_case)
