@@ -1,5 +1,11 @@
+"""
+Functions used to modify / patch casefiles
+"""
+
 import jsonpatch
 from jsonpath_ng.ext import parse
+
+from nemde.errors import CasefileUpdaterLookupError
 
 
 def convert_path(path):
@@ -54,8 +60,8 @@ def get_patch_operation(casefile, update):
 
     # Only one element should be returned
     if len(elements) != 1:
-        raise ValueError(
-            f'Path does not uniquely identify object. {len(elements)} identified.')
+        message = f'Path does not uniquely identify object. {len(elements)} identified.'
+        raise CasefileUpdaterLookupError(message)
 
     # Full path to element that should be updated
     element_path = str(elements[0].full_path)
@@ -70,7 +76,21 @@ def get_patch_operation(casefile, update):
 
 
 def patch_casefile(casefile, updates):
-    """Patch an existing casefile"""
+    """
+    Patch an existing casefile
+
+    Parameters
+    ----------
+    casefile : dict
+        NEMDE casefile
+
+    updates : list
+        Operations used to patch casefile
+
+    Returns
+    -------
+    Updated casefile with patches applied
+    """
 
     # Create patch object and apply to casefile
     patch = jsonpatch.JsonPatch(updates)

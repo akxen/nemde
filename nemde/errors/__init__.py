@@ -32,3 +32,10 @@ class CasefileRunModeError(ValueError):
     """
     Raised if intervention run mode is not 'physical' or 'pricing'
     """
+
+
+class CasefileUpdaterLookupError(ValueError):
+    """
+    Raised when lookup performed in casefile updater does not return a single
+    element.
+    """
