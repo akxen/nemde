@@ -1,5 +1,5 @@
 """
-Test serializing casefile data into a format that can be consumed by the model 
+Test serializing casefile data into a format that can be consumed by the model
 constructor
 """
 
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 def test_casefile_serializer():
 
-    case = load_base_case(case_id='20201101001')
+    casefile = load_base_case(case_id='20201101001')
 
-    serialized_casefile = construct_case(case)
+    serialized_casefile = construct_case(data=casefile, intervention='1')
     logger.info(serialized_casefile)

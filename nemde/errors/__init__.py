@@ -39,3 +39,9 @@ class CasefileUpdaterLookupError(ValueError):
     Raised when lookup performed in casefile updater does not return a single
     element.
     """
+
+
+class CasefileOptionsError(ValueError):
+    """
+    Raised when user defined options are set incorrectly
+    """

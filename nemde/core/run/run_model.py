@@ -5,7 +5,8 @@ Run model with user specified inputs
 import json
 
 from nemde.io.casefile import load_base_case
-# from nemde.core.casefile.updater import update_casefile
+from nemde.errors import CasefileOptionsError
+from nemde.core.casefile.updater import patch_casefile
 from nemde.core.model.serializers import casefile_serializer
 # from nemde.core.model.serializers import solution_serializer
 # from nemde.core.model.preprocessing import preprocess_serialized_casefile
@@ -27,9 +28,10 @@ def clean_user_input(user_data):
     # TODO check if user case data is in JSON format - if not convert to JSON
 
     # Place cleaned data
-    cleaned_data = {
+    cleaned = {
+        'case_data': data.get('case_data', None),
         'case_id': data.get('case_id', None),
-        'case_data': data.get('case_data', {}),
+        'patches': data.get('patches', []),
         'options': {
             'intervention': options.get('intervention', '1'),
             'algorithm': options.get('algorithm', 'dispatch_only'),
@@ -37,7 +39,16 @@ def clean_user_input(user_data):
         }
     }
 
-    return cleaned_data
+    has_case_data = cleaned['case_data'] is not None
+    has_case_id = cleaned['case_id'] is not None
+    has_patches = len(cleaned['patches']) > 0
+
+    if has_case_data and (has_case_id or has_patches):
+        description = ("If 'case_data' is specified then 'case_id' and",
+                       "'patches' should be omitted")
+        raise CasefileOptionsError("Case options conflict", description)
+
+    return cleaned
 
 
 def run_model(user_data):
@@ -56,22 +67,23 @@ def run_model(user_data):
     # Extract model options
     case_id = data.get('case_id')
     user_case_data = data.get('case_data')
+    user_patches = data.get('patches')
     algorithm = data.get('options').get('algorithm')
     intervention = data.get('options').get('intervention')
     solution_format = data.get('options').get('solution_format')
 
-    # Get data corresponding to casefile
+    # Use user specified casefile
     if case_id is None:
-        base_case = {}
+        case_data = user_case_data
+
+    # Use use base casefile and apply user patches
     else:
         base_case = load_base_case(case_id=case_id)
+        case_data = patch_casefile(casefile=base_case, updates=user_patches)
 
-    # # Update base case with case data specified by user
-    # updated_case = update_casefile(base=base_case, update=user_case_data)
-
-    # # Construct serialized casefile and model object
-    # serialized_case = casefile_serializer.construct_case(data=updated_case)
-    # print(serialized_case)
+    # Construct serialized casefile and model object
+    serialized_case = casefile_serializer.construct_case(
+        data=case_data, intervention=intervention)
 
     # # Apply preprocessing to serialized casefile
     # preprocessed_case = preprocess_serialized_casefile(data=serialized_case)
