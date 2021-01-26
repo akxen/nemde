@@ -7,8 +7,8 @@ import json
 from nemde.io.casefile import load_base_case
 from nemde.errors import CasefileOptionsError
 from nemde.core.casefile.updater import patch_casefile
-from nemde.core.model.serializers import casefile_serializer
-from nemde.core.model.serializers import solution_serializer
+from nemde.core.model.serializers.casefile_serializer import construct_case
+from nemde.core.model.serializers.solution_serializer import get_solution
 from nemde.core.model.preprocessing import preprocess_serialized_casefile
 from nemde.core.model.constructor import construct_model
 from nemde.core.model.algorithms import solve_model
@@ -23,11 +23,7 @@ def clean_user_input(user_data):
     # Extract options
     options = data.get('options', {})
 
-    # TODO check parameters and raise exceptions if values not allowed
-
-    # TODO check if user case data is in JSON format - if not convert to JSON
-
-    # Place cleaned data
+    # Cleaned options
     cleaned = {
         'case_data': data.get('case_data', None),
         'case_id': data.get('case_id', None),
@@ -71,10 +67,9 @@ def run_model(user_data):
     case_id = data.get('case_id')
     user_case_data = data.get('case_data')
     user_patches = data.get('patches')
-    run_mode = data.get('run_mode', 'physical')
+    run_mode = data.get('run_mode')
     algorithm = data.get('options').get('algorithm')
     solution_format = data.get('options').get('solution_format')
-    intervention = '0'
 
     # Use user specified casefile
     if case_id is None:
@@ -86,7 +81,7 @@ def run_model(user_data):
         case_data = patch_casefile(casefile=base_case, updates=user_patches)
 
     # Construct serialized casefile and model object
-    serialized_case = casefile_serializer.construct_case(data=case_data, mode=run_mode)
+    serialized_case = construct_case(data=case_data, mode=run_mode)
 
     # Apply preprocessing to serialized casefile
     preprocessed_case = preprocess_serialized_casefile(data=serialized_case)
@@ -95,8 +90,7 @@ def run_model(user_data):
     model = construct_model(data=preprocessed_case)
 
     # Solve model and extract solution
-    model = solve_model(model=model, intervention=intervention, algorithm=algorithm)
-    solution = solution_serializer.serialize_model_solution(
-        model=model, format=solution_format)
+    model = solve_model(model=model, algorithm=algorithm)
+    solution = get_solution(model=model, format=solution_format)
 
     return solution

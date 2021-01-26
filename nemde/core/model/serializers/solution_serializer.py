@@ -172,7 +172,7 @@ def get_constraint_solution(model, constraint_id):
     return output
 
 
-def serialize_model_solution(model, format=None):
+def get_solution(model, format=None):
     """Extract model solution solution"""
 
     output = {

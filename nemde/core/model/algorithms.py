@@ -7,7 +7,7 @@ import time
 import pyomo.environ as pyo
 
 
-def solve_model(model, intervention=None, algorithm=None):
+def solve_model(model, algorithm=None):
     """Solve model"""
 
     # Setup solver
