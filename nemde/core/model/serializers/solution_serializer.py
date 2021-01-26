@@ -37,7 +37,7 @@ def get_period_solution(model):
         "@PeriodID": "2020-11-01T04:05:00+10:00",
         "@Intervention": "0",
         # "@SwitchRunBestStatus": "1",
-        "@TotalObjective": "-10540790.07213",
+        "@TotalObjective": model.OBJECTIVE.expr(),
         # "@SolverStatus": "0",
         # "@NPLStatus": "0",
         "@TotalAreaGenViolation": "0",

@@ -95,7 +95,4 @@ def run_model(user_data):
     model = solve_model(model=model, intervention=intervention, algorithm=algorithm)
     solution = solution_serializer.serialize_model_solution(model=model, format=solution_format)
 
-    # Convert solution dict to json
-    solution_json = json.dumps(solution)
-
-    return solution_json
+    return solution
