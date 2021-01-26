@@ -8,10 +8,10 @@ from nemde.io.casefile import load_base_case
 from nemde.errors import CasefileOptionsError
 from nemde.core.casefile.updater import patch_casefile
 from nemde.core.model.serializers import casefile_serializer
-# from nemde.core.model.serializers import solution_serializer
-# from nemde.core.model.preprocessing import preprocess_serialized_casefile
-# from nemde.core.model.constructor import construct_model
-# from nemde.core.model.algorithms import solve_model
+from nemde.core.model.serializers import solution_serializer
+from nemde.core.model.preprocessing import get_preprocessed_serialized_casefile
+from nemde.core.model.constructor import construct_model
+from nemde.core.model.algorithms import solve_model
 
 
 def clean_user_input(user_data):
@@ -33,7 +33,7 @@ def clean_user_input(user_data):
         'case_id': data.get('case_id', None),
         'patches': data.get('patches', []),
         'options': {
-            'intervention': options.get('intervention', '1'),
+            'intervention': options.get('intervention', '0'),
             'algorithm': options.get('algorithm', 'dispatch_only'),
             'solution_format': options.get('solution_format', 'standard')
         }
@@ -85,17 +85,17 @@ def run_model(user_data):
     serialized_case = casefile_serializer.construct_case(
         data=case_data, intervention=intervention)
 
-    # # Apply preprocessing to serialized casefile
-    # preprocessed_case = preprocess_serialized_casefile(data=serialized_case)
+    # Apply preprocessing to serialized casefile
+    preprocessed_case = get_preprocessed_serialized_casefile(data=serialized_case)
 
-    # # Construct model
-    # model = construct_model(data=preprocessed_case)
+    # Construct model
+    model = construct_model(data=preprocessed_case)
 
-    # # Solve model and extract solution
-    # model = solve_model(model=model, intervention=intervention, algorithm=algorithm)
-    # solution = solution_serializer(model=model, format=solution_format)
+    # Solve model and extract solution
+    model = solve_model(model=model, intervention=intervention, algorithm=algorithm)
+    solution = solution_serializer.serialize_model_solution(model=model, format=solution_format)
 
-    # # Convert solution dict to json
-    # solution_json = json.dumps(solution)
+    # Convert solution dict to json
+    solution_json = json.dumps(solution)
 
-    # return solution_json
+    return solution_json

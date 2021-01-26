@@ -1584,7 +1584,7 @@ def define_tie_breaking_expressions(m):
     # Tie break cost TODO: Note that tie-break price of 1e-4 gives better results than 1e-6.
     m.E_TRADER_TIE_BREAK_COST = pyo.Expression(
         # expr=sum(m.P_TIE_BREAK_PRICE * (m.V_TRADER_SLACK_1[i] + m.V_TRADER_SLACK_2[i]) for i in m.S_TRADER_PRICE_TIED)
-        expr=sum(1e-2 * (m.V_TRADER_SLACK_1[i] + m.V_TRADER_SLACK_2[i])
+        expr=sum(1e-6 * 15000 * (m.V_TRADER_SLACK_1[i] + m.V_TRADER_SLACK_2[i])
                  for i in m.S_TRADER_PRICE_TIED)
     )
 
@@ -3028,26 +3028,5 @@ def construct_model(data):
     # Add component allowing dual variables to be imported
     m.dual = pyo.Suffix(direction=pyo.Suffix.IMPORT)
     print('Constructed model in:', time.time() - t0)
-
-    return m
-
-
-def solve_model(m):
-    """Solve model"""
-
-    # Setup solver
-    solver_options = {
-    }
-
-    opt = pyo.SolverFactory('cbc', solver_io='lp')
-
-    # Solve model
-    t0 = time.time()
-
-    print('Starting MILP solve:', time.time() - t0)
-    solve_status_1 = opt.solve(
-        m, tee=True, options=solver_options, keepfiles=False)
-    print('Finished MILP solve:', time.time() - t0)
-    print('Objective value - 1:', m.OBJECTIVE.expr())
 
     return m

@@ -310,7 +310,7 @@ def preprocess_case_file(data) -> dict:
     return out
 
 
-def get_preprocessed_case_file(data) -> dict:
+def get_preprocessed_serialized_casefile(data) -> dict:
     """Apply preprocessing and append to input dictionary"""
 
     # Preprocessed inputs

@@ -1101,10 +1101,10 @@ def construct_case(data, intervention) -> dict:
         'P_CVF_GENERIC_CONSTRAINT_PRICE': get_case_attribute(data, '@GenericConstraintPrice', float),
         'P_CVF_SATISFACTORY_NETWORK_PRICE': get_case_attribute(data, '@Satisfactory_Network_Price', float),
         'P_TIE_BREAK_PRICE': get_case_attribute(data, '@TieBreakPrice', float),
-        # 'intermediate': {
-        #     'generic_constraint_lhs_terms': get_generic_constraint_lhs_terms(data),
-        #     'loss_model_segments': get_standardised_interconnector_loss_model_segments(data),
-        # },
+        'intermediate': {
+            'generic_constraint_lhs_terms': get_generic_constraint_lhs_terms(data),
+            'loss_model_segments': get_standardised_interconnector_loss_model_segments(data),
+        },
     }
 
     return case_data
