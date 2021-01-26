@@ -100,10 +100,10 @@ def define_parameters(m, data):
 
     # Intervention status
     m.P_INTERVENTION_STATUS = pyo.Param(
-        initialize=data['P_INTERVENTION_STATUS'])
+        initialize=data['P_INTERVENTION_STATUS'], within=pyo.Any)
 
     # Case ID
-    m.P_CASE_ID = pyo.Param(initialize=data['P_CASE_ID'])
+    m.P_CASE_ID = pyo.Param(initialize=data['P_CASE_ID'], within=pyo.Any)
 
     # Price bands for traders (generators / loads)
     m.P_TRADER_PRICE_BAND = pyo.Param(
@@ -118,10 +118,8 @@ def define_parameters(m, data):
         m.S_TRADER_OFFERS, initialize=data['P_TRADER_MAX_AVAIL'])
 
     # Initial MW output for generators / loads
-    m.P_TRADER_INITIAL_MW = pyo.Param(
-        m.S_TRADERS, initialize=data['P_TRADER_INITIAL_MW'])
-    m.P_TRADER_WHAT_IF_INITIAL_MW = pyo.Param(
-        m.S_TRADERS, initialize=data['P_TRADER_WHAT_IF_INITIAL_MW'])
+    m.P_TRADER_EFFECTIVE_INITIAL_MW = pyo.Param(
+        m.S_TRADERS, initialize=data['P_TRADER_EFFECTIVE_INITIAL_MW'])
 
     # UIGF for semi-dispatchable plant
     m.P_TRADER_UIGF = pyo.Param(
@@ -133,15 +131,15 @@ def define_parameters(m, data):
 
     # Trader AGC status
     m.P_TRADER_AGC_STATUS = pyo.Param(
-        m.S_TRADERS, initialize=data['P_TRADER_AGC_STATUS'])
+        m.S_TRADERS, initialize=data['P_TRADER_AGC_STATUS'], within=pyo.Any)
 
     # Trader semi-dispatch status
     m.P_TRADER_SEMI_DISPATCH_STATUS = pyo.Param(
-        m.S_TRADERS, initialize=data['P_TRADER_SEMI_DISPATCH_STATUS'])
+        m.S_TRADERS, initialize=data['P_TRADER_SEMI_DISPATCH_STATUS'], within=pyo.Any)
 
     # Trader region
     m.P_TRADER_REGION = pyo.Param(
-        m.S_TRADERS, initialize=data['P_TRADER_REGION'])
+        m.S_TRADERS, initialize=data['P_TRADER_REGION'], within=pyo.Any)
 
     # Trader ramp up and down rates
     m.P_TRADER_PERIOD_RAMP_UP_RATE = pyo.Param(m.S_TRADER_ENERGY_OFFERS,
@@ -174,13 +172,13 @@ def define_parameters(m, data):
                                                                 .get('P_TRADER_FCAS_AVAILABILITY_STATUS')))
 
     # Trader type
-    m.P_TRADER_TYPE = pyo.Param(m.S_TRADERS, initialize=data['P_TRADER_TYPE'])
+    m.P_TRADER_TYPE = pyo.Param(m.S_TRADERS, initialize=data['P_TRADER_TYPE'], within=pyo.Any)
 
     # Trader fast start parameters
     m.P_TRADER_MIN_LOADING_MW = pyo.Param(
         m.S_TRADER_FAST_START, initialize=data['P_TRADER_MIN_LOADING_MW'])
     m.P_TRADER_CURRENT_MODE = pyo.Param(
-        m.S_TRADER_FAST_START, initialize=data['P_TRADER_CURRENT_MODE'])
+        m.S_TRADER_FAST_START, initialize=data['P_TRADER_CURRENT_MODE'], within=pyo.Any)
     m.P_TRADER_CURRENT_MODE_TIME = pyo.Param(
         m.S_TRADER_FAST_START, initialize=data['P_TRADER_CURRENT_MODE_TIME'])
     m.P_TRADER_T1 = pyo.Param(m.S_TRADER_FAST_START,
@@ -198,15 +196,15 @@ def define_parameters(m, data):
     m.P_TRADER_SCADA_RAMP_DOWN_RATE = pyo.Param(
         m.S_TRADERS, initialize=data['P_TRADER_SCADA_RAMP_DN_RATE'])
 
-    # Interconnector initial MW
-    m.P_INTERCONNECTOR_INITIAL_MW = pyo.Param(
-        m.S_INTERCONNECTORS, initialize=data['P_INTERCONNECTOR_INITIAL_MW'])
+    # Interconnector initial MW (WhatIfMW used if pricing run for intervention period)
+    m.P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW = pyo.Param(
+        m.S_INTERCONNECTORS, initialize=data['P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW'])
 
     # Interconnector 'to' and 'from' regions
     m.P_INTERCONNECTOR_TO_REGION = pyo.Param(
-        m.S_INTERCONNECTORS, initialize=data['P_INTERCONNECTOR_TO_REGION'])
+        m.S_INTERCONNECTORS, initialize=data['P_INTERCONNECTOR_TO_REGION'], within=pyo.Any)
     m.P_INTERCONNECTOR_FROM_REGION = pyo.Param(
-        m.S_INTERCONNECTORS, initialize=data['P_INTERCONNECTOR_FROM_REGION'])
+        m.S_INTERCONNECTORS, initialize=data['P_INTERCONNECTOR_FROM_REGION'], within=pyo.Any)
 
     # Interconnector lower and upper limits - NOTE: these are absolute values (lower limit is positive)
     m.P_INTERCONNECTOR_LOWER_LIMIT = pyo.Param(
@@ -216,7 +214,7 @@ def define_parameters(m, data):
 
     # Interconnector MNSP status
     m.P_INTERCONNECTOR_MNSP_STATUS = pyo.Param(
-        m.S_INTERCONNECTORS, initialize=data['P_INTERCONNECTOR_MNSP_STATUS'])
+        m.S_INTERCONNECTORS, initialize=data['P_INTERCONNECTOR_MNSP_STATUS'], within=pyo.Any)
 
     # Interconnector loss share
     m.P_INTERCONNECTOR_LOSS_SHARE = pyo.Param(
@@ -286,7 +284,7 @@ def define_parameters(m, data):
 
     # Generic constraint type
     m.P_GC_TYPE = pyo.Param(m.S_GENERIC_CONSTRAINTS,
-                            initialize=data['P_GC_TYPE'])
+                            initialize=data['P_GC_TYPE'], within=pyo.Any)
 
     # Generic constraint violation factors
     m.P_CVF_GC = pyo.Param(m.S_GENERIC_CONSTRAINTS,
@@ -955,7 +953,7 @@ def define_aggregate_power_expressions(m):
         for i, j in m.S_TRADER_OFFERS:
             if j == 'LDOF':
                 if (r == m.P_TRADER_REGION[i]) and (m.P_TRADER_SEMI_DISPATCH_STATUS[i] == '0'):
-                    total += m.P_TRADER_INITIAL_MW[i]
+                    total += m.P_TRADER_EFFECTIVE_INITIAL_MW[i]
 
         return total
 
@@ -979,7 +977,7 @@ def define_aggregate_power_expressions(m):
 
             # MNSP losses applied to sending end - based on InitialMW
             if m.P_INTERCONNECTOR_MNSP_STATUS[i] == '1':
-                if m.P_INTERCONNECTOR_INITIAL_MW[i] >= 0:
+                if m.P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW[i] >= 0:
                     mnsp_loss_share = 1
                 else:
                     mnsp_loss_share = 0
@@ -1024,7 +1022,7 @@ def define_aggregate_power_expressions(m):
             # Initial loss estimate over interconnector
             loss = m.P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE[i]
             loss_share = m.P_INTERCONNECTOR_LOSS_SHARE[i]
-            initial_mw = m.P_INTERCONNECTOR_INITIAL_MW[i]
+            initial_mw = m.P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW[i]
 
             # Loss applied to sending end
             if (r == from_region) and (mnsp_status == '1') and (initial_mw >= 0):
@@ -1075,7 +1073,7 @@ def define_aggregate_power_expressions(m):
             # Interconnector flow from solution
             loss = m.V_LOSS[i]
             loss_share = m.P_INTERCONNECTOR_LOSS_SHARE[i]
-            initial_mw = m.P_INTERCONNECTOR_INITIAL_MW[i]
+            initial_mw = m.P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW[i]
 
             # MNSP losses applied to sending end - based on InitialMW
             if mnsp_status == '1':
@@ -1121,7 +1119,7 @@ def define_aggregate_power_expressions(m):
             # Interconnector flow from solution
             loss = m.V_LOSS[i]
             loss_share = m.P_INTERCONNECTOR_LOSS_SHARE[i]
-            initial_mw = m.P_INTERCONNECTOR_INITIAL_MW[i]
+            initial_mw = m.P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW[i]
 
             # Loss applied to sending end
             if (r == from_region) and (mnsp_status == '1') and (initial_mw >= 0):
@@ -1178,7 +1176,7 @@ def define_aggregate_power_expressions(m):
                 continue
 
             # Initial MW and solution flow
-            initial_mw = m.P_INTERCONNECTOR_INITIAL_MW[i]
+            initial_mw = m.P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW[i]
 
             to_lf_export = m.P_MNSP_TO_REGION_LF_EXPORT[i]
             to_lf_import = m.P_MNSP_TO_REGION_LF_IMPORT[i]
@@ -1258,7 +1256,7 @@ def define_aggregate_power_expressions(m):
                 continue
 
             # Initial MW and solution flow
-            initial_mw = m.P_INTERCONNECTOR_INITIAL_MW[i]
+            initial_mw = m.P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW[i]
 
             to_lf_export = m.P_MNSP_TO_REGION_LF_EXPORT[i]
             to_lf_import = m.P_MNSP_TO_REGION_LF_IMPORT[i]
@@ -1328,7 +1326,7 @@ def define_aggregate_power_expressions(m):
                 continue
 
             # Extract initial and target flow
-            initial_flow = m.P_INTERCONNECTOR_INITIAL_MW[i]
+            initial_flow = m.P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW[i]
             flow = m.V_GC_INTERCONNECTOR[i]
 
             to_lf_export = m.P_MNSP_TO_REGION_LF_EXPORT[i]
@@ -1409,7 +1407,7 @@ def define_aggregate_power_expressions(m):
                 continue
 
             # Extract initial and target flow
-            initial_flow = m.P_INTERCONNECTOR_INITIAL_MW[i]
+            initial_flow = m.P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW[i]
             flow = m.V_GC_INTERCONNECTOR[i]
 
             to_lf_export = m.P_MNSP_TO_REGION_LF_EXPORT[i]
@@ -1820,7 +1818,7 @@ def define_unit_constraints(m):
 
             return m.V_TRADER_TOTAL_OFFER[i, j] <= initial_mw + ramp_up_capability + m.V_CV_TRADER_RAMP_UP[i]
 
-        return m.V_TRADER_TOTAL_OFFER[i, j] - m.P_TRADER_INITIAL_MW[i] <= (ramp_limit / 12) + m.V_CV_TRADER_RAMP_UP[i]
+        return m.V_TRADER_TOTAL_OFFER[i, j] - m.P_TRADER_EFFECTIVE_INITIAL_MW[i] <= (ramp_limit / 12) + m.V_CV_TRADER_RAMP_UP[i]
 
     # Ramp up rate limit
     m.C_TRADER_RAMP_UP_RATE = pyo.Constraint(
@@ -1841,7 +1839,7 @@ def define_unit_constraints(m):
             ramp_limit = m.P_TRADER_PERIOD_RAMP_DOWN_RATE[(i, j)]
 
         # Initial MW
-        initial_mw = m.P_TRADER_INITIAL_MW[i]
+        initial_mw = m.P_TRADER_EFFECTIVE_INITIAL_MW[i]
 
         return m.V_TRADER_TOTAL_OFFER[i, j] - initial_mw + m.V_CV_TRADER_RAMP_DOWN[i] >= - (ramp_limit / 12)
 
@@ -1904,7 +1902,7 @@ def define_mnsp_constraints(m):
     def mnsp_ramp_up_rule(m, i, j):
         """MNSP ramp-up constraint"""
 
-        return (m.V_MNSP_TOTAL_OFFER[i, j] <= m.P_INTERCONNECTOR_INITIAL_MW[i] + (m.P_MNSP_RAMP_UP_RATE[i, j] / 12)
+        return (m.V_MNSP_TOTAL_OFFER[i, j] <= m.P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW[i] + (m.P_MNSP_RAMP_UP_RATE[i, j] / 12)
                 + m.V_CV_MNSP_RAMP_UP[i, j])
 
     # MNSP ramp up constraint
@@ -1914,7 +1912,7 @@ def define_mnsp_constraints(m):
         """MNSP ramp-down constraint"""
 
         return (m.V_MNSP_TOTAL_OFFER[i, j] + m.V_CV_MNSP_RAMP_DOWN[i, j]
-                >= m.P_INTERCONNECTOR_INITIAL_MW[i] - (m.P_MNSP_RAMP_DOWN_RATE[i, j] / 12))
+                >= m.P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW[i] - (m.P_MNSP_RAMP_DOWN_RATE[i, j] / 12))
 
     # MNSP ramp down constraint
     m.C_MNSP_RAMP_DOWN = pyo.Constraint(
@@ -2166,7 +2164,7 @@ def define_fcas_constraints(m):
 
         else:
             return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] + m.V_TRADER_TOTAL_OFFER[i, 'R5RE']
-                    <= m.P_TRADER_INITIAL_MW[i] + (m.P_TRADER_SCADA_RAMP_UP_RATE[i] / 12)
+                    <= m.P_TRADER_EFFECTIVE_INITIAL_MW[i] + (m.P_TRADER_SCADA_RAMP_UP_RATE[i] / 12)
                     + m.V_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, j])
 
     # Generator joint ramp up constraint
@@ -2199,7 +2197,7 @@ def define_fcas_constraints(m):
         else:
             return (m.V_TRADER_TOTAL_OFFER[i, 'ENOF'] - m.V_TRADER_TOTAL_OFFER[i, 'L5RE']
                     + m.V_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, j]
-                    >= m.P_TRADER_INITIAL_MW[i] - (m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] / 12))
+                    >= m.P_TRADER_EFFECTIVE_INITIAL_MW[i] - (m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] / 12))
 
     # Generator joint ramp down constraint
     m.C_FCAS_GENERATOR_JOINT_RAMPING_DOWN = pyo.Constraint(
@@ -2406,7 +2404,7 @@ def define_fcas_constraints(m):
         else:
             return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] - m.V_TRADER_TOTAL_OFFER[i, 'R5RE']
                     + m.V_CV_TRADER_FCAS_JOINT_RAMPING_UP[i, j]
-                    >= m.P_TRADER_INITIAL_MW[i] - (m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] / 12))
+                    >= m.P_TRADER_EFFECTIVE_INITIAL_MW[i] - (m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] / 12))
 
     # Load joint ramp up constraint
     m.C_FCAS_LOAD_JOINT_RAMPING_UP = pyo.Constraint(
@@ -2437,7 +2435,7 @@ def define_fcas_constraints(m):
 
         else:
             return (m.V_TRADER_TOTAL_OFFER[i, 'LDOF'] + m.V_TRADER_TOTAL_OFFER[i, 'L5RE']
-                    <= m.P_TRADER_INITIAL_MW[i] + (m.P_TRADER_SCADA_RAMP_UP_RATE[i] / 12)
+                    <= m.P_TRADER_EFFECTIVE_INITIAL_MW[i] + (m.P_TRADER_SCADA_RAMP_UP_RATE[i] / 12)
                     + m.V_CV_TRADER_FCAS_JOINT_RAMPING_DOWN[i, j])
 
     # Load joint ramp down constraint

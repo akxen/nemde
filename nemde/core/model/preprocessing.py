@@ -1,15 +1,6 @@
 """Apply pre-processing logic to case data"""
 
-import os
-import json
-import time
-
 import nemde.core.model.utils.fcas
-# import loaders
-# import transforms.original.data
-# import transforms.simplified.case
-# import transforms.simplified.data
-# from lookup import get_intervention_status
 
 
 def reorder_tuple(input_tuple) -> tuple:
@@ -69,7 +60,7 @@ def get_mnsp_region_loss_indicator(data) -> dict:
     region_index = data['S_REGIONS']
 
     # MNSP attributes # TODO: this needs to change if intervention pricing case is considered
-    initial_mw = data['P_INTERCONNECTOR_INITIAL_MW']
+    initial_mw = data['P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW']
     to_region = data['P_INTERCONNECTOR_TO_REGION']
     from_region = data['P_INTERCONNECTOR_FROM_REGION']
 
@@ -125,7 +116,7 @@ def get_trader_fcas_info(data) -> dict:
                 'high_breakpoint': data['P_TRADER_HIGH_BREAKPOINT'][(trader_id, trade_type)],
                 'enablement_max': data['P_TRADER_ENABLEMENT_MAX'][(trader_id, trade_type)],
                 'max_avail': data['P_TRADER_MAX_AVAIL'][(trader_id, trade_type)],
-                'initial_mw': data['P_TRADER_INITIAL_MW'].get(trader_id),  # TODO: may need to be updated (intervention)
+                'initial_mw': data['P_TRADER_EFFECTIVE_INITIAL_MW'].get(trader_id),  # TODO: may need to be updated (intervention)
                 'uigf': data['P_TRADER_UIGF'].get(trader_id),
                 'hmw': data['P_TRADER_HMW'].get(trader_id),
                 'lmw': data['P_TRADER_LMW'].get(trader_id),
@@ -282,7 +273,7 @@ def get_interconnector_initial_loss_estimate(data) -> dict:
 
     # Initial MW for all interconnectors
     interconnectors = data['S_INTERCONNECTORS']
-    initial_mw = data['P_INTERCONNECTOR_INITIAL_MW']  # TODO: will need to change if considering intervention pricing
+    initial_mw = data['P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW']  # TODO: will need to change if considering intervention pricing
     segments = data['intermediate']['loss_model_segments']
 
     # Loss estimate
@@ -310,7 +301,7 @@ def preprocess_case_file(data) -> dict:
     return out
 
 
-def get_preprocessed_serialized_casefile(data) -> dict:
+def preprocess_serialized_casefile(data) -> dict:
     """Apply preprocessing and append to input dictionary"""
 
     # Preprocessed inputs

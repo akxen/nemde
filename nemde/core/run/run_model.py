@@ -9,7 +9,7 @@ from nemde.errors import CasefileOptionsError
 from nemde.core.casefile.updater import patch_casefile
 from nemde.core.model.serializers import casefile_serializer
 from nemde.core.model.serializers import solution_serializer
-from nemde.core.model.preprocessing import get_preprocessed_serialized_casefile
+from nemde.core.model.preprocessing import preprocess_serialized_casefile
 from nemde.core.model.constructor import construct_model
 from nemde.core.model.algorithms import solve_model
 
@@ -32,8 +32,8 @@ def clean_user_input(user_data):
         'case_data': data.get('case_data', None),
         'case_id': data.get('case_id', None),
         'patches': data.get('patches', []),
+        'run_mode': options.get('run_mode', 'physical'),
         'options': {
-            'intervention': options.get('intervention', '0'),
             'algorithm': options.get('algorithm', 'dispatch_only'),
             'solution_format': options.get('solution_format', 'standard')
         }
@@ -47,6 +47,9 @@ def clean_user_input(user_data):
         description = ("If 'case_data' is specified then 'case_id' and",
                        "'patches' should be omitted")
         raise CasefileOptionsError("Case options conflict", description)
+
+    if cleaned.get('run_mode') not in ['physical', 'pricing']:
+        raise CasefileOptionsError("'run_mode' must be set to 'physical' or 'pricing'")
 
     return cleaned
 
@@ -68,9 +71,10 @@ def run_model(user_data):
     case_id = data.get('case_id')
     user_case_data = data.get('case_data')
     user_patches = data.get('patches')
+    run_mode = data.get('run_mode', 'physical')
     algorithm = data.get('options').get('algorithm')
-    intervention = data.get('options').get('intervention')
     solution_format = data.get('options').get('solution_format')
+    intervention = '0'
 
     # Use user specified casefile
     if case_id is None:
@@ -82,17 +86,17 @@ def run_model(user_data):
         case_data = patch_casefile(casefile=base_case, updates=user_patches)
 
     # Construct serialized casefile and model object
-    serialized_case = casefile_serializer.construct_case(
-        data=case_data, intervention=intervention)
+    serialized_case = casefile_serializer.construct_case(data=case_data, mode=run_mode)
 
     # Apply preprocessing to serialized casefile
-    preprocessed_case = get_preprocessed_serialized_casefile(data=serialized_case)
+    preprocessed_case = preprocess_serialized_casefile(data=serialized_case)
 
     # Construct model
     model = construct_model(data=preprocessed_case)
 
     # Solve model and extract solution
     model = solve_model(model=model, intervention=intervention, algorithm=algorithm)
-    solution = solution_serializer.serialize_model_solution(model=model, format=solution_format)
+    solution = solution_serializer.serialize_model_solution(
+        model=model, format=solution_format)
 
     return solution

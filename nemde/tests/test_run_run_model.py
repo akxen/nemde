@@ -14,6 +14,7 @@ def test_run_model():
 
     user_data_dict = {
         'case_id': '20201101001',
+        'run_mode': 'physical'
     }
 
     # Run model

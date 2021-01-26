@@ -6,7 +6,7 @@ import os
 import json
 import time
 
-from nemde.core.casefile.lookup import convert_to_list
+from nemde.core.casefile.lookup import convert_to_list, get_intervention_status
 
 
 def find(path, data):
@@ -989,25 +989,28 @@ def get_price_tied_bands(data):
     return price_tied_flattened
 
 
-def construct_case(data, intervention) -> dict:
+def construct_case(data, mode) -> dict:
     """
     Parse json data
 
     Parameters
     ----------
     data : dict
-        NEM case file
+        NEMDE casefile
+
+    mode : str
+        Run mode. Either 'pricing' or 'physical'.
 
     Returns
     -------
-    case_data : dict
+    case : dict
         Dictionary containing case data to be read into model
     """
 
     # Get intervention status
-    # intervention = get_intervention_status(data, mode)
+    intervention = get_intervention_status(data=data, mode=mode)
 
-    case_data = {
+    case = {
         'S_REGIONS': get_region_index(data),
         'S_TRADERS': get_trader_index(data),
         'S_TRADERS_SEMI_DISPATCH': get_trader_semi_dispatch_index(data),
@@ -1106,5 +1109,25 @@ def construct_case(data, intervention) -> dict:
             'loss_model_segments': get_standardised_interconnector_loss_model_segments(data),
         },
     }
+
+    # Get intervention flag
+    intervention_flag = get_case_attribute(data, '@Intervention', str)
+
+    # Use 'What If' if an intervention pricing period and run mode is 'pricing'
+    if (intervention_flag == 'True') and (mode == 'pricing'):
+        effective_mw = {
+            'P_TRADER_EFFECTIVE_INITIAL_MW': case['P_TRADER_WHAT_IF_INITIAL_MW'],
+            'P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW': case['P_INTERCONNECTOR_WHAT_IF_INITIAL_MW'],
+        }
+
+    # Use InitialMW in all other cases
+    else:
+        effective_mw = {
+            'P_TRADER_EFFECTIVE_INITIAL_MW': case['P_TRADER_INITIAL_MW'],
+            'P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW': case['P_INTERCONNECTOR_INITIAL_MW'],
+        }
+
+    # Combine into final serialized case dictionary
+    case_data = {**case, **effective_mw}
 
     return case_data

@@ -391,4 +391,4 @@ def get_intervention_status(data, mode) -> str:
     elif (intervention_flag == 'True') and (mode == 'pricing'):
         return '0'
     else:
-        raise CasefileRunModeError('Unhandled case:', mode)
+        raise CasefileRunModeError(f'Unhandled case: {mode}')
