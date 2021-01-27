@@ -56,8 +56,7 @@ def define_sets(m, data):
     m.S_TRADER_FAST_START = pyo.Set(initialize=data['S_TRADER_FAST_START'])
 
     # Price tied bands
-    m.S_TRADER_PRICE_TIED = pyo.Set(initialize=data.get(
-        'preprocessed').get('S_TRADER_PRICE_TIED'))
+    m.S_TRADER_PRICE_TIED = pyo.Set(initialize=data.get('S_TRADER_PRICE_TIED'))
 
     # Generic constraints
     m.S_GENERIC_CONSTRAINTS = pyo.Set(initialize=data['S_GENERIC_CONSTRAINTS'])

@@ -840,7 +840,38 @@ def get_price_tied_bands(data):
     return price_tied_flattened
 
 
-def construct_case(data, mode) -> dict:
+def get_mnsp_region_loss_indicator(data) -> dict:
+    """Get region loss indicator. =1 if from region and InitialMW >= 0, or if ToRegion and InitialMW < 0, else =0"""
+
+    # MNSP and region index
+    mnsp_index = data['S_MNSPS']
+    region_index = data['S_REGIONS']
+
+    # MNSP attributes # TODO: this needs to change if intervention pricing case is considered
+    initial_mw = data['P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW']
+    to_region = data['P_INTERCONNECTOR_TO_REGION']
+    from_region = data['P_INTERCONNECTOR_FROM_REGION']
+
+    # Container for output
+    out = {}
+    for i in mnsp_index:
+
+        for j in region_index:
+            # Loss applied to FromRegion
+            if (j == from_region[i]) and (initial_mw[i] >= 0):
+                out[(i, j)] = 1
+
+            # Loss applied to ToRegion
+            elif (j == to_region[i]) and (initial_mw[i] < 0):
+                out[(i, j)] = 1
+
+            else:
+                out[(i, j)] = 0
+
+    return out
+
+
+def construct_case(data, intervention) -> dict:
     """
     Parse json data
 
@@ -849,8 +880,8 @@ def construct_case(data, mode) -> dict:
     data : dict
         NEMDE casefile
 
-    mode : str
-        Run mode. Either 'pricing' or 'physical'.
+    intervention : str
+        NEMDE intervention flag. Either '1' or '0'.
 
     Returns
     -------
@@ -859,7 +890,7 @@ def construct_case(data, mode) -> dict:
     """
 
     # Get intervention status
-    intervention = get_intervention_status(data=data, mode=mode)
+    # intervention = get_intervention_status(data=data, mode=mode)
 
     case = {
         'S_REGIONS': get_region_index(data),
@@ -965,7 +996,7 @@ def construct_case(data, mode) -> dict:
     intervention_flag = get_case_attribute(data, '@Intervention', str)
 
     # Use 'What If' if an intervention pricing period and run mode is 'pricing'
-    if (intervention_flag == 'True') and (mode == 'pricing'):
+    if (intervention_flag == 'True') and (intervention == '0'):
         effective_mw = {
             'P_TRADER_EFFECTIVE_INITIAL_MW': case['P_TRADER_WHAT_IF_INITIAL_MW'],
             'P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW': case['P_INTERCONNECTOR_WHAT_IF_INITIAL_MW'],
