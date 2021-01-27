@@ -4,6 +4,7 @@ Convert case data into format that can be used to construct model instance
 
 from nemde.core.casefile.lookup import convert_to_list, get_intervention_status
 from nemde.core.casefile.algorithms import get_parsed_interconnector_loss_model_segments
+from nemde.core.casefile.algorithms import get_interconnector_loss_estimate
 
 
 def find(path, data):
@@ -908,6 +909,20 @@ def get_mnsp_region_loss_indicator(data, mode) -> dict:
     return out
 
 
+def get_interconnector_initial_loss_estimate(data, mode) -> dict:
+    """Get initial loss estimate for each interconnector"""
+
+    # Initial MW for all interconnectors
+    interconnectors = get_interconnector_index(data=data)
+
+    # Depends on intervention pricing period status
+    initial_mw = get_interconnector_effective_initial_mw(data=data, mode=mode)
+
+    return {i: get_interconnector_loss_estimate(
+            data=data, interconnector_id=i, flow=initial_mw[i])
+            for i in interconnectors}
+
+
 def construct_case(data, mode) -> dict:
     """
     Parse json data
@@ -988,6 +1003,7 @@ def construct_case(data, mode) -> dict:
         'P_INTERCONNECTOR_LOSS_SEGMENT_LIMIT': get_interconnector_loss_model_segment_attribute(data, '@Limit', float),
         'P_INTERCONNECTOR_LOSS_SEGMENT_FACTOR': get_interconnector_loss_model_segment_attribute(data, '@Factor', float),
         'P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW': get_interconnector_effective_initial_mw(data=data, mode=mode),
+        'P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE': get_interconnector_initial_loss_estimate(data=data, mode=mode),
         'P_MNSP_PRICE_BAND': get_mnsp_price_bands(data),
         'P_MNSP_QUANTITY_BAND': get_mnsp_quantity_bands(data),
         'P_MNSP_MAX_AVAILABLE': get_mnsp_quantity_band_attribute(data, '@MaxAvail', float),

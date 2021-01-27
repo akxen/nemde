@@ -295,7 +295,7 @@ def preprocess_case_file(data) -> dict:
         # 'P_MNSP_REGION_LOSS_INDICATOR': get_mnsp_region_loss_indicator(data),
         'P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_X': get_interconnector_loss_model_breakpoints_x(data),
         'P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y': get_interconnector_loss_model_breakpoints_y(data),
-        'P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE': get_interconnector_initial_loss_estimate(data),
+        # 'P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE': get_interconnector_initial_loss_estimate(data),
     }
 
     return out

@@ -220,9 +220,8 @@ def define_parameters(m, data):
         m.S_INTERCONNECTORS, initialize=data['P_INTERCONNECTOR_LOSS_SHARE'])
 
     # Interconnector initial loss estimate
-    m.P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE = pyo.Param(m.S_INTERCONNECTORS,
-                                                         initialize=(data.get('preprocessed')
-                                                                     .get('P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE')))
+    m.P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE = pyo.Param(
+        m.S_INTERCONNECTORS, initialize=data.get('P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE'))
 
     # Interconnector loss model segment limit
     m.P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_X = pyo.Param(
