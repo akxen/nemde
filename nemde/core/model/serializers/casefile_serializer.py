@@ -840,12 +840,51 @@ def get_price_tied_bands(data):
     return price_tied_flattened
 
 
-def get_mnsp_region_loss_indicator(data) -> dict:
-    """Get region loss indicator. =1 if from region and InitialMW >= 0, or if ToRegion and InitialMW < 0, else =0"""
+def get_trader_effective_initial_mw(data, mode):
+    """
+    Effective InitialMW depends on run mode. If a pricing run for an
+    intervention pricing period, then WhatIfInitialMW should be used. Otherwise
+    should use InitialMW.
+    """
+
+    # Get intervention flag
+    intervention_flag = get_case_attribute(data, '@Intervention', str)
+
+    # Use 'What If' if an intervention pricing period and run mode is 'pricing'
+    if (intervention_flag == 'True') and (mode == 'pricing'):
+        return get_trader_initial_condition_attribute(data, 'WhatIfInitialMW', float)
+    else:
+        return get_trader_initial_condition_attribute(data, 'InitialMW', float)
+
+
+def get_interconnector_effective_initial_mw(data, mode):
+    """
+    Effective InitialMW depends on run mode. If a pricing run for an
+    intervention pricing period, then WhatIfInitialMW should be used. Otherwise
+    should use InitialMW.
+    """
+
+    # Get intervention flag
+    intervention_flag = get_case_attribute(data, '@Intervention', str)
+
+    # Use 'What If' if an intervention pricing period and run mode is 'pricing'
+    if (intervention_flag == 'True') and (mode == 'pricing'):
+        return get_interconnector_collection_attribute(data, 'WhatIfInitialMW', float)
+    else:
+        return get_interconnector_collection_attribute(data, 'InitialMW', float)
+
+
+def get_mnsp_region_loss_indicator(data, mode) -> dict:
+    """
+    Get region loss indicator. =1 if from region and InitialMW >= 0, 
+    or if ToRegion and InitialMW < 0, else =0
+    """
 
     # MNSP and region index
-    mnsp_index = data['S_MNSPS']
-    region_index = data['S_REGIONS']
+    mnsp_index = get_mnsp_index(data)
+    region_index = get_region_index(data)
+
+    # Check if InitialMW or WhatIfInitialMW should be used
 
     # MNSP attributes # TODO: this needs to change if intervention pricing case is considered
     initial_mw = data['P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW']
@@ -871,7 +910,7 @@ def get_mnsp_region_loss_indicator(data) -> dict:
     return out
 
 
-def construct_case(data, intervention) -> dict:
+def construct_case(data, mode) -> dict:
     """
     Parse json data
 
@@ -890,7 +929,7 @@ def construct_case(data, intervention) -> dict:
     """
 
     # Get intervention status
-    # intervention = get_intervention_status(data=data, mode=mode)
+    intervention = get_intervention_status(data=data, mode=mode)
 
     case = {
         'S_REGIONS': get_region_index(data),
@@ -939,6 +978,7 @@ def construct_case(data, intervention) -> dict:
         'P_TRADER_LOW_BREAKPOINT': get_trader_period_trade_attribute(data, '@LowBreakpoint', float),
         'P_TRADER_HIGH_BREAKPOINT': get_trader_period_trade_attribute(data, '@HighBreakpoint', float),
         'P_TRADER_ENABLEMENT_MAX': get_trader_period_trade_attribute(data, '@EnablementMax', float),
+        'P_TRADER_EFFECTIVE_INITIAL_MW': get_trader_effective_initial_mw(data=data, mode=mode),
         'P_INTERCONNECTOR_INITIAL_MW': get_interconnector_collection_attribute(data, 'InitialMW', float),
         'P_INTERCONNECTOR_TO_REGION': get_interconnector_period_collection_attribute(data, '@ToRegion', str),
         'P_INTERCONNECTOR_FROM_REGION': get_interconnector_period_collection_attribute(data, '@FromRegion', str),
@@ -949,6 +989,7 @@ def construct_case(data, intervention) -> dict:
         'P_INTERCONNECTOR_LOSS_LOWER_LIMIT': get_interconnector_loss_model_attribute(data, '@LossLowerLimit', float),
         'P_INTERCONNECTOR_LOSS_SEGMENT_LIMIT': get_interconnector_loss_model_segment_attribute(data, '@Limit', float),
         'P_INTERCONNECTOR_LOSS_SEGMENT_FACTOR': get_interconnector_loss_model_segment_attribute(data, '@Factor', float),
+        'P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW': get_interconnector_effective_initial_mw(data=data, mode=mode),
         'P_MNSP_PRICE_BAND': get_mnsp_price_bands(data),
         'P_MNSP_QUANTITY_BAND': get_mnsp_quantity_bands(data),
         'P_MNSP_MAX_AVAILABLE': get_mnsp_quantity_band_attribute(data, '@MaxAvail', float),
@@ -992,24 +1033,4 @@ def construct_case(data, intervention) -> dict:
         },
     }
 
-    # Get intervention flag
-    intervention_flag = get_case_attribute(data, '@Intervention', str)
-
-    # Use 'What If' if an intervention pricing period and run mode is 'pricing'
-    if (intervention_flag == 'True') and (intervention == '0'):
-        effective_mw = {
-            'P_TRADER_EFFECTIVE_INITIAL_MW': case['P_TRADER_WHAT_IF_INITIAL_MW'],
-            'P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW': case['P_INTERCONNECTOR_WHAT_IF_INITIAL_MW'],
-        }
-
-    # Use InitialMW in all other cases
-    else:
-        effective_mw = {
-            'P_TRADER_EFFECTIVE_INITIAL_MW': case['P_TRADER_INITIAL_MW'],
-            'P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW': case['P_INTERCONNECTOR_INITIAL_MW'],
-        }
-
-    # Combine into final serialized case dictionary
-    case_data = {**case, **effective_mw}
-
-    return case_data
+    return case

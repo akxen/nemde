@@ -28,7 +28,7 @@ def clean_user_input(user_data):
         'case_data': data.get('case_data', None),
         'case_id': data.get('case_id', None),
         'patches': data.get('patches', []),
-        'intervention': options.get('intervention', '0'),
+        'run_mode': options.get('run_mode', 'physical'),
         'options': {
             'algorithm': options.get('algorithm', 'dispatch_only'),
             'solution_format': options.get('solution_format', 'standard')
@@ -44,8 +44,8 @@ def clean_user_input(user_data):
                        "'patches' should be omitted")
         raise CasefileOptionsError("Case options conflict", description)
 
-    if cleaned.get('intervention') not in ['0', '1']:
-        raise CasefileOptionsError("'intervention' must be set to '0' or '1'")
+    if cleaned.get('run_mode') not in ['physical', 'pricing']:
+        raise CasefileOptionsError("'intervention' must be set to 'physical' or 'pricing'")
 
     return cleaned
 
@@ -67,7 +67,7 @@ def run_model(user_data):
     case_id = data.get('case_id')
     user_case_data = data.get('case_data')
     user_patches = data.get('patches')
-    intervention = data.get('intervention')
+    run_mode = data.get('run_mode')
     algorithm = data.get('options').get('algorithm')
     solution_format = data.get('options').get('solution_format')
 
@@ -81,7 +81,7 @@ def run_model(user_data):
         case_data = patch_casefile(casefile=base_case, updates=user_patches)
 
     # Construct serialized casefile and model object
-    serialized_case = construct_case(data=case_data, intervention=intervention)
+    serialized_case = construct_case(data=case_data, mode=run_mode)
 
     # Apply preprocessing to serialized casefile
     preprocessed_case = preprocess_serialized_casefile(data=serialized_case)

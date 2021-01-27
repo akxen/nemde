@@ -10,7 +10,7 @@ start = time.time()
 
 data = {
     'case_id': '20201101001',
-    'intervention': '0',
+    'run_mode': 'physical',
 }
 
 data_json = json.dumps(data)
