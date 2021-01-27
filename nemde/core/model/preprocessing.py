@@ -292,7 +292,7 @@ def preprocess_case_file(data) -> dict:
     out = {
         # 'S_TRADER_PRICE_TIED': get_trader_price_tied_bands(data),
         'P_TRADER_FCAS_AVAILABILITY_STATUS': get_trader_fcas_availability_status(data),
-        'P_MNSP_REGION_LOSS_INDICATOR': get_mnsp_region_loss_indicator(data),
+        # 'P_MNSP_REGION_LOSS_INDICATOR': get_mnsp_region_loss_indicator(data),
         'P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_X': get_interconnector_loss_model_breakpoints_x(data),
         'P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y': get_interconnector_loss_model_breakpoints_y(data),
         'P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE': get_interconnector_initial_loss_estimate(data),

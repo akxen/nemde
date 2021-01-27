@@ -263,9 +263,8 @@ def define_parameters(m, data):
         m.S_MNSPS, initialize=data['P_MNSP_FROM_REGION_LF_IMPORT'])
 
     # MNSP loss indicator
-    m.P_MNSP_REGION_LOSS_INDICATOR = pyo.Param(m.S_MNSPS, m.S_REGIONS,
-                                               initialize=(data.get('preprocessed')
-                                                           .get('P_MNSP_REGION_LOSS_INDICATOR')))
+    m.P_MNSP_REGION_LOSS_INDICATOR = pyo.Param(
+        m.S_MNSPS, m.S_REGIONS, initialize=data.get('P_MNSP_REGION_LOSS_INDICATOR'))
 
     # Initial region demand
     m.P_REGION_INITIAL_DEMAND = pyo.Param(

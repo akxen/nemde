@@ -876,7 +876,7 @@ def get_interconnector_effective_initial_mw(data, mode):
 
 def get_mnsp_region_loss_indicator(data, mode) -> dict:
     """
-    Get region loss indicator. =1 if from region and InitialMW >= 0, 
+    Get region loss indicator. =1 if FromRegion and InitialMW >= 0, 
     or if ToRegion and InitialMW < 0, else =0
     """
 
@@ -884,12 +884,10 @@ def get_mnsp_region_loss_indicator(data, mode) -> dict:
     mnsp_index = get_mnsp_index(data)
     region_index = get_region_index(data)
 
-    # Check if InitialMW or WhatIfInitialMW should be used
-
     # MNSP attributes # TODO: this needs to change if intervention pricing case is considered
-    initial_mw = data['P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW']
-    to_region = data['P_INTERCONNECTOR_TO_REGION']
-    from_region = data['P_INTERCONNECTOR_FROM_REGION']
+    initial_mw = get_interconnector_effective_initial_mw(data=data, mode=mode)
+    to_region = get_interconnector_period_collection_attribute(data, '@ToRegion', str)
+    from_region = get_interconnector_period_collection_attribute(data, '@FromRegion', str)
 
     # Container for output
     out = {}
@@ -1002,6 +1000,7 @@ def construct_case(data, mode) -> dict:
         'P_MNSP_LOSS_PRICE': get_case_attribute(data, '@MNSPLossesPrice', float),
         'P_MNSP_RAMP_UP_RATE': get_mnsp_quantity_band_attribute(data, '@RampUpRate', float),
         'P_MNSP_RAMP_DOWN_RATE': get_mnsp_quantity_band_attribute(data, '@RampDnRate', float),
+        'P_MNSP_REGION_LOSS_INDICATOR': get_mnsp_region_loss_indicator(data=data, mode=mode),
         'P_REGION_INITIAL_DEMAND': get_region_initial_condition_attribute(data, 'InitialDemand', float),
         'P_REGION_ADE': get_region_initial_condition_attribute(data, 'ADE', float),
         'P_REGION_DF': get_region_period_collection_attribute(data, '@DF', float),
