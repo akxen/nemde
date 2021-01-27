@@ -2,11 +2,8 @@
 Convert case data into format that can be used to construct model instance
 """
 
-import os
-import json
-import time
-
 from nemde.core.casefile.lookup import convert_to_list, get_intervention_status
+from nemde.core.casefile.algorithms import get_parsed_interconnector_loss_model_segments
 
 
 def find(path, data):
@@ -39,24 +36,30 @@ def find(path, data):
 def get_region_index(data) -> list:
     """Get NEM region index"""
 
-    path = 'NEMSPDCaseFile.NemSpdInputs.RegionCollection.Region'
-
-    # return [i['@RegionID'] for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('RegionCollection')
-    #                                  .get('Region'))]
-    return [i['@RegionID'] for i in find(path, data)]
+    return [i['@RegionID'] for i in (data.get('NEMSPDCaseFile')
+                                     .get('NemSpdInputs')
+                                     .get('RegionCollection')
+                                     .get('Region'))]
 
 
 def get_trader_index(data) -> list:
     """Get trader index"""
 
-    return [i['@TraderID'] for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection')
-                                     .get('Period').get('TraderPeriodCollection').get('TraderPeriod'))]
+    return [i['@TraderID'] for i in (data.get('NEMSPDCaseFile')
+                                     .get('NemSpdInputs')
+                                     .get('PeriodCollection')
+                                     .get('Period')
+                                     .get('TraderPeriodCollection')
+                                     .get('TraderPeriod'))]
 
 
 def get_trader_semi_dispatch_index(data) -> list:
     """Get index of semi-dispatchable plant"""
 
-    return [i['@TraderID'] for i in data.get('NEMSPDCaseFile').get('NemSpdInputs').get('TraderCollection').get('Trader')
+    return [i['@TraderID'] for i in data.get('NEMSPDCaseFile')
+            .get('NemSpdInputs')
+            .get('TraderCollection')
+            .get('Trader')
             if i['@SemiDispatch'] == '1']
 
 
@@ -64,7 +67,8 @@ def get_trader_offer_index(data) -> list:
     """Get trader offer index"""
 
     return [(i['@TraderID'], j['@TradeType'])
-            for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
+            for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                      .get('PeriodCollection').get('Period')
                       .get('TraderPeriodCollection').get('TraderPeriod'))
             for j in convert_to_list(i.get('TradeCollection').get('Trade'))]
 
@@ -73,39 +77,29 @@ def get_trader_fcas_offer_index(data) -> list:
     """Get trader FCAS offers"""
 
     return [(i['@TraderID'], j['@TradeType'])
-            for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
+            for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                      .get('PeriodCollection').get('Period')
                       .get('TraderPeriodCollection').get('TraderPeriod'))
-            for j in convert_to_list(i.get('TradeCollection').get('Trade')) if j['@TradeType'] not in ['ENOF', 'LDOF']]
+            for j in convert_to_list(i.get('TradeCollection').get('Trade'))
+            if j['@TradeType'] not in ['ENOF', 'LDOF']]
 
 
 def get_trader_energy_offer_index(data) -> list:
     """Get trader energy offers"""
 
     return [(i['@TraderID'], j['@TradeType'])
-            for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
+            for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                      .get('PeriodCollection').get('Period')
                       .get('TraderPeriodCollection').get('TraderPeriod'))
-            for j in convert_to_list(i.get('TradeCollection').get('Trade')) if j['@TradeType'] in ['ENOF', 'LDOF']]
-
-
-def get_trader_fcas_available_offers_index(data) -> list:
-    """Get available FCAS offers"""
-
-    # All FCAS offers
-    offers = get_trader_fcas_offer_index(data)
-
-    # FCAS available
-    available = fcas.get_trader_fcas_availability_status(data)
-
-    # All available FCAS offers
-    return [i for i in offers if available[i]]
+            for j in convert_to_list(i.get('TradeCollection').get('Trade'))
+            if j['@TradeType'] in ['ENOF', 'LDOF']]
 
 
 def get_trader_fast_start_index(data) -> list:
     """Get fast start units"""
 
-    # All traders
-    traders = data.get('NEMSPDCaseFile').get(
-        'NemSpdInputs').get('TraderCollection').get('Trader')
+    traders = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+               .get('TraderCollection').get('Trader'))
 
     # Fast start unit IDs
     return [i['@TraderID'] for i in traders if i.get('@FastStart') == '1']
@@ -114,28 +108,31 @@ def get_trader_fast_start_index(data) -> list:
 def get_generic_constraint_index(data) -> list:
     """Get generic constraint index"""
 
-    return [i['@ConstraintID'] for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection')
-                                         .get('Period').get('GenericConstraintPeriodCollection')
+    return [i['@ConstraintID'] for i in (data.get('NEMSPDCaseFile')
+                                         .get('NemSpdInputs')
+                                         .get('PeriodCollection')
+                                         .get('Period')
+                                         .get('GenericConstraintPeriodCollection')
                                          .get('GenericConstraintPeriod'))]
 
 
 def get_generic_constraint_trader_variable_index(data) -> list:
     """Get all trader variables within generic constraints"""
 
-    # All constraints
-    constraints = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('GenericConstraintCollection')
+    constraints = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                   .get('GenericConstraintCollection')
                    .get('GenericConstraint'))
 
     # Container for all trader variables
     trader_variables = []
     for i in constraints:
-        lhs_factor_collection = i.get('LHSFactorCollection')
+        collection = i.get('LHSFactorCollection')
 
         # Continue if no LHS factors or no trader factors
-        if (lhs_factor_collection is None) or (lhs_factor_collection.get('TraderFactor') is None):
+        if (collection is None) or (collection.get('TraderFactor') is None):
             continue
 
-        for j in convert_to_list(lhs_factor_collection.get('TraderFactor')):
+        for j in convert_to_list(collection.get('TraderFactor')):
             trader_variables.append((j['@TraderID'], j['@TradeType']))
 
     # Retain unique indices
@@ -145,20 +142,20 @@ def get_generic_constraint_trader_variable_index(data) -> list:
 def get_generic_constraint_interconnector_variable_index(data) -> list:
     """Get all interconnector variables within generic constraints"""
 
-    # All constraints
-    constraints = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('GenericConstraintCollection')
+    constraints = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                   .get('GenericConstraintCollection')
                    .get('GenericConstraint'))
 
     # Container for all interconnector variables
     interconnector_variables = []
     for i in constraints:
-        lhs_factor_collection = i.get('LHSFactorCollection')
+        collection = i.get('LHSFactorCollection')
 
         # Continue if no LHS factors or no interconnector factors
-        if (lhs_factor_collection is None) or (lhs_factor_collection.get('InterconnectorFactor') is None):
+        if (collection is None) or (collection.get('InterconnectorFactor') is None):
             continue
 
-        for j in convert_to_list(lhs_factor_collection.get('InterconnectorFactor')):
+        for j in convert_to_list(collection.get('InterconnectorFactor')):
             interconnector_variables.append(j['@InterconnectorID'])
 
     # Retain unique indices
@@ -168,20 +165,20 @@ def get_generic_constraint_interconnector_variable_index(data) -> list:
 def get_generic_constraint_region_variable_index(data) -> list:
     """Get generic constraint region variable indices"""
 
-    # All constraints
-    constraints = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('GenericConstraintCollection')
+    constraints = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                   .get('GenericConstraintCollection')
                    .get('GenericConstraint'))
 
     # Container for all region variables
     region_variables = []
     for i in constraints:
-        lhs_factor_collection = i.get('LHSFactorCollection')
+        collection = i.get('LHSFactorCollection')
 
         # Continue if no LHS factors or no region factors
-        if (lhs_factor_collection is None) or (lhs_factor_collection.get('RegionFactor') is None):
+        if (collection is None) or (collection.get('RegionFactor') is None):
             continue
 
-        for j in convert_to_list(lhs_factor_collection.get('RegionFactor')):
+        for j in convert_to_list(collection.get('RegionFactor')):
             region_variables.append((j['@RegionID'], j['@TradeType']))
 
     # Retain unique indices
@@ -191,9 +188,10 @@ def get_generic_constraint_region_variable_index(data) -> list:
 def get_mnsp_index(data) -> list:
     """Get MNSP index"""
 
-    # All interconnectors
-    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
-                       .get('InterconnectorPeriodCollection').get('InterconnectorPeriod'))
+    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                       .get('PeriodCollection').get('Period')
+                       .get('InterconnectorPeriodCollection')
+                       .get('InterconnectorPeriod'))
 
     # Only retain MNSPs
     return [i['@InterconnectorID'] for i in interconnectors if i['@MNSP'] == '1']
@@ -202,14 +200,15 @@ def get_mnsp_index(data) -> list:
 def get_mnsp_offer_index(data) -> list:
     """Get MNSP offer index"""
 
-    # All interconnectors
-    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
-                       .get('InterconnectorPeriodCollection').get('InterconnectorPeriod'))
+    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                       .get('PeriodCollection').get('Period')
+                       .get('InterconnectorPeriodCollection')
+                       .get('InterconnectorPeriod'))
 
     # Container for offer index
     offer_index = []
     for i in interconnectors:
-        # Non-MNSP interconnectors will not have the MNSPOfferCollection attribute
+        # Non-MNSP interconnectors do not have an MNSPOfferCollection attribute
         if i.get('MNSPOfferCollection') is None:
             continue
 
@@ -223,16 +222,19 @@ def get_mnsp_offer_index(data) -> list:
 def get_interconnector_index(data) -> list:
     """Get interconnector index"""
 
-    return [i['@InterconnectorID'] for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection')
-                                             .get('Period').get('InterconnectorPeriodCollection')
+    return [i['@InterconnectorID'] for i in (data.get('NEMSPDCaseFile')
+                                             .get('NemSpdInputs')
+                                             .get('PeriodCollection')
+                                             .get('Period')
+                                             .get('InterconnectorPeriodCollection')
                                              .get('InterconnectorPeriod'))]
 
 
 def get_interconnector_loss_model_breakpoint_index(data) -> list:
     """Get interconnector loss model breakpoint index"""
 
-    # All interconnectors
-    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('InterconnectorCollection')
+    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                       .get('InterconnectorCollection')
                        .get('Interconnector'))
 
     # Container for indices
@@ -251,8 +253,8 @@ def get_interconnector_loss_model_breakpoint_index(data) -> list:
 def get_interconnector_loss_model_interval_index(data) -> list:
     """Get interconnector loss model interval index"""
 
-    # All interconnectors
-    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('InterconnectorCollection')
+    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                       .get('InterconnectorCollection')
                        .get('Interconnector'))
 
     # Container for indices
@@ -271,22 +273,23 @@ def get_interconnector_loss_model_interval_index(data) -> list:
 def get_trader_price_bands(data) -> dict:
     """Trader price bands"""
 
-    # All traders
-    traders = data.get('NEMSPDCaseFile').get(
-        'NemSpdInputs').get('TraderCollection').get('Trader')
+    traders = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+               .get('TraderCollection').get('Trader'))
 
     # Container for all price bands
     price_bands = {}
     for i in traders:
         # All trade types for a given trader
-        trade_types = (i.get('TradePriceStructureCollection').get('TradePriceStructure')
-                       .get('TradeTypePriceStructureCollection').get('TradeTypePriceStructure'))
+        trade_types = (i.get('TradePriceStructureCollection')
+                       .get('TradePriceStructure')
+                       .get('TradeTypePriceStructureCollection')
+                       .get('TradeTypePriceStructure'))
 
         for j in convert_to_list(trade_types):
             # Price bands
             for k in range(1, 11):
-                price_bands[(i['@TraderID'], j['@TradeType'], k)
-                            ] = float(j.get(f'@PriceBand{k}'))
+                key = (i['@TraderID'], j['@TradeType'], k)
+                price_bands[key] = float(j.get(f'@PriceBand{k}'))
 
     return price_bands
 
@@ -294,8 +297,8 @@ def get_trader_price_bands(data) -> dict:
 def get_trader_quantity_bands(data) -> dict:
     """Get trader quantity bands"""
 
-    # All traders
-    traders = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
+    traders = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+               .get('PeriodCollection').get('Period')
                .get('TraderPeriodCollection').get('TraderPeriod'))
 
     # Container for quantity bands
@@ -304,8 +307,8 @@ def get_trader_quantity_bands(data) -> dict:
         for j in convert_to_list(i.get('TradeCollection').get('Trade')):
             # Quantity bands
             for k in range(1, 11):
-                quantity_bands[(i['@TraderID'], j['@TradeType'], k)
-                               ] = float(j[f'@BandAvail{k}'])
+                key = (i['@TraderID'], j['@TradeType'], k)
+                quantity_bands[key] = float(j[f'@BandAvail{k}'])
 
     return quantity_bands
 
@@ -313,9 +316,8 @@ def get_trader_quantity_bands(data) -> dict:
 def get_trader_initial_condition_attribute(data, attribute, func) -> dict:
     """Get trader initial MW"""
 
-    # All traders
-    traders = data.get('NEMSPDCaseFile').get(
-        'NemSpdInputs').get('TraderCollection').get('Trader')
+    traders = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+               .get('TraderCollection').get('Trader'))
 
     # Container for initial MW data
     values = {}
@@ -333,85 +335,60 @@ def get_trader_period_attribute(data, attribute, func) -> dict:
     """Get trader period attribute"""
 
     return {i['@TraderID']: func(i[attribute])
-            for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
-                      .get('TraderPeriodCollection').get('TraderPeriod')) if i.get(attribute) is not None}
+            for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                      .get('PeriodCollection').get('Period')
+                      .get('TraderPeriodCollection').get('TraderPeriod'))
+            if i.get(attribute) is not None}
 
 
 def get_trader_collection_attribute(data, attribute, func) -> dict:
     """Get trader collection attribute"""
 
-    return {i['@TraderID']: func(i[attribute])
-            for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('TraderCollection').get('Trader'))}
+    return {i['@TraderID']: func(i[attribute]) for i in (data.get('NEMSPDCaseFile')
+                                                         .get('NemSpdInputs')
+                                                         .get('TraderCollection')
+                                                         .get('Trader'))}
 
 
 def get_trader_period_trade_attribute(data, attribute, func) -> dict:
     """Get trader quantity band attribute"""
 
     return {(i['@TraderID'], j['@TradeType']): func(j[attribute])
-            for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
-                      .get('TraderPeriodCollection').get('TraderPeriod'))
-            for j in convert_to_list(i.get('TradeCollection').get('Trade')) if j.get(attribute) is not None}
-
-
-def get_trader_fcas_trapezium(data) -> dict:
-    """Get FCAS trapeziums"""
-
-    return {(i['@TraderID'], j['@TradeType']):
-            {
-            'EnablementMin': float(j['@EnablementMin']),
-            'LowBreakpoint': float(j['@LowBreakpoint']),
-            'HighBreakpoint': float(j['@HighBreakpoint']),
-            'EnablementMax': float(j['@EnablementMax']),
-            'MaxAvail': float(j['@MaxAvail']),
-            }
-            for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
+            for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                      .get('PeriodCollection').get('Period')
                       .get('TraderPeriodCollection').get('TraderPeriod'))
             for j in convert_to_list(i.get('TradeCollection').get('Trade'))
-            if j['@TradeType'] in ['R6SE', 'R60S', 'R5MI', 'R5RE', 'L6SE', 'L60S', 'L5MI', 'L5RE']}
-
-
-def get_trader_fcas_availability_status(data) -> dict:
-    """Get FCAS availability"""
-
-    # All FCAS offers
-    offers = get_trader_offer_index(data)
-
-    # Container for FCAS availability
-    fcas_status = {}
-    for trader_id, trade_type in offers:
-        # Only check availability for FCAS offers
-        if trade_type in ['L5RE', 'L6SE', 'L60S', 'L5MI', 'R5RE', 'R6SE', 'R60S', 'R5MI']:
-            # Get FCAS availability status
-            fcas_status[(trader_id, trade_type)] = fcas.get_trader_fcas_availability_status(
-                data, trader_id, trade_type)
-
-    return fcas_status
+            if j.get(attribute) is not None}
 
 
 def get_trader_fast_start_attribute(data, attribute, func) -> dict:
     """Get trader fast start attribute"""
 
-    # All traders
-    traders = data.get('NEMSPDCaseFile').get(
-        'NemSpdInputs').get('TraderCollection').get('Trader')
+    traders = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+               .get('TraderCollection').get('Trader'))
 
     # Fast start traders
     fast_start_traders = get_trader_fast_start_index(data)
 
-    return {i['@TraderID']: func(i.get(attribute)) if i.get(attribute) is not None else i.get(attribute) for i in traders if i['@TraderID'] in fast_start_traders}
+    return {i['@TraderID']: func(i.get(attribute))
+            if i.get(attribute) is not None else i.get(attribute)
+            for i in traders if i['@TraderID'] in fast_start_traders}
 
 
 def get_interconnector_collection_attribute(data, attribute, func) -> dict:
     """Get interconnector collection attribute"""
 
-    # All interconnectors
-    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('InterconnectorCollection')
+    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                       .get('InterconnectorCollection')
                        .get('Interconnector'))
 
     # Container for extract values
     values = {}
     for i in interconnectors:
-        for j in i.get('InterconnectorInitialConditionCollection').get('InterconnectorInitialCondition'):
+        initial_conditions = (i.get('InterconnectorInitialConditionCollection')
+                              .get('InterconnectorInitialCondition'))
+
+        for j in initial_conditions:
             if j['@InitialConditionID'] == attribute:
                 values[i['@InterconnectorID']] = func(j['@Value'])
 
@@ -439,9 +416,10 @@ def get_interconnector_period_collection_attribute(data, attribute, func) -> dic
         Dictionary of extracted interconnector period collection attributes
     """
 
-    # All interconnectors
-    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
-                       .get('InterconnectorPeriodCollection').get('InterconnectorPeriod'))
+    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                       .get('PeriodCollection').get('Period')
+                       .get('InterconnectorPeriodCollection')
+                       .get('InterconnectorPeriod'))
 
     # Container for extracted values
     values = {}
@@ -468,22 +446,26 @@ def get_interconnector_loss_model_attribute(data, attribute, func) -> dict:
     """
 
     return {i['@InterconnectorID']: func(i.get('LossModelCollection').get('LossModel')[attribute])
-            for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('InterconnectorCollection')
-                      .get('Interconnector'))}
+            for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                      .get('InterconnectorCollection').get('Interconnector'))}
 
 
 def get_interconnector_loss_model_segments(data, interconnector_id) -> list:
     """Get segments corresponding to interconnector loss model"""
 
-    # All interconnectors
-    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('InterconnectorCollection')
+    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                       .get('InterconnectorCollection')
                        .get('Interconnector'))
 
     # Container for loss model segments
     segments = []
     for i in interconnectors:
         if i['@InterconnectorID'] == interconnector_id:
-            for segment in i.get('LossModelCollection').get('LossModel').get('SegmentCollection').get('Segment'):
+            loss_model_segments = (i.get('LossModelCollection')
+                                   .get('LossModel').get('SegmentCollection')
+                                   .get('Segment'))
+
+            for segment in loss_model_segments:
                 s = {j: int(k) if j == '@Limit' else float(k) for j, k in segment.items()}
                 segments.append(s)
 
@@ -493,14 +475,16 @@ def get_interconnector_loss_model_segments(data, interconnector_id) -> list:
 def get_interconnector_loss_model_segment_attribute(data, attribute, func) -> dict:
     """Get interconnector loss model segment collection"""
 
-    # All interconnectors
-    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('InterconnectorCollection')
-                       .get('Interconnector'))
+    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                       .get('InterconnectorCollection').get('Interconnector'))
 
     # Container for values
     values = {}
     for i in interconnectors:
-        for j, k in enumerate(i.get('LossModelCollection').get('LossModel').get('SegmentCollection').get('Segment')):
+        segment_attributes = (i.get('LossModelCollection').get('LossModel')
+                              .get('SegmentCollection').get('Segment'))
+
+        for j, k in enumerate(segment_attributes):
             # Extract loss model segment attribute
             values[(i['@InterconnectorID'], j)] = func(k[attribute])
 
@@ -510,41 +494,15 @@ def get_interconnector_loss_model_segment_attribute(data, attribute, func) -> di
 def get_standardised_interconnector_loss_model_segments(data) -> dict:
     """Use breakpoints and segment factors to construct a new start-end representation for the MLF curve"""
 
-    # All interconnectors
-    # interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('InterconnectorCollection')
-    #                    .get('Interconnector'))
-    interconnectors = get_interconnector_index(data)
-
-    # Loss lower limit
-    loss_lower_limit = get_interconnector_loss_model_attribute(
-        data, '@LossLowerLimit', float)
-
-    # Container for output
-    out = {}
-    for interconnector_id in interconnectors:
-        # Check loss model
-        segments = get_interconnector_loss_model_segments(data, interconnector_id)
-
-        # First segment
-        start = -loss_lower_limit[interconnector_id]
-
-        # Format segments with start, end, and factor
-        new_segments = []
-        for s in segments:
-            segment = {'start': start, 'end': s['@Limit'], 'factor': s['@Factor']}
-            start = s['@Limit']
-            new_segments.append(segment)
-
-        out[interconnector_id] = new_segments
-
-    return out
+    return {i: get_parsed_interconnector_loss_model_segments(data, i)
+            for i in get_interconnector_index(data)}
 
 
 def get_mnsp_price_bands(data) -> dict:
     """Get MNSP price bands"""
 
-    # All interconnectors
-    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('InterconnectorCollection')
+    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                       .get('InterconnectorCollection')
                        .get('Interconnector'))
 
     # Container for price band information
@@ -554,12 +512,15 @@ def get_mnsp_price_bands(data) -> dict:
             continue
 
         # MNSP price structure
-        price_structure = (i.get('MNSPPriceStructureCollection').get('MNSPPriceStructure')
-                           .get('MNSPRegionPriceStructureCollection').get('MNSPRegionPriceStructure'))
+        price_structure = (i.get('MNSPPriceStructureCollection')
+                           .get('MNSPPriceStructure')
+                           .get('MNSPRegionPriceStructureCollection')
+                           .get('MNSPRegionPriceStructure'))
+
         for j in price_structure:
             for k in range(1, 11):
-                price_bands[(i['@InterconnectorID'], j['@RegionID'], k)
-                            ] = float(j[f'@PriceBand{k}'])
+                key = (i['@InterconnectorID'], j['@RegionID'], k)
+                price_bands[key] = float(j[f'@PriceBand{k}'])
 
     return price_bands
 
@@ -567,9 +528,10 @@ def get_mnsp_price_bands(data) -> dict:
 def get_mnsp_quantity_bands(data) -> dict:
     """Get MNSP quantity bands"""
 
-    # All interconnectors
-    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
-                       .get('InterconnectorPeriodCollection').get('InterconnectorPeriod'))
+    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                       .get('PeriodCollection').get('Period')
+                       .get('InterconnectorPeriodCollection')
+                       .get('InterconnectorPeriod'))
 
     # Container for quantity band information
     quantity_bands = {}
@@ -581,8 +543,8 @@ def get_mnsp_quantity_bands(data) -> dict:
         offers = i.get('MNSPOfferCollection').get('MNSPOffer')
         for j in offers:
             for k in range(1, 11):
-                quantity_bands[(i['@InterconnectorID'], j['@RegionID'], k)
-                               ] = float(j[f'@BandAvail{k}'])
+                key = (i['@InterconnectorID'], j['@RegionID'], k)
+                quantity_bands[key] = float(j[f'@BandAvail{k}'])
 
     return quantity_bands
 
@@ -590,9 +552,10 @@ def get_mnsp_quantity_bands(data) -> dict:
 def get_mnsp_offer_attribute(data, attribute) -> dict:
     """MNSP offer attribute"""
 
-    # All interconnectors
-    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
-                       .get('InterconnectorPeriodCollection').get('InterconnectorPeriod'))
+    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                       .get('PeriodCollection').get('Period')
+                       .get('InterconnectorPeriodCollection')
+                       .get('InterconnectorPeriod'))
 
     # Container for MNSP offer attributes
     values = {}
@@ -604,8 +567,8 @@ def get_mnsp_offer_attribute(data, attribute) -> dict:
         offers = i.get('MNSPOfferCollection').get('MNSPOffer')
         for j in offers:
             for k in range(1, 11):
-                values[(i['@InterconnectorID'], j['@RegionID'], k)
-                       ] = float(j[f'@{attribute}'])
+                key = (i['@InterconnectorID'], j['@RegionID'], k)
+                values[key] = float(j[f'@{attribute}'])
 
     return values
 
@@ -613,9 +576,10 @@ def get_mnsp_offer_attribute(data, attribute) -> dict:
 def get_mnsp_quantity_band_attribute(data, attribute, func) -> dict:
     """Get MNSP max available"""
 
-    # All interconnectors
-    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
-                       .get('InterconnectorPeriodCollection').get('InterconnectorPeriod'))
+    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                       .get('PeriodCollection').get('Period')
+                       .get('InterconnectorPeriodCollection')
+                       .get('InterconnectorPeriod'))
 
     # Container for max available data
     max_available = {}
@@ -650,9 +614,10 @@ def get_mnsp_period_collection_attribute(data, attribute, func) -> dict:
         MNSP period collection attribute
     """
 
-    # All interconnectors
-    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
-                       .get('InterconnectorPeriodCollection').get('InterconnectorPeriod'))
+    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                       .get('PeriodCollection').get('Period')
+                       .get('InterconnectorPeriodCollection')
+                       .get('InterconnectorPeriod'))
 
     # Container for extracted values
     values = {}
@@ -687,14 +652,16 @@ def get_region_initial_condition_attribute(data, attribute, func) -> dict:
         Extract attribute values for each NEM region
     """
 
-    # All regions
-    regions = data.get('NEMSPDCaseFile').get(
-        'NemSpdInputs').get('RegionCollection').get('Region')
+    regions = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+               .get('RegionCollection').get('Region'))
 
     # Container for extracted values
     values = {}
     for i in regions:
-        for j in i.get('RegionInitialConditionCollection').get('RegionInitialCondition'):
+        initial_conditions = (i.get('RegionInitialConditionCollection')
+                              .get('RegionInitialCondition'))
+
+        for j in initial_conditions:
             if j['@InitialConditionID'] == attribute:
                 values[i['@RegionID']] = func(j['@Value'])
 
@@ -705,7 +672,8 @@ def get_region_period_collection_attribute(data, attribute, func) -> dict:
     """Get region period collection attribute"""
 
     return {i['@RegionID']: func(i[attribute])
-            for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('PeriodCollection').get('Period')
+            for i in (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                      .get('PeriodCollection').get('Period')
                       .get('RegionPeriodCollection').get('RegionPeriod'))}
 
 
@@ -727,9 +695,8 @@ def get_generic_constraint_rhs(data, intervention) -> dict:
         Dictionary with keys = ConstraintIDs, values = constraint RHS
     """
 
-    # All constraints
-    constraints = data.get('NEMSPDCaseFile').get(
-        'NemSpdOutputs').get('ConstraintSolution')
+    constraints = (data.get('NEMSPDCaseFile').get('NemSpdOutputs')
+                   .get('ConstraintSolution'))
 
     # Container for constraint RHS terms
     rhs = {}
@@ -762,8 +729,8 @@ def get_generic_constraint_collection_attribute(data, attribute, func) -> dict:
         Extracted generic constraint collection values
     """
 
-    # All constraints
-    constraints = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('GenericConstraintCollection')
+    constraints = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                   .get('GenericConstraintCollection')
                    .get('GenericConstraint'))
 
     # Container for extract values
@@ -782,9 +749,6 @@ def parse_constraint(constraint_data):
     """Constraint data"""
 
     lhs = constraint_data.get('LHSFactorCollection')
-
-    # if lhs is None:
-    #     return {}
 
     # Trader factors
     traders = {(i['@TraderID'], i['@TradeType']): float(i['@Factor'])
@@ -805,10 +769,12 @@ def parse_constraint(constraint_data):
 
 
 def get_generic_constraint_lhs_terms(data) -> dict:
-    """Generic constraint LHS terms - if no LHS terms then constraint is skipped"""
+    """
+    Generic constraint LHS terms - if no LHS terms then constraint is skipped
+    """
 
-    # All constraints
-    constraints = (data.get('NEMSPDCaseFile').get('NemSpdInputs').get('GenericConstraintCollection')
+    constraints = (data.get('NEMSPDCaseFile').get('NemSpdInputs')
+                   .get('GenericConstraintCollection')
                    .get('GenericConstraint'))
 
     return {i.get('@ConstraintID'): parse_constraint(i) for i in constraints
@@ -819,121 +785,6 @@ def get_case_attribute(data, attribute, func):
     """Extract case attribute"""
 
     return func(data.get('NEMSPDCaseFile').get('NemSpdInputs').get('Case')[attribute])
-
-
-def get_trader_solution(data, intervention) -> dict:
-    """Get trader solution"""
-
-    # All traders
-    traders = data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('TraderSolution')
-
-    # Keys that should be converted to type string. All other keys to be converted to type float.
-    str_keys = ['@TraderID', '@PeriodID', '@Intervention',
-                '@FSTargetMode', '@SemiDispatchCap']
-
-    # Container for extracted values
-    solutions = {}
-    for i in traders:
-        # Parse values - only consider no intervention case
-        if i['@Intervention'] == intervention:
-            solutions[i['@TraderID']
-                      ] = {k: str(v) if k in str_keys else float(v) for k, v in i.items()}
-
-    return solutions
-
-
-def get_interconnector_solution(data, intervention) -> dict:
-    """Get interconnector solution"""
-
-    # All interconnectors
-    interconnectors = data.get('NEMSPDCaseFile').get(
-        'NemSpdOutputs').get('InterconnectorSolution')
-
-    # Keys that should be converted to type string. All other keys to be converted to type float.
-    str_keys = ['@InterconnectorID', '@PeriodID', '@Intervention', '@NPLExists']
-
-    # Container for extracted interconnector solutions
-    solutions = {}
-    for i in interconnectors:
-        # Parse values - only consider no intervention case
-        if i['@Intervention'] == intervention:
-            solutions[i['@InterconnectorID']
-                      ] = {k: str(v) if k in str_keys else float(v) for k, v in i.items()}
-
-    return solutions
-
-
-def get_region_solution(data, intervention) -> dict:
-    """Get region solution"""
-
-    # All regions
-    regions = data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('RegionSolution')
-
-    # Keys that should be converted to type string. All other keys to be converted to type float.
-    str_keys = ['@RegionID', '@PeriodID', '@Intervention']
-
-    # Container for extracted region solutions
-    solutions = {}
-    for i in regions:
-        # Parse values - only consider no intervention case
-        if i['@Intervention'] == intervention:
-            solutions[i['@RegionID']
-                      ] = {k: str(v) if k in str_keys else float(v) for k, v in i.items()}
-
-    return solutions
-
-
-def get_region_solution_attribute(data, attribute, func, intervention) -> dict:
-    """Get given solution attribute for all regions"""
-
-    # All regions
-    regions = data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('RegionSolution')
-
-    return {i['@RegionID']: func(i[attribute]) for i in regions if i['@Intervention'] == intervention}
-
-
-def get_constraint_solution(data, intervention) -> dict:
-    """Get constraint solution"""
-
-    # All constraints
-    constraints = data.get('NEMSPDCaseFile').get(
-        'NemSpdOutputs').get('ConstraintSolution')
-
-    # Keys that should be converted to type string. All other keys to be converted to type float.
-    str_keys = ['@ConstraintID', '@Version', '@PeriodID', '@Intervention']
-
-    # Container for extracted region solutions
-    solutions = {}
-    for i in constraints:
-        # Parse values - only consider no intervention case
-        if i['@Intervention'] == intervention:
-            solutions[i['@ConstraintID']
-                      ] = {k: str(v) if k in str_keys else float(v) for k, v in i.items()}
-
-    return solutions
-
-
-def get_case_solution(data) -> dict:
-    """Get case solution"""
-
-    # Keys that should be converted to type string. All other keys to be converted to type float.
-    str_keys = ['@SolverStatus', '@Terminal', '@InterventionStatus', '@SolverVersion', '@NPLStatus', '@OCD_Status',
-                '@CaseSubType']
-
-    return {k: str(v) if k in str_keys else float(v)
-            for k, v in data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('CaseSolution').items()}
-
-
-def get_period_solution(data, intervention) -> dict:
-    """Get period solution"""
-
-    # Keys that should be converted to type string. All other keys to be converted to type float.
-    str_keys = ['@PeriodID', '@Intervention',
-                '@SwitchRunBestStatus', '@SolverStatus', '@NPLStatus']
-
-    return {k: str(v) if k in str_keys else float(v)
-            for i in convert_to_list(data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('PeriodSolution'))
-            for k, v in i.items() if i['@Intervention'] == intervention}
 
 
 def reorder_tuple(input_tuple) -> tuple:
