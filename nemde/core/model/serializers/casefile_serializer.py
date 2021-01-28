@@ -5,6 +5,7 @@ Convert case data into format that can be used to construct model instance
 from nemde.core.casefile.lookup import convert_to_list, get_intervention_status
 from nemde.core.casefile.algorithms import get_parsed_interconnector_loss_model_segments
 from nemde.core.casefile.algorithms import get_interconnector_loss_estimate
+from nemde.core.model.utils import fcas
 
 
 def find(path, data):
@@ -966,6 +967,85 @@ def get_interconnector_loss_model_breakpoints_x(data) -> dict:
     return values
 
 
+def get_trader_fcas_info(data, mode) -> dict:
+    """Extract parameter used in FCAS availability calculations - convert to standard format"""
+
+    # FCAS trade types
+    fcas_trade_types = ['R6SE', 'R60S', 'R5MI', 'R5RE', 'L6SE', 'L60S', 'L5MI', 'L5RE']
+
+    # Extract data used for FCAS calculations
+    trader_quantity_bands = get_trader_quantity_bands(data=data)
+    trader_type = get_trader_collection_attribute(data, '@TraderType', str)
+    max_avail = get_trader_period_trade_attribute(data, '@MaxAvail', float)
+    enablement_min = get_trader_period_trade_attribute(data, '@EnablementMin', float)
+    low_breakpoint = get_trader_period_trade_attribute(data, '@LowBreakpoint', float)
+    high_breakpoint = get_trader_period_trade_attribute(data, '@HighBreakpoint', float)
+    enablement_max = get_trader_period_trade_attribute(data, '@EnablementMax', float)
+    effective_initial_mw = get_trader_effective_initial_mw(data=data, mode=mode)
+    uigf = get_trader_period_attribute(data, '@UIGF', float)
+    hmw = get_trader_initial_condition_attribute(data, 'HMW', float)
+    lmw = get_trader_initial_condition_attribute(data, 'LMW', float)
+    agc_status = get_trader_initial_condition_attribute(data, 'AGCStatus', str)
+    scada_ramp_up_rate = get_trader_initial_condition_attribute(data, 'SCADARampUpRate', float)
+    scada_ramp_dn_rate = get_trader_initial_condition_attribute(data, 'SCADARampDnRate', float)
+    semi_dispatch = get_trader_collection_attribute(data, '@SemiDispatch', str)
+
+    # Container for output
+    out = {}
+    for trader_id, trade_type in get_trader_offer_index(data=data):
+        if trade_type in fcas_trade_types:
+            # Extract trader quantity bands for given service
+            quantity_bands = {k: v for k, v in trader_quantity_bands.items()
+                              if k[0] == trader_id and k[1] == trade_type}
+
+            # Energy offer trade type depends on whether trader is a generator or a load
+            if trader_type[trader_id] == 'GENERATOR':
+                energy_offer_type = 'ENOF'
+            elif trader_type[trader_id] in ['LOAD', 'NORMALLY_ON_LOAD']:
+                energy_offer_type = 'LDOF'
+            else:
+                raise Exception('Unexpected trader type:', trader_id, trader_type[trader_id])
+
+            # Compile output into single dictionary
+            out[(trader_id, trade_type)] = {
+                'trader_id': trader_id,
+                'trade_type': trade_type,
+                'quantity_bands': quantity_bands,
+                'energy_max_avail': max_avail.get((trader_id, energy_offer_type)),
+                'enablement_min': enablement_min[(trader_id, trade_type)],
+                'low_breakpoint': low_breakpoint[(trader_id, trade_type)],
+                'high_breakpoint': high_breakpoint[(trader_id, trade_type)],
+                'enablement_max': enablement_max[(trader_id, trade_type)],
+                'max_avail': max_avail[(trader_id, trade_type)],
+                'initial_mw': effective_initial_mw.get(trader_id),
+                'uigf': uigf.get(trader_id),
+                'hmw': hmw.get(trader_id),
+                'lmw': lmw.get(trader_id),
+                'agc_status': agc_status.get(trader_id),
+                'agc_ramp_up': scada_ramp_up_rate.get(trader_id),
+                'agc_ramp_dn': scada_ramp_dn_rate.get(trader_id),
+                'trader_type': trader_type.get(trader_id),
+                'semi_dispatch': semi_dispatch.get(trader_id),
+            }
+
+    return out
+
+
+def get_trader_fcas_availability_status(data, mode) -> dict:
+    """Get FCAS availability"""
+
+    # Extract trade FCAS parameters into single dictionary to assist with availability calculations
+    fcas_info = get_trader_fcas_info(data=data, mode=mode)
+
+    # Container for FCAS availability
+    fcas_status = {}
+    for (trader_id, trade_type), params in fcas_info.items():
+        # Get FCAS availability status
+        fcas_status[(trader_id, trade_type)] = fcas.get_trader_fcas_availability_status(params)
+
+    return fcas_status
+
+
 def construct_case(data, mode) -> dict:
     """
     Parse json data
@@ -1035,6 +1115,7 @@ def construct_case(data, mode) -> dict:
         'P_TRADER_HIGH_BREAKPOINT': get_trader_period_trade_attribute(data, '@HighBreakpoint', float),
         'P_TRADER_ENABLEMENT_MAX': get_trader_period_trade_attribute(data, '@EnablementMax', float),
         'P_TRADER_EFFECTIVE_INITIAL_MW': get_trader_effective_initial_mw(data=data, mode=mode),
+        'P_TRADER_FCAS_AVAILABILITY_STATUS': get_trader_fcas_availability_status(data=data, mode=mode),
         'P_INTERCONNECTOR_INITIAL_MW': get_interconnector_collection_attribute(data, 'InitialMW', float),
         'P_INTERCONNECTOR_TO_REGION': get_interconnector_period_collection_attribute(data, '@ToRegion', str),
         'P_INTERCONNECTOR_FROM_REGION': get_interconnector_period_collection_attribute(data, '@FromRegion', str),

@@ -166,9 +166,8 @@ def define_parameters(m, data):
     # m.P_TRADER_MAX_AVAILABLE = pyo.Param(m.S_TRADER_FCAS_OFFERS, initialize=data['P_TRADER_MAX_AVAIL'])
 
     # Trader FCAS availability
-    m.P_TRADER_FCAS_AVAILABILITY_STATUS = pyo.Param(m.S_TRADER_FCAS_OFFERS,
-                                                    initialize=(data.get('preprocessed')
-                                                                .get('P_TRADER_FCAS_AVAILABILITY_STATUS')))
+    m.P_TRADER_FCAS_AVAILABILITY_STATUS = pyo.Param(
+        m.S_TRADER_FCAS_OFFERS, initialize=data.get('P_TRADER_FCAS_AVAILABILITY_STATUS'))
 
     # Trader type
     m.P_TRADER_TYPE = pyo.Param(m.S_TRADERS, initialize=data['P_TRADER_TYPE'], within=pyo.Any)

@@ -84,13 +84,14 @@ def run_model(user_data):
     serialized_case = construct_case(data=case_data, mode=run_mode)
 
     # Apply preprocessing to serialized casefile
-    preprocessed_case = preprocess_serialized_casefile(data=serialized_case)
+    # preprocessed_case = preprocess_serialized_casefile(data=serialized_case)
 
     # assert serialized_case['P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y'] == preprocessed_case['preprocessed']['P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y']
     # assert serialized_case['P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_X'] == preprocessed_case['preprocessed']['P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_X']
+    # assert serialized_case['P_TRADER_FCAS_AVAILABILITY_STATUS'] == preprocessed_case['preprocessed']['P_TRADER_FCAS_AVAILABILITY_STATUS']
 
     # Construct model
-    model = construct_model(data=preprocessed_case)
+    model = construct_model(data=serialized_case)
 
     # Solve model and extract solution
     model = solve_model(model=model, algorithm=algorithm)
