@@ -923,6 +923,49 @@ def get_interconnector_initial_loss_estimate(data, mode) -> dict:
             for i in interconnectors}
 
 
+def get_interconnector_loss_model_breakpoints_y(data) -> dict:
+    """Get interconnector loss model breakpoints - y-coordinate (estimated loss)"""
+
+    # Get loss model segments
+    interconnectors = get_interconnector_index(data=data)
+
+    limit = get_interconnector_loss_model_segment_attribute(data, '@Limit', float)
+    lower_limit = get_interconnector_loss_model_attribute(data, '@LossLowerLimit', float)
+    # segments = get_standardised_interconnector_loss_model_segments(data=data)
+
+    # Break point values - offset segment ID - first segment should be loss lower limit
+    values = {(i, s + 1):
+              get_interconnector_loss_estimate(data=data, interconnector_id=i, flow=v)
+              for (i, s), v in limit.items()}
+
+    # Add loss lower limit with zero index (corresponds to first segment)
+    for i in interconnectors:
+        values[(i, 0)] = get_interconnector_loss_estimate(
+            data=data, interconnector_id=i, flow=-lower_limit[i])
+
+    return values
+
+
+def get_interconnector_loss_model_breakpoints_x(data) -> dict:
+    """Get interconnector loss model breakpoints - x-coordinate (power output)"""
+
+    # Get loss model segments and lower limits for each interconnector
+    limit = get_interconnector_loss_model_segment_attribute(data, '@Limit', float)
+    # limit = data['P_INTERCONNECTOR_LOSS_SEGMENT_LIMIT']
+    lower_limit = get_interconnector_loss_model_attribute(data, '@LossLowerLimit', float)
+    # lower_limit = data['P_INTERCONNECTOR_LOSS_LOWER_LIMIT']
+
+    # Container for break point values - offset segment ID - first segment should be loss lower limit
+    values = {(interconnector_id, segment_id + 1): flow
+              for (interconnector_id, segment_id), flow in limit.items()}
+
+    # Add loss lower limit with zero index (corresponds to first segment)
+    for i in get_interconnector_index(data=data):
+        values[(i, 0)] = -lower_limit[i]
+
+    return values
+
+
 def construct_case(data, mode) -> dict:
     """
     Parse json data
@@ -1004,6 +1047,8 @@ def construct_case(data, mode) -> dict:
         'P_INTERCONNECTOR_LOSS_SEGMENT_FACTOR': get_interconnector_loss_model_segment_attribute(data, '@Factor', float),
         'P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW': get_interconnector_effective_initial_mw(data=data, mode=mode),
         'P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE': get_interconnector_initial_loss_estimate(data=data, mode=mode),
+        'P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y': get_interconnector_loss_model_breakpoints_y(data=data),
+        'P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_X': get_interconnector_loss_model_breakpoints_x(data=data),
         'P_MNSP_PRICE_BAND': get_mnsp_price_bands(data),
         'P_MNSP_QUANTITY_BAND': get_mnsp_quantity_bands(data),
         'P_MNSP_MAX_AVAILABLE': get_mnsp_quantity_band_attribute(data, '@MaxAvail', float),

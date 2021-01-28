@@ -86,6 +86,9 @@ def run_model(user_data):
     # Apply preprocessing to serialized casefile
     preprocessed_case = preprocess_serialized_casefile(data=serialized_case)
 
+    # assert serialized_case['P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y'] == preprocessed_case['preprocessed']['P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y']
+    # assert serialized_case['P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_X'] == preprocessed_case['preprocessed']['P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_X']
+
     # Construct model
     model = construct_model(data=preprocessed_case)
 

@@ -225,13 +225,13 @@ def define_parameters(m, data):
 
     # Interconnector loss model segment limit
     m.P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_X = pyo.Param(
-        m.S_INTERCONNECTOR_LOSS_MODEL_BREAKPOINTS, initialize=(data.get('preprocessed')
-                                                               .get('P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_X')))
+        m.S_INTERCONNECTOR_LOSS_MODEL_BREAKPOINTS,
+        initialize=data.get('P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_X'))
 
     # Interconnector loss model segment factor
     m.P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y = pyo.Param(
-        m.S_INTERCONNECTOR_LOSS_MODEL_BREAKPOINTS, initialize=(data.get('preprocessed')
-                                                               .get('P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y')))
+        m.S_INTERCONNECTOR_LOSS_MODEL_BREAKPOINTS,
+        initialize=data.get('P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y'))
 
     # Price bands for MNSPs
     m.P_MNSP_PRICE_BAND = pyo.Param(
