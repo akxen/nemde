@@ -9,7 +9,6 @@ from nemde.errors import CasefileOptionsError
 from nemde.core.casefile.updater import patch_casefile
 from nemde.core.model.serializers.casefile_serializer import construct_case
 from nemde.core.model.serializers.solution_serializer import get_solution
-from nemde.core.model.preprocessing import preprocess_serialized_casefile
 from nemde.core.model.constructor import construct_model
 from nemde.core.model.algorithms import solve_model
 
@@ -82,13 +81,6 @@ def run_model(user_data):
 
     # Construct serialized casefile and model object
     serialized_case = construct_case(data=case_data, mode=run_mode)
-
-    # Apply preprocessing to serialized casefile
-    # preprocessed_case = preprocess_serialized_casefile(data=serialized_case)
-
-    # assert serialized_case['P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y'] == preprocessed_case['preprocessed']['P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_Y']
-    # assert serialized_case['P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_X'] == preprocessed_case['preprocessed']['P_INTERCONNECTOR_LOSS_MODEL_BREAKPOINT_X']
-    # assert serialized_case['P_TRADER_FCAS_AVAILABILITY_STATUS'] == preprocessed_case['preprocessed']['P_TRADER_FCAS_AVAILABILITY_STATUS']
 
     # Construct model
     model = construct_model(data=serialized_case)
