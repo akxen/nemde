@@ -11,15 +11,19 @@ start = time.time()
 data = {
     'case_id': '20201101001',
     'run_mode': 'physical',
+    'options': {
+        'solution_format': 'validation'
+    }
 }
 
 data_json = json.dumps(data)
 solution = run_model(data_json)
-print(solution['PeriodSolution']['@TotalObjective'])
 
-base = load_base_case(case_id='20201101001')
-obj = float(base.get('NEMSPDCaseFile').get('NemSpdOutputs')
-            .get('PeriodSolution').get('@TotalObjective'))
-print(obj)
+# print(solution['PeriodSolution']['@TotalObjective'])
+
+# base = load_base_case(case_id='20201101001')
+# obj = float(base.get('NEMSPDCaseFile').get('NemSpdOutputs')
+#             .get('PeriodSolution').get('@TotalObjective'))
+# print(obj)
 print('Finished', time.time() - start)
 print(solution['PeriodSolution'])
