@@ -15,6 +15,12 @@ def get_case_attribute(data, attribute, func):
         return e
 
 
+def get_case_solution(data):
+    """Get case solution"""
+
+    return data['NEMSPDCaseFile']['NemSpdOutputs']['CaseSolution']
+
+
 def get_region_collection_attribute(data, region_id, attribute, func):
     """Get region collection attribute"""
 
@@ -58,6 +64,19 @@ def get_region_period_collection_attribute(data, region_id, attribute, func):
             return func(i[attribute])
 
     raise CasefileLookupError('Attribute not found:', region_id, attribute)
+
+
+def get_region_solution(data, region_id, intervention):
+    """Extract region solution"""
+
+    regions = data.get('NEMSPDCaseFile').get('NemSpdOutputs').get('RegionSolution')
+
+    for i in regions:
+        if (i['@RegionID'] == region_id) and (i['@Intervention'] == intervention):
+            return i
+
+    message = f'Solution not found: {region_id} {intervention}'
+    raise CasefileLookupError(message)
 
 
 def get_region_solution_attribute(data, region_id, attribute, func, intervention):
@@ -152,6 +171,22 @@ def get_trader_price_band_attribute(data, trader_id, trade_type, attribute, func
                     return func(j[attribute])
 
     message = f'Attribute not found: {trader_id} {trade_type} {attribute}'
+    raise CasefileLookupError(message)
+
+
+def get_trader_solution(data, trader_id, intervention):
+    """Get trader solution"""
+
+    traders = (data.get('NEMSPDCaseFile').get('NemSpdOutputs')
+               .get('TraderSolution'))
+
+    for i in traders:
+        trader_id_matches = i['@TraderID'] == trader_id
+        intervention_flag_matches = i['@Intervention'] == intervention
+        if trader_id_matches and intervention_flag_matches:
+            return i
+
+    message = f'Solution not found: {trader_id} {intervention}'
     raise CasefileLookupError(message)
 
 
@@ -255,6 +290,23 @@ def get_interconnector_loss_model_segments(data, interconnector_id) -> list:
     return output
 
 
+def get_interconnector_solution(data, interconnector_id, intervention):
+    """Extract interconnector solution"""
+
+    interconnectors = (data.get('NEMSPDCaseFile').get('NemSpdOutputs')
+                       .get('InterconnectorSolution'))
+
+    for i in interconnectors:
+        interconnector_id_matches = i['@InterconnectorID'] == interconnector_id
+        intervention_flag_matches = i['@Intervention'] == intervention
+
+        if interconnector_id_matches and intervention_flag_matches:
+            return i
+
+    message = f'Solution not found: {interconnector_id} {intervention}'
+    raise CasefileLookupError(message)
+
+
 def get_interconnector_solution_attribute(data, interconnector_id, attribute, func, intervention):
     """Get interconnector solution attribute"""
 
@@ -304,6 +356,23 @@ def get_generic_constraint_trk_collection_attribute(data, constraint_id, attribu
     return func(trk_items[attribute])
 
 
+def get_generic_constraint_solution(data, constraint_id, intervention):
+    """Get generic constraint solution attribute"""
+
+    constraints = (data.get('NEMSPDCaseFile').get('NemSpdOutputs')
+                   .get('ConstraintSolution'))
+
+    for i in constraints:
+        contraint_id_matches = i['@ConstraintID'] == constraint_id
+        intervention_flag_matches = i['@Intervention'] == intervention
+
+        if contraint_id_matches and intervention_flag_matches:
+            return i
+
+    message = f'Solution not found: {constraint_id} {intervention}'
+    raise CasefileLookupError(message)
+
+
 def get_generic_constraint_solution_attribute(data, constraint_id, attribute, func, intervention):
     """Get generic constraint solution attribute"""
 
@@ -319,6 +388,19 @@ def get_generic_constraint_solution_attribute(data, constraint_id, attribute, fu
 
     message = f'Attribute not found: {constraint_id} {attribute} {intervention}'
     raise CasefileLookupError(message)
+
+
+def get_period_solution(data, intervention):
+    """Get period solution attribute"""
+
+    period_solution = (data.get('NEMSPDCaseFile').get('NemSpdOutputs')
+                       .get('PeriodSolution'))
+
+    for i in convert_to_list(period_solution):
+        if i['@Intervention'] == intervention:
+            return i
+
+    raise CasefileLookupError('Attribute not found:', intervention)
 
 
 def get_period_solution_attribute(data, attribute, func, intervention):
