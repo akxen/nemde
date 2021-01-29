@@ -63,6 +63,10 @@ def run_model(user_data):
     ----------
     user_data : dict
         Dictionary containing user supplied information
+    
+    Returns
+    -------
+    Model solution
     """
 
     # Clean user input and set defaults
@@ -92,7 +96,7 @@ def run_model(user_data):
     model = construct_model(data=serialized_case)
     model = solve_model(model=model, algorithm=algorithm)
 
-    # Compare solution with NEMDE solution or simply run model and return solution
+    # Compare solution with NEMDE solution or run model and return solution
     if solution_format == 'standard':
         return get_solution(model=model)
 

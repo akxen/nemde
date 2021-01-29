@@ -1,8 +1,8 @@
 import json
 import time
 
-from nemde.core.run.run_model import run_model
 from nemde.io.casefile import load_base_case
+from nemde.core.model.execution import run_model
 from nemde.config.setup_variables import setup_environment_variables
 setup_environment_variables()
 
