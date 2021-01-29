@@ -63,7 +63,7 @@ def run_model(user_data):
     ----------
     user_data : dict
         Dictionary containing user supplied information
-    
+
     Returns
     -------
     Model solution

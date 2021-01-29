@@ -58,7 +58,7 @@ def create_table(schema, table):
     # Container for rows in the CSV template
     columns = []
 
-    with open(os.path.join(os.path.dirname(__file__), 'templates', f'{table}.csv'), newline='') as f:
+    with open(os.path.join(os.path.dirname(__file__), 'mysql_tables', f'{table}.csv'), newline='') as f:
         # CSV reader object
         template_writer = csv.reader(f, delimiter=',')
 

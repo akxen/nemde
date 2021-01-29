@@ -8,6 +8,9 @@ import calendar
 
 import context
 import nemde
+from nemde.io.database.mysql import initialise_tables
+from nemde.config.setup_variables import setup_environment_variables
+setup_environment_variables(online=False)
 
 
 def get_month_dispatch_intervals(year, month):
@@ -47,7 +50,7 @@ def upload_casefiles(schema, data_dir, year, month):
     """Upload casefiles for a given month to the database"""
 
     # Initialise database tables
-    nemde.core.database.mysql.initialise_tables(schema=schema)
+    initialise_tables(schema=schema)
 
     # All dispatch intervals for a given month
     intervals = get_month_dispatch_intervals(year=year, month=month)
@@ -61,7 +64,7 @@ def upload_casefiles(schema, data_dir, year, month):
 
 if __name__ == '__main__':
     # Setup env variables
-    nemde.config.setup_variables.run_setup(online=False)
+    nemde.config.setup_variables.setup_environment_variables(online=False)
 
     # Folder containing zipped NEMDE casefiles
     data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir,
