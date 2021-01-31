@@ -4,6 +4,7 @@ Serializer used to extract solution from Pyomo model and convert to JSON
 
 from nemde.core.casefile import lookup
 from nemde.io.casefile import load_base_case
+from nemde.core.model.serializers import casefile_serializer
 
 
 def get_region_total_dispatch(m, region_id, trade_type):
@@ -281,7 +282,141 @@ def get_trader_solution_comparison(model, trader_id, casefile):
             '@L6Violation', '@L60Violation', '@L5Violation', '@L5RegViolation',
             '@EnergyTarget']
 
-    return compare_solutions(dict_1=solution, dict_2=actual, keys=keys)
+    # Dispatch target and violation comparison
+    comparison = compare_solutions(dict_1=solution, dict_2=actual, keys=keys)
+
+    return comparison
+
+
+def get_marginal_price_band(price_bands, quantity_bands, output):
+    """Get marginal price band for a given trader"""
+
+    # Initialise total output
+    total_output = 0
+    for i in range(1, 11):
+        total_output += quantity_bands[i]
+
+        # Want to find first occurrence where cumulative output > dispatch target
+        band_condition = total_output > output
+
+        if band_condition:
+            # Return price corresponding to quantity band
+            return price_bands[i]
+
+    # Max price (highest price band)
+    return price_bands[10]
+
+
+def get_trader_model_marginal_price_band(model, trader_id, trade_type):
+    """Get trader model marginal price band"""
+
+    # Extract price and quantity bands from model
+    price_bands = {i: model.P_TRADER_PRICE_BAND[trader_id, trade_type, i]
+                   for i in range(1, 11)}
+
+    quantity_bands = {i: model.P_TRADER_QUANTITY_BAND[trader_id, trade_type, i]
+                      for i in range(1, 11)}
+
+    dispatch_target = model.V_TRADER_TOTAL_OFFER[trader_id, trade_type].value
+
+    # Get model marginal price band
+    marginal_price_band = get_marginal_price_band(
+        price_bands=price_bands, quantity_bands=quantity_bands, output=dispatch_target)
+
+    return marginal_price_band
+
+
+def get_trader_actual_marginal_price_band(casefile, trader_id, trade_type, intervention):
+    """Get marginal price band using NEMDE solution parameters"""
+
+    price_bands = {i: lookup.get_trader_price_band_attribute(
+        data=casefile, trader_id=trader_id, trade_type=trade_type,
+        attribute=f'@PriceBand{i}', func=float)
+        for i in range(1, 11)}
+
+    quantity_bands = {i: lookup.get_trader_quantity_band_attribute(
+        data=casefile, trader_id=trader_id, trade_type=trade_type,
+        attribute=f'@BandAvail{i}', func=float)
+        for i in range(1, 11)}
+
+    # Mapping between trade types and dispatch target keys used in trader solution
+    key_map = {
+        'R6SE': '@R6Target', 'R60S': '@R60Target', 'R5MI': '@R5Target', 'R5RE': '@R5RegTarget',
+        'L6SE': '@L6Target', 'L60S': '@L60Target', 'L5MI': '@L5Target', 'L5RE': '@L5RegTarget',
+        'ENOF': '@EnergyTarget', 'LDOF': '@EnergyTarget'}
+
+    # Key in trader solution which corresponds to trader dispatch
+    trade_type_key = key_map[trade_type]
+
+    dispatch_target = lookup.get_trader_solution_attribute(
+        data=casefile, trader_id=trader_id, attribute=trade_type_key,
+        func=float, intervention=intervention)
+
+    # Compute marginal price band
+    marginal_price_band = get_marginal_price_band(
+        price_bands=price_bands, quantity_bands=quantity_bands, output=dispatch_target)
+
+    return marginal_price_band
+
+
+def get_trader_solution_summary(model, trader_id, trade_type, casefile):
+    """
+    Compute summary statistics for each trader. Output is formatted so
+    aggregation operations can be easily performed.
+    """
+
+    # Get difference between model and actual dispatch targets
+    comparison = get_trader_solution_comparison(
+        model=model, trader_id=trader_id, casefile=casefile)
+
+    # Mapping between trade type and trader solution dispatch target key
+    trader_solution_key_map = {
+        'R6SE': '@R6Target', 'R60S': '@R60Target', 'R5MI': '@R5Target', 'R5RE': '@R5RegTarget',
+        'L6SE': '@L6Target', 'L60S': '@L60Target', 'L5MI': '@L5Target', 'L5RE': '@L5RegTarget',
+        'ENOF': '@EnergyTarget', 'LDOF': '@EnergyTarget'}
+
+    trader_solution_key = trader_solution_key_map[trade_type]
+
+    # Get trader region
+    region_id = lookup.get_trader_period_collection_attribute(
+        data=casefile, trader_id=trader_id, attribute='@RegionID', func=str)
+
+    # Get intervention status
+    intervention = model.P_INTERVENTION_STATUS.value
+
+    # Get region solution from NEMDE casefile
+    actual_region_solution = lookup.get_region_solution(
+        data=casefile, region_id=region_id, intervention=intervention)
+
+    # Mapping between trade type and region solution price key
+    region_solution_key_map = {
+        'R6SE': '@R6Price', 'R60S': '@R60Price', 'R5MI': '@R5Price', 'R5RE': '@R5RegPrice',
+        'L6SE': '@L6Price', 'L60S': '@L60Price', 'L5MI': '@L5Price', 'L5RE': '@L5RegPrice',
+        'ENOF': '@EnergyPrice', 'LDOF': '@EnergyPrice'}
+
+    region_solution_key = region_solution_key_map[trade_type]
+
+    model_marginal_price_band = get_trader_model_marginal_price_band(
+        model=model, trader_id=trader_id, trade_type=trade_type)
+
+    actual_marginal_price_band = get_trader_actual_marginal_price_band(
+        casefile=casefile, trader_id=trader_id, trade_type=trade_type,
+        intervention=intervention)
+
+    # Construct output
+    out = {**comparison[trader_solution_key],
+           **{'trader_id': trader_id,
+              'trade_type': trade_type,
+              'intervention': intervention,
+              'model_marginal_price_band': model_marginal_price_band,
+              'actual_marginal_price_band': actual_marginal_price_band,
+              'actual_region_price': float(actual_region_solution[region_solution_key]),
+              'region_id': region_id,
+              'case_id': model.P_CASE_ID.value
+              }
+           }
+
+    return out
 
 
 def get_region_solution(model, region_id):
@@ -546,6 +681,11 @@ def get_solution_comparison(model):
         model=model, constraint_id=i, casefile=casefile)
         for i in model.S_GENERIC_CONSTRAINTS]
 
+    # Compute trader summary statistics used for aggregate analyses
+    trader_summary = [get_trader_solution_summary(
+        model=model, trader_id=i, trade_type=j, casefile=casefile)
+        for i, j in model.S_TRADER_OFFERS]
+
     output = {
         'CaseSolution': get_case_solution_comparison(model=model, casefile=casefile),
         'PeriodSolution': get_period_solution_comparison(model=model, casefile=casefile),
@@ -553,6 +693,9 @@ def get_solution_comparison(model):
         'TraderSolution': traders,
         'InterconnectorSolution': interconnectors,
         'ConstraintSolution': constraints,
+        'summary': {
+            'traders': trader_summary
+        }
     }
 
     return output
