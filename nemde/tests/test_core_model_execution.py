@@ -55,7 +55,7 @@ def get_casefile_ids(year, month, n):
     return population[:n]
 
 
-@pytest.fixture(scope='module', params=get_casefile_ids(year=2020, month=11, n=2))
+@pytest.fixture(scope='module', params=get_casefile_ids(year=2020, month=11, n=3))
 def case_id(request):
     return request.param
 
@@ -87,7 +87,7 @@ def test_run_model():
     assert abs(relative_difference) <= 1e-3
 
 
-def test_run_model_sample(testrun_uid, case_id):
+def test_run_model_validation(testrun_uid, case_id):
     """Run model for a sample of case IDs"""
 
     user_data = {
@@ -98,7 +98,7 @@ def test_run_model_sample(testrun_uid, case_id):
         }
     }
 
-    # Run model which returns solution
+    # Run model and return solution
     user_data_json = json.dumps(user_data)
     solution = run_model(user_data=user_data_json)
 
@@ -114,7 +114,8 @@ def test_run_model_sample(testrun_uid, case_id):
     mysql.post_entry(schema=os.environ['MYSQL_SCHEMA'], table='results', entry=entry)
 
     # Compute relative difference
-    objective = solution['PeriodSolution']['@TotalObjective']
-    relative_difference = objective['abs_difference'] / abs(objective['actual'])
+    objective = [i for i in solution['PeriodSolution'] if i['key'] == '@TotalObjective'][0]
+    absolute_difference = abs(objective['model'] - objective['actual'])
+    relative_difference = absolute_difference / abs(objective['actual'])
 
     assert relative_difference <= 0.001

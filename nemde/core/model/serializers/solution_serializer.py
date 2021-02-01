@@ -2,6 +2,8 @@
 Serializer used to extract solution from Pyomo model and convert to JSON
 """
 
+import itertools
+
 from nemde.core.casefile import lookup
 from nemde.io.casefile import load_base_case
 from nemde.core.model.serializers import casefile_serializer
@@ -188,20 +190,36 @@ def compare_solutions(dict_1, dict_2, keys):
     return out
 
 
+def compare_solutions_list(dict_1, dict_2, keys, info={}):
+    """Compare solutions returning a list of dictionaries for each key"""
+
+    return [{**info, **{'key': k, 'model': dict_1[k], 'actual': float(dict_2[k])}} for k in keys]
+
+
 def get_constraint_solution_comparison(model, constraint_id, casefile):
     """Validation intervention solution"""
+
+    # Intervention status
+    intervention = model.P_INTERVENTION_STATUS.value
 
     # Model solution
     solution = get_constraint_solution(model=model, constraint_id=constraint_id)
 
     # NEMDE solution
     actual = lookup.get_generic_constraint_solution(
-        data=casefile, constraint_id=constraint_id, intervention=model.P_INTERVENTION_STATUS.value)
+        data=casefile, constraint_id=constraint_id, intervention=intervention)
 
     # Keys to be compared
     keys = ['@RHS', '@Deficit']
 
-    return compare_solutions(dict_1=solution, dict_2=actual, keys=keys)
+    # Additional information to append to each entry
+    info = {
+        'case_id': model.P_CASE_ID.value,
+        'intervention': intervention,
+        'constraint_id': constraint_id
+    }
+
+    return compare_solutions_list(dict_1=solution, dict_2=actual, keys=keys, info=info)
 
 
 def get_trader_solution(model, trader_id):
@@ -283,7 +301,13 @@ def get_trader_solution_comparison(model, trader_id, casefile):
             '@EnergyTarget']
 
     # Dispatch target and violation comparison
-    comparison = compare_solutions(dict_1=solution, dict_2=actual, keys=keys)
+    info = {
+        'case_id': model.P_CASE_ID.value,
+        'intervention': model.P_INTERVENTION_STATUS.value,
+        'trader_id': trader_id
+    }
+    comparison = compare_solutions_list(
+        dict_1=solution, dict_2=actual, keys=keys, info=info)
 
     return comparison
 
@@ -377,16 +401,18 @@ def get_trader_solution_summary(model, trader_id, trade_type, casefile):
 
     trader_solution_key = trader_solution_key_map[trade_type]
 
+    # Model and actual dispatch
+    model_dispatch = [i['model']
+                      for i in comparison if i['key'] == trader_solution_key][0]
+    actual_dispatch = [i['actual']
+                       for i in comparison if i['key'] == trader_solution_key][0]
+
     # Get trader region
     region_id = lookup.get_trader_period_collection_attribute(
         data=casefile, trader_id=trader_id, attribute='@RegionID', func=str)
 
     # Get intervention status
     intervention = model.P_INTERVENTION_STATUS.value
-
-    # Get region solution from NEMDE casefile
-    actual_region_solution = lookup.get_region_solution(
-        data=casefile, region_id=region_id, intervention=intervention)
 
     # Mapping between trade type and region solution price key
     region_solution_key_map = {
@@ -396,6 +422,11 @@ def get_trader_solution_summary(model, trader_id, trade_type, casefile):
 
     region_solution_key = region_solution_key_map[trade_type]
 
+    # Get actual region price (from NEMDE solution)
+    actual_region_price = lookup.get_region_solution_attribute(
+        data=casefile, region_id=region_id, attribute=region_solution_key,
+        intervention=intervention, func=float)
+
     model_marginal_price_band = get_trader_model_marginal_price_band(
         model=model, trader_id=trader_id, trade_type=trade_type)
 
@@ -404,17 +435,18 @@ def get_trader_solution_summary(model, trader_id, trade_type, casefile):
         intervention=intervention)
 
     # Construct output
-    out = {**comparison[trader_solution_key],
-           **{'trader_id': trader_id,
-              'trade_type': trade_type,
-              'intervention': intervention,
-              'model_marginal_price_band': model_marginal_price_band,
-              'actual_marginal_price_band': actual_marginal_price_band,
-              'actual_region_price': float(actual_region_solution[region_solution_key]),
-              'region_id': region_id,
-              'case_id': model.P_CASE_ID.value
-              }
-           }
+    out = {
+        'case_id': model.P_CASE_ID.value,
+        'intervention': intervention,
+        'trader_id': trader_id,
+        'trade_type': trade_type,
+        'model': model_dispatch,
+        'actual': actual_dispatch,
+        'model_marginal_price_band': model_marginal_price_band,
+        'actual_marginal_price_band': actual_marginal_price_band,
+        'actual_region_price': actual_region_price,
+        'region_id': region_id
+    }
 
     return out
 
@@ -472,21 +504,31 @@ def get_region_solution(model, region_id):
 def get_region_solution_comparison(model, region_id, casefile):
     """Compare region solution with actual NEMDE region solution"""
 
+    # Intervention status
+    intervention = model.P_INTERVENTION_STATUS.value
+
     # Model solution
     solution = get_region_solution(model=model, region_id=region_id)
 
     # NEMDE solution
     actual = lookup.get_region_solution(
-        data=casefile, region_id=region_id, intervention=model.P_INTERVENTION_STATUS.value)
+        data=casefile, region_id=region_id, intervention=intervention)
 
     # Keys to be compared
     keys = ["@DispatchedGeneration", "@DispatchedLoad", "@FixedDemand",
             "@NetExport", "@SurplusGeneration",
-            "@R6Dispatch", "@R60Dispatch", "@R5Dispatch", "@R5RegDispatch"
+            "@R6Dispatch", "@R60Dispatch", "@R5Dispatch", "@R5RegDispatch",
             "@L6Dispatch", "@L60Dispatch", "@L5Dispatch", "@L5RegDispatch",
             "@ClearedDemand"]
 
-    return compare_solutions(dict_1=solution, dict_2=actual, keys=keys)
+    # Additional info to append to each record
+    info = {
+        'region_id': region_id,
+        'intervention': intervention,
+        'case_id': model.P_CASE_ID.value
+    }
+
+    return compare_solutions_list(dict_1=solution, dict_2=actual, keys=keys, info=info)
 
 
 def get_interconnector_solution(model, interconnector_id):
@@ -528,7 +570,14 @@ def get_interconnector_solution_comparison(model, interconnector_id, casefile):
     # Keys to be compared
     keys = ["@Flow", "@Losses", "@Deficit"]
 
-    return compare_solutions(dict_1=solution, dict_2=actual, keys=keys)
+    # Additional info to include for each entry
+    info = {
+        'interconnector_id': interconnector_id,
+        'case_id': model.P_CASE_ID.value,
+        'intervention': model.P_INTERVENTION_STATUS.value
+    }
+
+    return compare_solutions_list(dict_1=solution, dict_2=actual, keys=keys, info=info)
 
 
 def get_case_solution(model):
@@ -579,7 +628,9 @@ def get_case_solution_comparison(model, casefile):
             "@TotalRampRateViolation", "@TotalUnitMWCapacityViolation",
             "@TotalFastStartViolation", "@TotalUIGFViolation"]
 
-    return compare_solutions(dict_1=solution, dict_2=actual, keys=keys)
+    # Additional info to append to each entry
+
+    return compare_solutions_list(dict_1=solution, dict_2=actual, keys=keys)
 
 
 def get_period_solution(model):
@@ -627,12 +678,15 @@ def get_period_solution_comparison(model, casefile):
     Compare period solution obtained from model with NEMDE period solution
     """
 
+    # Intervention status
+    intervention = model.P_INTERVENTION_STATUS.value
+
     # Model solution
     solution = get_period_solution(model=model)
 
     # NEMDE solution
     actual = lookup.get_period_solution(
-        data=casefile, intervention=model.P_INTERVENTION_STATUS.value)
+        data=casefile, intervention=intervention)
 
     # Keys to be compared
     keys = ["@TotalObjective", "@TotalInterconnectorViolation",
@@ -642,7 +696,10 @@ def get_period_solution_comparison(model, casefile):
             "@TotalMNSPCapacityViolation",
             "@TotalUIGFViolation"]
 
-    return compare_solutions(dict_1=solution, dict_2=actual, keys=keys)
+    # Additional info to append to each entry
+    info = {'case_id': model.P_CASE_ID.value, 'intervention': intervention}
+
+    return compare_solutions_list(dict_1=solution, dict_2=actual, keys=keys, info=info)
 
 
 def get_solution(model):
@@ -687,12 +744,12 @@ def get_solution_comparison(model):
         for i, j in model.S_TRADER_OFFERS]
 
     output = {
-        'CaseSolution': get_case_solution_comparison(model=model, casefile=casefile),
+        # 'CaseSolution': get_case_solution_comparison(model=model, casefile=casefile),
         'PeriodSolution': get_period_solution_comparison(model=model, casefile=casefile),
-        'RegionSolution': regions,
-        'TraderSolution': traders,
-        'InterconnectorSolution': interconnectors,
-        'ConstraintSolution': constraints,
+        'RegionSolution': [i for i in itertools.chain.from_iterable(regions)],
+        'TraderSolution': [i for i in itertools.chain.from_iterable(traders)],
+        'InterconnectorSolution': [i for i in itertools.chain.from_iterable(interconnectors)],
+        'ConstraintSolution': [i for i in itertools.chain.from_iterable(constraints)],
         'summary': {
             'traders': trader_summary
         }
