@@ -136,8 +136,19 @@ def post_entry(schema, table, entry):
     close_connection(conn, cur)
 
 
-def get_validation_results(schema, table, run_id):
-    """Extract results for a given validation test run"""
+def get_casefile_validation_results(schema, table, run_id, case_id):
+    """Extract results for a given casefile for a given validation test run"""
+
+    conn, cur = connect_to_database()
+
+    sql = f"SELECT * FROM {schema}.{table} WHERE run_id='{run_id}' AND case_id='{case_id}'"
+    cur.execute(sql)
+
+    return cur.fetchall()[0]
+
+
+def get_test_run_validation_results(schema, table, run_id):
+    """Extract all results for a given validation test run"""
 
     conn, cur = connect_to_database()
 

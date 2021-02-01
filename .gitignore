@@ -5,4 +5,3 @@ data/MMSDM_2019_10/*
 *.ipynb_checkpoints/*
 *.loaded
 *.json
-validation/*

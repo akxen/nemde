@@ -6,6 +6,7 @@ import itertools
 
 import pandas as pd
 
+import context
 from nemde.io.database.mysql import get_latest_run_id
 from nemde.io.database.mysql import get_validation_results
 from nemde.config.setup_variables import setup_environment_variables

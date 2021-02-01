@@ -1,1 +1,0 @@
-pytest --ignore=nemde2/

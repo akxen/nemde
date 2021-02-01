@@ -55,7 +55,7 @@ def get_casefile_ids(year, month, n):
     return population[:n]
 
 
-@pytest.fixture(scope='module', params=get_casefile_ids(year=2020, month=11, n=3))
+@pytest.fixture(scope='module', params=get_casefile_ids(year=2020, month=11, n=100))
 def case_id(request):
     return request.param
 
