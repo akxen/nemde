@@ -312,16 +312,21 @@ def get_trader_solution_comparison(model, trader_id, casefile):
     return comparison
 
 
-def get_marginal_price_band(price_bands, quantity_bands, output):
-    """Get marginal price band for a given trader"""
+def get_price_band(price_bands, quantity_bands, output, mode):
+    """Get current or marginal price band for a given trader"""
 
     # Initialise total output
     total_output = 0
     for i in range(1, 11):
         total_output += quantity_bands[i]
 
-        # Want to find first occurrence where cumulative output > dispatch target
-        band_condition = total_output > output
+        if mode == 'marginal':
+            # Want to find first occurrence where cumulative output > dispatch target
+            band_condition = total_output > output
+        elif mode == 'current':
+            band_condition = total_output >= output
+        else:
+            raise ValueError("'mode' must be either 'marginal' or 'current'")
 
         if band_condition:
             # Return price corresponding to quantity band
@@ -331,7 +336,7 @@ def get_marginal_price_band(price_bands, quantity_bands, output):
     return price_bands[10]
 
 
-def get_trader_model_marginal_price_band(model, trader_id, trade_type):
+def get_trader_model_price_band(model, trader_id, trade_type, mode):
     """Get trader model marginal price band"""
 
     # Extract price and quantity bands from model
@@ -344,14 +349,15 @@ def get_trader_model_marginal_price_band(model, trader_id, trade_type):
     dispatch_target = model.V_TRADER_TOTAL_OFFER[trader_id, trade_type].value
 
     # Get model marginal price band
-    marginal_price_band = get_marginal_price_band(
-        price_bands=price_bands, quantity_bands=quantity_bands, output=dispatch_target)
+    price_band = get_price_band(
+        price_bands=price_bands, quantity_bands=quantity_bands, 
+        output=dispatch_target, mode=mode)
 
-    return marginal_price_band
+    return price_band
 
 
-def get_trader_actual_marginal_price_band(casefile, trader_id, trade_type, intervention):
-    """Get marginal price band using NEMDE solution parameters"""
+def get_trader_actual_price_band(casefile, trader_id, trade_type, intervention, mode):
+    """Get current or marginal price band using NEMDE solution parameters"""
 
     price_bands = {i: lookup.get_trader_price_band_attribute(
         data=casefile, trader_id=trader_id, trade_type=trade_type,
@@ -377,10 +383,11 @@ def get_trader_actual_marginal_price_band(casefile, trader_id, trade_type, inter
         func=float, intervention=intervention)
 
     # Compute marginal price band
-    marginal_price_band = get_marginal_price_band(
-        price_bands=price_bands, quantity_bands=quantity_bands, output=dispatch_target)
+    price_band = get_price_band(
+        price_bands=price_bands, quantity_bands=quantity_bands,
+        output=dispatch_target, mode=mode)
 
-    return marginal_price_band
+    return price_band
 
 
 def get_trader_solution_summary(model, trader_id, trade_type, casefile):
@@ -427,12 +434,20 @@ def get_trader_solution_summary(model, trader_id, trade_type, casefile):
         data=casefile, region_id=region_id, attribute=region_solution_key,
         intervention=intervention, func=float)
 
-    model_marginal_price_band = get_trader_model_marginal_price_band(
-        model=model, trader_id=trader_id, trade_type=trade_type)
+    model_marginal_price_band = get_trader_model_price_band(
+        model=model, trader_id=trader_id, trade_type=trade_type, mode='marginal')
 
-    actual_marginal_price_band = get_trader_actual_marginal_price_band(
+    model_current_price_band = get_trader_model_price_band(
+        model=model, trader_id=trader_id, trade_type=trade_type, mode='current')
+
+    actual_marginal_price_band = get_trader_actual_price_band(
         casefile=casefile, trader_id=trader_id, trade_type=trade_type,
-        intervention=intervention)
+        intervention=intervention, mode='marginal')
+
+    actual_current_price_band = get_trader_actual_price_band(
+        casefile=casefile, trader_id=trader_id, trade_type=trade_type,
+        intervention=intervention, mode='current')
+
 
     # Construct output
     out = {
@@ -443,7 +458,9 @@ def get_trader_solution_summary(model, trader_id, trade_type, casefile):
         'model': model_dispatch,
         'actual': actual_dispatch,
         'model_marginal_price_band': model_marginal_price_band,
+        'model_current_price_band': model_current_price_band,
         'actual_marginal_price_band': actual_marginal_price_band,
+        'actual_current_price_band': actual_current_price_band,
         'actual_region_price': actual_region_price,
         'region_id': region_id
     }

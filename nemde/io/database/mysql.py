@@ -134,3 +134,27 @@ def post_entry(schema, table, entry):
 
     # Close database connection
     close_connection(conn, cur)
+
+
+def get_validation_results(schema, table, run_id):
+    """Extract results for a given validation test run"""
+
+    conn, cur = connect_to_database()
+
+    sql = f"SELECT * FROM {schema}.{table} WHERE run_id='{run_id}'"
+    cur.execute(sql)
+
+    return cur.fetchall()
+
+
+def get_latest_run_id(schema, table):
+    """Get most recent validation run ID"""
+
+    conn, cur = connect_to_database()
+    sql = f"SELECT run_id FROM {schema}.{table} ORDER BY row_id DESC LIMIT 1"
+    cur.execute(sql)
+
+    # Results
+    results = cur.fetchall()
+
+    return results[0]['run_id']
