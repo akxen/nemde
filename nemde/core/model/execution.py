@@ -95,7 +95,7 @@ def run_model(user_data):
 
     # Construct and solve model
     model = construct_model(data=serialized_case)
-    model = solve_model_fast_start(model=model, algorithm=algorithm)
+    model = solve_model(model=model, algorithm=algorithm)
 
     # Compare solution with NEMDE solution or run model and return solution
     if solution_format == 'standard':
