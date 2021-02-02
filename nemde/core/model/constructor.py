@@ -176,9 +176,9 @@ def define_parameters(m, data):
     m.P_TRADER_MIN_LOADING_MW = pyo.Param(
         m.S_TRADER_FAST_START, initialize=data['P_TRADER_MIN_LOADING_MW'])
     m.P_TRADER_CURRENT_MODE = pyo.Param(
-        m.S_TRADER_FAST_START, initialize=data['P_TRADER_CURRENT_MODE'], within=pyo.Any)
+        m.S_TRADER_FAST_START, initialize=data['P_TRADER_CURRENT_MODE'], within=pyo.Any, mutable=True)
     m.P_TRADER_CURRENT_MODE_TIME = pyo.Param(
-        m.S_TRADER_FAST_START, initialize=data['P_TRADER_CURRENT_MODE_TIME'])
+        m.S_TRADER_FAST_START, initialize=data['P_TRADER_CURRENT_MODE_TIME'], mutable=True)
     m.P_TRADER_T1 = pyo.Param(m.S_TRADER_FAST_START,
                               initialize=data['P_TRADER_T1'])
     m.P_TRADER_T2 = pyo.Param(m.S_TRADER_FAST_START,
@@ -1754,7 +1754,7 @@ def define_unit_constraints(m):
             ramp_limit = m.P_TRADER_PERIOD_RAMP_UP_RATE[(i, j)]
 
         # Unit on fixed startup profile. T2 ramp rate applies while in T2, then SCADA ramp rate for rest of interval
-        if (i in m.P_TRADER_CURRENT_MODE.keys()) and (m.P_TRADER_CURRENT_MODE[i] == '1'):
+        if (i in m.P_TRADER_CURRENT_MODE.keys()) and (m.P_TRADER_CURRENT_MODE[i].value == '1'):
             # Output fixed to 0 for this amount of time over dispatch interval
             t1_time_remaining = m.P_TRADER_T1[i] - \
                 m.P_TRADER_CURRENT_MODE_TIME[i]
@@ -1785,7 +1785,7 @@ def define_unit_constraints(m):
 
             return m.V_TRADER_TOTAL_OFFER[i, j] <= initial_mw + ramp_up_capability + m.V_CV_TRADER_RAMP_UP[i]
 
-        elif (i in m.P_TRADER_CURRENT_MODE.keys()) and (m.P_TRADER_CURRENT_MODE[i] == '2'):
+        elif (i in m.P_TRADER_CURRENT_MODE.keys()) and (m.P_TRADER_CURRENT_MODE[i].value == '2'):
             # Amount of time remaining in T2
             t2_time_remaining = m.P_TRADER_T2[i] - \
                 m.P_TRADER_CURRENT_MODE_TIME[i]
@@ -2874,8 +2874,8 @@ def define_fast_start_unit_inflexibility_constraints(m):
 
         # Get effective mode and time at end of dispatch interval
         effective_mode, effective_time = get_inflexibility_profile_effective_mode_and_time(
-            m.P_TRADER_CURRENT_MODE[i],
-            m.P_TRADER_CURRENT_MODE_TIME[i],
+            m.P_TRADER_CURRENT_MODE[i].value,
+            m.P_TRADER_CURRENT_MODE_TIME[i].value,
             m.P_TRADER_T1[i],
             m.P_TRADER_T2[i],
             m.P_TRADER_T3[i],
