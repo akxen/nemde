@@ -9,10 +9,8 @@ setup_environment_variables()
 
 start = time.time()
 
-
-case_id = '20201129139'
 data = {
-    'case_id': case_id,
+    'case_id': '20201101001',
     'run_mode': 'physical',
     'options': {
         'solution_format': 'validation'
@@ -22,12 +20,11 @@ data = {
 data_json = json.dumps(data)
 solution = run_model(data_json)
 
-objective = [i for i in solution['PeriodSolution'] if i['key'] == '@TotalObjective'][0]
+# print(solution['PeriodSolution']['@TotalObjective'])
 
+# base = load_base_case(case_id='20201101001')
 # obj = float(base.get('NEMSPDCaseFile').get('NemSpdOutputs')
-# .get('PeriodSolution').get('@TotalObjective'))
-
-print('Objective', objective)
-print('Abs. difference', abs(objective['model'] - objective['actual']))
+#             .get('PeriodSolution').get('@TotalObjective'))
+# print(obj)
 print('Finished', time.time() - start)
-# print(solution['summary'])
+print(solution['summary'])

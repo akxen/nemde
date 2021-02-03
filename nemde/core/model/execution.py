@@ -12,7 +12,6 @@ from nemde.core.model.serializers.solution_serializer import get_solution
 from nemde.core.model.serializers.solution_serializer import get_solution_comparison
 from nemde.core.model.constructor import construct_model
 from nemde.core.model.algorithms import solve_model
-from nemde.core.model.algorithms import solve_model_fast_start
 
 
 def clean_user_input(user_data):
