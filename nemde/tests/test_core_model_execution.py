@@ -19,7 +19,7 @@ setup_environment_variables(online=False)
 logger = logging.getLogger(__name__)
 
 
-def get_casefile_ids(year, month, n):
+def get_randomised_casefile_ids(year, month, n):
     """
     Get casefile IDs
 
@@ -55,7 +55,18 @@ def get_casefile_ids(year, month, n):
     return population[:n]
 
 
-@pytest.fixture(scope='module', params=get_casefile_ids(year=2020, month=11, n=20))
+def get_casefile_ids():
+    """Run tests for a given set of casefiles"""
+
+    case_ids = ['20201101017', '20201101126', '20201101127', '20201101134',
+                '20201101135', '20201101161', '20201101164', '20201101165',
+                '20201101169']
+
+    return case_ids
+
+
+# @pytest.fixture(scope='module', params=get_randomised_casefile_ids(year=2020, month=11, n=20))
+@pytest.fixture(scope='module', params=get_casefile_ids())
 def case_id(request):
     return request.param
 
@@ -114,7 +125,8 @@ def test_run_model_validation(testrun_uid, case_id):
     mysql.post_entry(schema=os.environ['MYSQL_SCHEMA'], table='results', entry=entry)
 
     # Compute relative difference
-    objective = [i for i in solution['PeriodSolution'] if i['key'] == '@TotalObjective'][0]
+    objective = [i for i in solution['PeriodSolution']
+                 if i['key'] == '@TotalObjective'][0]
     absolute_difference = abs(objective['model'] - objective['actual'])
     relative_difference = absolute_difference / abs(objective['actual'])
 

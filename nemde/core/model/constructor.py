@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 import pyomo.environ as pyo
 
+from nemde.core.model.utils import fast_start
 # import nemde.core.utils.fcas
 # import nemde.core.data.data
 # import nemde.core.data.lookup
@@ -1753,38 +1754,47 @@ def define_unit_constraints(m):
             return pyo.Constraint.Skip
 
         # Ramp rate TODO: check if second condition is necessary
-        if (i in m.P_TRADER_SCADA_RAMP_UP_RATE.keys()) and (m.P_TRADER_SCADA_RAMP_UP_RATE[i] > 0):
-            ramp_limit = min([m.P_TRADER_SCADA_RAMP_UP_RATE[i],
-                              m.P_TRADER_PERIOD_RAMP_UP_RATE[(i, j)]])
-        else:
-            ramp_limit = m.P_TRADER_PERIOD_RAMP_UP_RATE[(i, j)]
+        # if (i in m.P_TRADER_SCADA_RAMP_UP_RATE.keys()) and (m.P_TRADER_SCADA_RAMP_UP_RATE[i] > 0):
+        #     ramp_limit = min([m.P_TRADER_SCADA_RAMP_UP_RATE[i],
+        #                       m.P_TRADER_PERIOD_RAMP_UP_RATE[(i, j)]])
+        # else:
+        #     ramp_limit = m.P_TRADER_PERIOD_RAMP_UP_RATE[(i, j)]
+
+        ramp_limit = m.P_TRADER_EFFECTIVE_RAMP_UP_RATE[i]
 
         # Unit on fixed startup profile. T2 ramp rate applies while in T2, then SCADA ramp rate for rest of interval
         if (i in m.P_TRADER_CURRENT_MODE.keys()) and (m.P_TRADER_CURRENT_MODE[i] == '1'):
             # Output fixed to 0 for this amount of time over dispatch interval
-            t1_time_remaining = m.P_TRADER_T1[i] - \
-                m.P_TRADER_CURRENT_MODE_TIME[i]
+            # t1_time_remaining = m.P_TRADER_T1[i] - \
+            #     m.P_TRADER_CURRENT_MODE_TIME[i]
 
-            # Unit follows fixed startup trajectory
-            t2_time = max(0, min(m.P_TRADER_T2[i], 5 - t1_time_remaining))
+            # # Unit follows fixed startup trajectory
+            # t2_time = max(0, min(m.P_TRADER_T2[i], 5 - t1_time_remaining))
 
-            # Time unit above min loading
-            min_loading_time = max([0, 5 - t1_time_remaining - t2_time])
+            # # Time unit above min loading
+            # min_loading_time = max([0, 5 - t1_time_remaining - t2_time])
 
-            # If T2=0 then unit immediately operates at min loading after synchronisation complete
-            if m.P_TRADER_T2[i] == 0:
-                t2_ramp_capability = m.P_TRADER_MIN_LOADING_MW[i]
+            # # If T2=0 then unit immediately operates at min loading after synchronisation complete
+            # if m.P_TRADER_T2[i] == 0:
+            #     t2_ramp_capability = m.P_TRADER_MIN_LOADING_MW[i]
 
-            # Else unit must follow fixed startup trajectory
-            else:
-                t2_ramp_capability = (
-                    m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T2[i]) * t2_time
+            # # Else unit must follow fixed startup trajectory
+            # else:
+            #     t2_ramp_capability = (
+            #         m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T2[i]) * t2_time
 
-            # Ramping capability over T3
-            t3_ramp_capability = (ramp_limit / 60) * min_loading_time
+            # # Ramping capability over T3
+            # t3_ramp_capability = (ramp_limit / 60) * min_loading_time
 
-            # Total ramp up capability
-            ramp_up_capability = t2_ramp_capability + t3_ramp_capability
+            # # Total ramp up capability
+            # ramp_up_capability = t2_ramp_capability + t3_ramp_capability
+            ramp_up_capability = fast_start.get_mode_one_ramping_capability(
+                t1=m.P_TRADER_T1[i],
+                t2=m.P_TRADER_T2[i],
+                min_loading=m.P_TRADER_MIN_LOADING_MW[i],
+                current_mode_time=m.P_TRADER_CURRENT_MODE_TIME[i],
+                effective_ramp_rate=ramp_limit
+            )
 
             # InitialMW = 0 if CurrentMode is T1
             initial_mw = 0
