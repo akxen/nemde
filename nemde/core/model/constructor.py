@@ -1737,8 +1737,7 @@ def define_generic_constraints(m):
             raise Exception(f'Unexpected constraint type: {m.P_GC_TYPE[c]}')
 
     # Generic constraints
-    m.C_GENERIC_CONSTRAINT = pyo.Constraint(
-        m.S_GENERIC_CONSTRAINTS, rule=generic_constraint_rule)
+    m.C_GENERIC_CONSTRAINT = pyo.Constraint(m.S_GENERIC_CONSTRAINTS, rule=generic_constraint_rule)
 
     return m
 
@@ -1753,81 +1752,22 @@ def define_unit_constraints(m):
         if (j != 'ENOF') and (j != 'LDOF'):
             return pyo.Constraint.Skip
 
-        # Ramp rate TODO: check if second condition is necessary
-        # if (i in m.P_TRADER_SCADA_RAMP_UP_RATE.keys()) and (m.P_TRADER_SCADA_RAMP_UP_RATE[i] > 0):
-        #     ramp_limit = min([m.P_TRADER_SCADA_RAMP_UP_RATE[i],
-        #                       m.P_TRADER_PERIOD_RAMP_UP_RATE[(i, j)]])
-        # else:
-        #     ramp_limit = m.P_TRADER_PERIOD_RAMP_UP_RATE[(i, j)]
-
-        ramp_limit = m.P_TRADER_EFFECTIVE_RAMP_UP_RATE[i]
-
-        # Unit on fixed startup profile. T2 ramp rate applies while in T2, then SCADA ramp rate for rest of interval
+        # Unit on fixed startup profile. T2 ramp rate applies while in T2, then
+        # SCADA ramp rate for rest of interval
         if (i in m.P_TRADER_CURRENT_MODE.keys()) and (m.P_TRADER_CURRENT_MODE[i] == '1'):
-            # Output fixed to 0 for this amount of time over dispatch interval
-            # t1_time_remaining = m.P_TRADER_T1[i] - \
-            #     m.P_TRADER_CURRENT_MODE_TIME[i]
-
-            # # Unit follows fixed startup trajectory
-            # t2_time = max(0, min(m.P_TRADER_T2[i], 5 - t1_time_remaining))
-
-            # # Time unit above min loading
-            # min_loading_time = max([0, 5 - t1_time_remaining - t2_time])
-
-            # # If T2=0 then unit immediately operates at min loading after synchronisation complete
-            # if m.P_TRADER_T2[i] == 0:
-            #     t2_ramp_capability = m.P_TRADER_MIN_LOADING_MW[i]
-
-            # # Else unit must follow fixed startup trajectory
-            # else:
-            #     t2_ramp_capability = (
-            #         m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T2[i]) * t2_time
-
-            # # Ramping capability over T3
-            # t3_ramp_capability = (ramp_limit / 60) * min_loading_time
-
-            # # Total ramp up capability
-            # ramp_up_capability = t2_ramp_capability + t3_ramp_capability
+            # Total ramp up capability when unit initially in mode 1
             ramp_up_capability = fast_start.get_mode_one_ramping_capability(
                 t1=m.P_TRADER_T1[i],
                 t2=m.P_TRADER_T2[i],
                 min_loading=m.P_TRADER_MIN_LOADING_MW[i],
                 current_mode_time=m.P_TRADER_CURRENT_MODE_TIME[i],
-                effective_ramp_rate=ramp_limit
+                effective_ramp_rate=m.P_TRADER_EFFECTIVE_RAMP_UP_RATE[i]
             )
 
-            # InitialMW = 0 if CurrentMode is T1
-            initial_mw = 0
-
-            return m.V_TRADER_TOTAL_OFFER[i, j] <= initial_mw + ramp_up_capability + m.V_CV_TRADER_RAMP_UP[i]
+            # Note: InitialMW = 0 if CurrentMode is T1 (unit is synchronising)
+            return m.V_TRADER_TOTAL_OFFER[i, j] <= ramp_up_capability + m.V_CV_TRADER_RAMP_UP[i]
 
         elif (i in m.P_TRADER_CURRENT_MODE.keys()) and (m.P_TRADER_CURRENT_MODE[i] == '2'):
-            # # Amount of time remaining in T2
-            # t2_time_remaining = m.P_TRADER_T2[i] - \
-            #     m.P_TRADER_CURRENT_MODE_TIME[i]
-
-            # # Time unit is above min loading level over the dispatch interval
-            # min_loading_time = max([0, 5 - t2_time_remaining])
-
-            # # If T2=0 then unit immediately operates at min loading after synchronisation complete
-            # if m.P_TRADER_T2[i] == 0:
-            #     t2_ramp_capability = m.P_TRADER_MIN_LOADING_MW[i]
-
-            # # Else unit must follow fixed startup trajectory
-            # else:
-            #     t2_ramp_capability = (
-            #         m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T2[i]) * t2_time_remaining
-
-            # # Ramping capability over T3
-            # t3_ramp_capability = (ramp_limit / 60) * min_loading_time
-
-            # # Total ramp up capability
-            # ramp_up_capability = t2_ramp_capability + t3_ramp_capability
-
-            # # InitialMW based on anticipated startup profile MW (may differ from actual InitialMW recorded by SCADA)
-            # initial_mw = (
-            #     m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T2[i]) * m.P_TRADER_CURRENT_MODE_TIME[i]
-
             # Initial MW and ramping capability if in mode 2
             initial_mw = fast_start.get_mode_two_initial_mw(
                 t2=m.P_TRADER_T2[i],
@@ -1840,12 +1780,16 @@ def define_unit_constraints(m):
                 t2=m.P_TRADER_T2[i],
                 min_loading=m.P_TRADER_MIN_LOADING_MW[i],
                 current_mode_time=m.P_TRADER_CURRENT_MODE_TIME[i],
-                effective_ramp_rate=ramp_limit
+                effective_ramp_rate=m.P_TRADER_EFFECTIVE_RAMP_UP_RATE[i]
             )
 
             return m.V_TRADER_TOTAL_OFFER[i, j] <= initial_mw + ramp_up_capability + m.V_CV_TRADER_RAMP_UP[i]
 
-        return m.V_TRADER_TOTAL_OFFER[i, j] - m.P_TRADER_EFFECTIVE_INITIAL_MW[i] <= (ramp_limit / 12) + m.V_CV_TRADER_RAMP_UP[i]
+        else:
+            return (m.V_TRADER_TOTAL_OFFER[i, j]
+                    - m.P_TRADER_EFFECTIVE_INITIAL_MW[i]
+                    <= (m.P_TRADER_EFFECTIVE_RAMP_UP_RATE[i] / 12)
+                    + m.V_CV_TRADER_RAMP_UP[i])
 
     # Ramp up rate limit
     m.C_TRADER_RAMP_UP_RATE = pyo.Constraint(m.S_TRADER_OFFERS, rule=trader_ramp_up_rate_rule)
@@ -1856,18 +1800,6 @@ def define_unit_constraints(m):
         # Only construct ramp-rate constraint for energy offers
         if (j != 'ENOF') and (j != 'LDOF'):
             return pyo.Constraint.Skip
-
-        # # Ramp rate TODO: check if second condition is necessary
-        # if (i in m.P_TRADER_SCADA_RAMP_DOWN_RATE.keys()) and (m.P_TRADER_SCADA_RAMP_DOWN_RATE[i] > 0):
-        #     ramp_limit = min([m.P_TRADER_SCADA_RAMP_DOWN_RATE[i],
-        #                       m.P_TRADER_PERIOD_RAMP_DOWN_RATE[(i, j)]])
-        # else:
-        #     ramp_limit = m.P_TRADER_PERIOD_RAMP_DOWN_RATE[(i, j)]
-
-        # # Initial MW
-        # initial_mw = m.P_TRADER_EFFECTIVE_INITIAL_MW[i]
-
-        # return m.V_TRADER_TOTAL_OFFER[i, j] - initial_mw + m.V_CV_TRADER_RAMP_DOWN[i] >= - (ramp_limit / 12)
 
         return (m.V_TRADER_TOTAL_OFFER[i, j]
                 - m.P_TRADER_EFFECTIVE_INITIAL_MW[i]
