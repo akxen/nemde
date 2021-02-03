@@ -194,6 +194,12 @@ def define_parameters(m, data):
     m.P_TRADER_SCADA_RAMP_DOWN_RATE = pyo.Param(
         m.S_TRADERS, initialize=data['P_TRADER_SCADA_RAMP_DN_RATE'])
 
+    # Effective ramp rate - min of energy offer ramp rate and SCADA ramp rate
+    m.P_TRADER_EFFECTIVE_RAMP_UP_RATE = pyo.Param(
+        m.S_TRADERS, initialize=data['P_TRADER_EFFECTIVE_RAMP_UP_RATE'])
+    m.P_TRADER_EFFECTIVE_RAMP_DN_RATE = pyo.Param(
+        m.S_TRADERS, initialize=data['P_TRADER_EFFECTIVE_RAMP_DN_RATE'])
+
     # Interconnector initial MW (WhatIfMW used if pricing run for intervention period)
     m.P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW = pyo.Param(
         m.S_INTERCONNECTORS, initialize=data['P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW'])

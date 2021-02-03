@@ -986,8 +986,10 @@ def get_trader_fcas_info(data, mode) -> dict:
     hmw = get_trader_initial_condition_attribute(data, 'HMW', float)
     lmw = get_trader_initial_condition_attribute(data, 'LMW', float)
     agc_status = get_trader_initial_condition_attribute(data, 'AGCStatus', str)
-    scada_ramp_up_rate = get_trader_initial_condition_attribute(data, 'SCADARampUpRate', float)
-    scada_ramp_dn_rate = get_trader_initial_condition_attribute(data, 'SCADARampDnRate', float)
+    scada_ramp_up_rate = get_trader_initial_condition_attribute(
+        data, 'SCADARampUpRate', float)
+    scada_ramp_dn_rate = get_trader_initial_condition_attribute(
+        data, 'SCADARampDnRate', float)
     semi_dispatch = get_trader_collection_attribute(data, '@SemiDispatch', str)
 
     # Container for output
@@ -1004,7 +1006,8 @@ def get_trader_fcas_info(data, mode) -> dict:
             elif trader_type[trader_id] in ['LOAD', 'NORMALLY_ON_LOAD']:
                 energy_offer_type = 'LDOF'
             else:
-                raise Exception('Unexpected trader type:', trader_id, trader_type[trader_id])
+                raise Exception('Unexpected trader type:',
+                                trader_id, trader_type[trader_id])
 
             # Compile output into single dictionary
             out[(trader_id, trade_type)] = {
@@ -1041,9 +1044,87 @@ def get_trader_fcas_availability_status(data, mode) -> dict:
     fcas_status = {}
     for (trader_id, trade_type), params in fcas_info.items():
         # Get FCAS availability status
-        fcas_status[(trader_id, trade_type)] = fcas.get_trader_fcas_availability_status(params)
+        fcas_status[(trader_id, trade_type)
+                    ] = fcas.get_trader_fcas_availability_status(params)
 
     return fcas_status
+
+
+def get_trader_energy_offer_ramp_rate(trader_id, ramp_rates):
+    """
+    Given dictionary of trader offer ramp rates, extract the energy offer ramp
+    rate for a given trader. Not all traders participate in the energy market
+    so the function may return if no energy offer ramp rate exists.
+    """
+
+    # Check that a trader doesn't have both energy and load offers. Will
+    # not know which offer ramp rate should be used. This case shouldn't
+    # occur in practice.
+    has_generation_offer = (trader_id, 'ENOF') in ramp_rates.keys()
+    has_load_offer = (trader_id, 'LDOF') in ramp_rates.keys()
+    if has_generation_offer and has_load_offer:
+        raise Exception('Trader has both generation and load offers')
+
+    # Ramp rate corresponding to energy offer
+    if (trader_id, 'ENOF') in ramp_rates.keys():
+        return ramp_rates[(trader_id, 'ENOF')]
+    elif (trader_id, 'LDOF') in ramp_rates.keys():
+        return ramp_rates[(trader_id, 'LDOF')]
+    else:
+        return None
+
+
+def get_trader_scada_ramp_rate(trader_id, ramp_rates):
+    """
+    Extract SCADA ramp rate for a given trader. If the SCADA ramp rate is 0
+    or missing return None.
+    """
+
+    if (trader_id in ramp_rates.keys()) and (ramp_rates[trader_id] > 0):
+        return ramp_rates[trader_id]
+    else:
+        return None
+
+
+def get_trader_effective_ramp_rate(data, direction) -> dict:
+    """
+    Compute effective ramp-up rate. Min of energy offer ramp rate and SCADA
+    ramp rate. Some traders do not have ramp rates specified and have None
+    corresponding to their ramp rate.
+    """
+
+    traders = get_trader_index(data=data)
+
+    # Get attributes corresponding to ramp direction (up or down)
+    if direction == 'up':
+        offer_attribute = '@RampUpRate'
+        scada_attribute = 'SCADARampUpRate'
+    elif direction == 'down':
+        offer_attribute = '@RampDnRate'
+        scada_attribute = 'SCADARampDnRate'
+    else:
+        raise ValueError("'direction' must be either 'up' or 'down'")
+
+    # Extract ramp rates defined in trader offers and SCADA initial conditions
+    offers = get_trader_period_trade_attribute(
+        data=data, attribute=offer_attribute, func=float)
+
+    scada = get_trader_initial_condition_attribute(
+        data=data, attribute=scada_attribute, func=float)
+
+    out = {}
+    for i in traders:
+        offer_ramp = get_trader_energy_offer_ramp_rate(trader_id=i, ramp_rates=offers)
+        scada_ramp = get_trader_scada_ramp_rate(trader_id=i, ramp_rates=scada)
+
+        # Non-none ramp rates
+        ramp_rates = [i for i in [offer_ramp, scada_ramp] if i is not None]
+
+        # Effective ramp rate is the min of the offer and SCADA ramp rates
+        if ramp_rates:
+            out[i] = min(ramp_rates)
+
+    return out
 
 
 def construct_case(data, mode) -> dict:
@@ -1116,6 +1197,8 @@ def construct_case(data, mode) -> dict:
         'P_TRADER_ENABLEMENT_MAX': get_trader_period_trade_attribute(data, '@EnablementMax', float),
         'P_TRADER_EFFECTIVE_INITIAL_MW': get_trader_effective_initial_mw(data=data, mode=mode),
         'P_TRADER_FCAS_AVAILABILITY_STATUS': get_trader_fcas_availability_status(data=data, mode=mode),
+        'P_TRADER_EFFECTIVE_RAMP_UP_RATE': get_trader_effective_ramp_rate(data=data, direction='up'),
+        'P_TRADER_EFFECTIVE_RAMP_DN_RATE': get_trader_effective_ramp_rate(data=data, direction='down'),
         'P_INTERCONNECTOR_INITIAL_MW': get_interconnector_collection_attribute(data, 'InitialMW', float),
         'P_INTERCONNECTOR_TO_REGION': get_interconnector_period_collection_attribute(data, '@ToRegion', str),
         'P_INTERCONNECTOR_FROM_REGION': get_interconnector_period_collection_attribute(data, '@FromRegion', str),

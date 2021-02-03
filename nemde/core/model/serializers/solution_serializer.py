@@ -193,7 +193,8 @@ def compare_solutions(dict_1, dict_2, keys):
 def compare_solutions_list(dict_1, dict_2, keys, info={}):
     """Compare solutions returning a list of dictionaries for each key"""
 
-    return [{**info, **{'key': k, 'model': dict_1[k], 'actual': float(dict_2[k])}} for k in keys]
+    return [{**info, **{'key': k, 'model': dict_1[k], 'actual': float(dict_2[k])}}
+            for k in keys if k in dict_1.keys()]
 
 
 def get_constraint_solution_comparison(model, constraint_id, casefile):
@@ -243,7 +244,7 @@ def get_trader_solution(model, trader_id):
         for i in trade_types
     }
 
-    output = {
+    trader_solution = {
         "@TraderID": trader_id,
         # "@PeriodID": "2020-11-01T04:05:00+10:00",
         "@CaseID": model.P_CASE_ID.value,  # Not in NEMDE solution
@@ -274,13 +275,20 @@ def get_trader_solution(model, trader_id):
         "@L5Violation": violation['L5MI'],
         "@L5RegViolation": violation['L5RE'],
         # "@FSTargetMode": "0",
-        # "@RampUpRate": "720",
-        # "@RampDnRate": "720",
-        # "@RampPrice": "0",
-        # "@RampDeficit": "0"
     }
 
-    return output
+    # Ramp rate information - not included for all traders
+    if trader_id in model.P_TRADER_EFFECTIVE_RAMP_UP_RATE.keys():
+        ramp_rates = {
+            "@RampUpRate": model.P_TRADER_EFFECTIVE_RAMP_UP_RATE[trader_id],
+            "@RampDnRate": model.P_TRADER_EFFECTIVE_RAMP_DN_RATE[trader_id],
+            # "@RampPrice": "0",
+            # "@RampDeficit": "0"
+        }
+    else:
+        ramp_rates = {}
+
+    return {**trader_solution, **ramp_rates}
 
 
 def get_trader_solution_comparison(model, trader_id, casefile):
@@ -298,7 +306,7 @@ def get_trader_solution_comparison(model, trader_id, casefile):
             '@L6Target', '@L60Target', '@L5Target', '@L5RegTarget',
             '@R6Violation', '@R60Violation', '@R5Violation', '@R5RegViolation',
             '@L6Violation', '@L60Violation', '@L5Violation', '@L5RegViolation',
-            '@EnergyTarget']
+            '@EnergyTarget', '@RampUpRate', '@RampDnRate']
 
     # Dispatch target and violation comparison
     info = {
@@ -310,162 +318,6 @@ def get_trader_solution_comparison(model, trader_id, casefile):
         dict_1=solution, dict_2=actual, keys=keys, info=info)
 
     return comparison
-
-
-def get_price_band(price_bands, quantity_bands, output, mode):
-    """Get current or marginal price band for a given trader"""
-
-    # Initialise total output
-    total_output = 0
-    for i in range(1, 11):
-        total_output += quantity_bands[i]
-
-        if mode == 'marginal':
-            # Want to find first occurrence where cumulative output > dispatch target
-            band_condition = total_output > output
-        elif mode == 'current':
-            band_condition = total_output >= output
-        else:
-            raise ValueError("'mode' must be either 'marginal' or 'current'")
-
-        if band_condition:
-            # Return price corresponding to quantity band
-            return price_bands[i]
-
-    # Max price (highest price band)
-    return price_bands[10]
-
-
-def get_trader_model_price_band(model, trader_id, trade_type, mode):
-    """Get trader model marginal price band"""
-
-    # Extract price and quantity bands from model
-    price_bands = {i: model.P_TRADER_PRICE_BAND[trader_id, trade_type, i]
-                   for i in range(1, 11)}
-
-    quantity_bands = {i: model.P_TRADER_QUANTITY_BAND[trader_id, trade_type, i]
-                      for i in range(1, 11)}
-
-    dispatch_target = model.V_TRADER_TOTAL_OFFER[trader_id, trade_type].value
-
-    # Get model marginal price band
-    price_band = get_price_band(
-        price_bands=price_bands, quantity_bands=quantity_bands, 
-        output=dispatch_target, mode=mode)
-
-    return price_band
-
-
-def get_trader_actual_price_band(casefile, trader_id, trade_type, intervention, mode):
-    """Get current or marginal price band using NEMDE solution parameters"""
-
-    price_bands = {i: lookup.get_trader_price_band_attribute(
-        data=casefile, trader_id=trader_id, trade_type=trade_type,
-        attribute=f'@PriceBand{i}', func=float)
-        for i in range(1, 11)}
-
-    quantity_bands = {i: lookup.get_trader_quantity_band_attribute(
-        data=casefile, trader_id=trader_id, trade_type=trade_type,
-        attribute=f'@BandAvail{i}', func=float)
-        for i in range(1, 11)}
-
-    # Mapping between trade types and dispatch target keys used in trader solution
-    key_map = {
-        'R6SE': '@R6Target', 'R60S': '@R60Target', 'R5MI': '@R5Target', 'R5RE': '@R5RegTarget',
-        'L6SE': '@L6Target', 'L60S': '@L60Target', 'L5MI': '@L5Target', 'L5RE': '@L5RegTarget',
-        'ENOF': '@EnergyTarget', 'LDOF': '@EnergyTarget'}
-
-    # Key in trader solution which corresponds to trader dispatch
-    trade_type_key = key_map[trade_type]
-
-    dispatch_target = lookup.get_trader_solution_attribute(
-        data=casefile, trader_id=trader_id, attribute=trade_type_key,
-        func=float, intervention=intervention)
-
-    # Compute marginal price band
-    price_band = get_price_band(
-        price_bands=price_bands, quantity_bands=quantity_bands,
-        output=dispatch_target, mode=mode)
-
-    return price_band
-
-
-def get_trader_solution_summary(model, trader_id, trade_type, casefile):
-    """
-    Compute summary statistics for each trader. Output is formatted so
-    aggregation operations can be easily performed.
-    """
-
-    # Get difference between model and actual dispatch targets
-    comparison = get_trader_solution_comparison(
-        model=model, trader_id=trader_id, casefile=casefile)
-
-    # Mapping between trade type and trader solution dispatch target key
-    trader_solution_key_map = {
-        'R6SE': '@R6Target', 'R60S': '@R60Target', 'R5MI': '@R5Target', 'R5RE': '@R5RegTarget',
-        'L6SE': '@L6Target', 'L60S': '@L60Target', 'L5MI': '@L5Target', 'L5RE': '@L5RegTarget',
-        'ENOF': '@EnergyTarget', 'LDOF': '@EnergyTarget'}
-
-    trader_solution_key = trader_solution_key_map[trade_type]
-
-    # Model and actual dispatch
-    model_dispatch = [i['model']
-                      for i in comparison if i['key'] == trader_solution_key][0]
-    actual_dispatch = [i['actual']
-                       for i in comparison if i['key'] == trader_solution_key][0]
-
-    # Get trader region
-    region_id = lookup.get_trader_period_collection_attribute(
-        data=casefile, trader_id=trader_id, attribute='@RegionID', func=str)
-
-    # Get intervention status
-    intervention = model.P_INTERVENTION_STATUS.value
-
-    # Mapping between trade type and region solution price key
-    region_solution_key_map = {
-        'R6SE': '@R6Price', 'R60S': '@R60Price', 'R5MI': '@R5Price', 'R5RE': '@R5RegPrice',
-        'L6SE': '@L6Price', 'L60S': '@L60Price', 'L5MI': '@L5Price', 'L5RE': '@L5RegPrice',
-        'ENOF': '@EnergyPrice', 'LDOF': '@EnergyPrice'}
-
-    region_solution_key = region_solution_key_map[trade_type]
-
-    # Get actual region price (from NEMDE solution)
-    actual_region_price = lookup.get_region_solution_attribute(
-        data=casefile, region_id=region_id, attribute=region_solution_key,
-        intervention=intervention, func=float)
-
-    model_marginal_price_band = get_trader_model_price_band(
-        model=model, trader_id=trader_id, trade_type=trade_type, mode='marginal')
-
-    model_current_price_band = get_trader_model_price_band(
-        model=model, trader_id=trader_id, trade_type=trade_type, mode='current')
-
-    actual_marginal_price_band = get_trader_actual_price_band(
-        casefile=casefile, trader_id=trader_id, trade_type=trade_type,
-        intervention=intervention, mode='marginal')
-
-    actual_current_price_band = get_trader_actual_price_band(
-        casefile=casefile, trader_id=trader_id, trade_type=trade_type,
-        intervention=intervention, mode='current')
-
-
-    # Construct output
-    out = {
-        'case_id': model.P_CASE_ID.value,
-        'intervention': intervention,
-        'trader_id': trader_id,
-        'trade_type': trade_type,
-        'model': model_dispatch,
-        'actual': actual_dispatch,
-        'model_marginal_price_band': model_marginal_price_band,
-        'model_current_price_band': model_current_price_band,
-        'actual_marginal_price_band': actual_marginal_price_band,
-        'actual_current_price_band': actual_current_price_band,
-        'actual_region_price': actual_region_price,
-        'region_id': region_id
-    }
-
-    return out
 
 
 def get_region_solution(model, region_id):
@@ -755,11 +607,6 @@ def get_solution_comparison(model):
         model=model, constraint_id=i, casefile=casefile)
         for i in model.S_GENERIC_CONSTRAINTS]
 
-    # Compute trader summary statistics used for aggregate analyses
-    trader_summary = [get_trader_solution_summary(
-        model=model, trader_id=i, trade_type=j, casefile=casefile)
-        for i, j in model.S_TRADER_OFFERS]
-
     output = {
         # 'CaseSolution': get_case_solution_comparison(model=model, casefile=casefile),
         'PeriodSolution': get_period_solution_comparison(model=model, casefile=casefile),
@@ -767,9 +614,6 @@ def get_solution_comparison(model):
         'TraderSolution': [i for i in itertools.chain.from_iterable(traders)],
         'InterconnectorSolution': [i for i in itertools.chain.from_iterable(interconnectors)],
         'ConstraintSolution': [i for i in itertools.chain.from_iterable(constraints)],
-        'summary': {
-            'traders': trader_summary
-        }
     }
 
     return output

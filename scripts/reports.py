@@ -7,8 +7,10 @@ import itertools
 import pandas as pd
 
 import context
+from nemde.core.casefile import lookup
+from nemde.io.casefile import load_base_case
 from nemde.io.database.mysql import get_latest_run_id
-from nemde.io.database.mysql import get_validation_results
+from nemde.io.database.mysql import get_test_run_validation_results
 from nemde.config.setup_variables import setup_environment_variables
 setup_environment_variables(online=False)
 
@@ -16,7 +18,7 @@ setup_environment_variables(online=False)
 def parse_validation_results(run_id):
     """Load validation results and convert to JSON"""
 
-    results = get_validation_results(
+    results = get_test_run_validation_results(
         schema=os.environ['MYSQL_SCHEMA'], table='results', run_id=run_id)
 
     return [json.loads(i['results']) for i in results]
@@ -35,45 +37,54 @@ def save_basis_results(results, key, filename):
     df.to_csv(filename, index=False)
 
 
-def get_trader_price_band_results(results):
-    """Get trader price band results"""
+def fast_start_unit_starts_up(casefile, intervention):
+    """Check if a fast start unit starts up for a given dispatch interval"""
 
-    # Construct DataFrame
-    traders = [i['summary']['traders'] for i in results]
-    df = pd.DataFrame(itertools.chain.from_iterable(traders))
+    # Get all traders
+    traders = lookup.get_trader_index(data=casefile)
 
-    # Compute absolute difference between model and NEMDE values
-    df['abs_difference'] = df['model'].subtract(df['actual']).abs()
-    df = df.sort_values(by='abs_difference', ascending=False)
+    # Flag indicating if at least one fast start unit starts up
+    for i in traders:
+        try:
+            current_mode = lookup.get_trader_collection_attribute(
+                data=casefile, trader_id=i, attribute='@CurrentMode', func=str)
+        except KeyError:
+            continue
 
-    # Conditions to check if FCAS result is consistent with price-tied solution
-    cond_1 = df['model_current_price_band'] == df['actual_current_price_band']
-    cond_2 = df['model_marginal_price_band'] == df['actual_current_price_band']
-    cond_3 = df['model_current_price_band'] == df['actual_marginal_price_band']
+        # Energy target
+        energy_target = lookup.get_trader_solution_attribute(
+            data=casefile, trader_id=i, attribute='@EnergyTarget',
+            intervention=intervention, func=float)
 
-    df['same_price_band'] = cond_1 | cond_2 | cond_3
+        if (current_mode == '0') and (energy_target > 0.005):
+            return True
 
-    return df
-
-
-def save_trader_price_band_results(results, filename):
-    """Save trader summary results"""
-
-    df = get_trader_price_band_results(results=results)
-    df.to_csv(filename, index=False)
+    # No fast start units starting up identified
+    return False
 
 
-def save_trader_price_band_filtered_results(results, filename):
+def fast_start_unit_startup_periods(results):
     """
-    Only include traders for which a mismatch between model and NEMDE
-    results is observed. Ignore mismatch if price band is the same between both
-    solutions. Mismatches will always exist because no tie-breaking is
-    enforced by NEMDE for FCAS solutions
+    Check if a fast start unit started up during a given interval. Model
+    does not currently support multi-run approach required when modelling
+    fast start unit startup intervals.
     """
 
-    df = get_trader_price_band_results(results=results)
-    mask = ~df.loc[:, 'same_price_band'] & (df.loc[:, 'abs_difference'] > 0.001)
-    df.loc[mask, :].to_csv(filename, index=False)
+    # Container for output
+    out = []
+    for i in results:
+        case_id = i['PeriodSolution'][0]['case_id']
+        casefile = load_base_case(case_id=case_id)
+
+        # Get intervention status
+        intervention = i['PeriodSolution'][0]['intervention']
+
+        # Check if fast start units found to be startint up during interval
+        startup = fast_start_unit_starts_up(casefile=casefile, intervention=intervention)
+        out.append({'case_id': case_id, 'intervention': intervention,
+                    'startup_flag': startup})
+
+    return out
 
 
 def construct_validation_report(run_id, root_dir):
@@ -88,6 +99,7 @@ def construct_validation_report(run_id, root_dir):
     # Construct directory where results are to be saved
     output_dir = os.path.join(root_dir, run_id)
     os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(os.path.join(output_dir, 'basis'), exist_ok=True)
 
     # Save basis results
     solution_filename_map = [
@@ -98,16 +110,13 @@ def construct_validation_report(run_id, root_dir):
     ]
 
     for (key, filename) in solution_filename_map:
-        save_basis_results(results=results, key=key,
-                           filename=os.path.join(output_dir, filename))
+        path = os.path.join(output_dir, 'basis', filename)
+        save_basis_results(results=results, key=key, filename=path)
 
-    # Save trader summary results - used to validate price-tied FCAS offers
-    save_trader_price_band_results(
-        results=results, filename=os.path.join(output_dir, 'traders_price_bands.csv'))
-
-    # Save filtered trader summary results
-    save_trader_price_band_filtered_results(
-        results=results, filename=os.path.join(output_dir, 'traders_price_bands_filtered.csv'))
+    # Check if fast start unit starts up for a given interval
+    startup_flags = fast_start_unit_startup_periods(results=results)
+    (pd.DataFrame(startup_flags).sort_values(by='startup_flag', ascending=False)
+     .to_csv(os.path.join(output_dir, 'startup.csv'), index=False))
 
 
 if __name__ == '__main__':
