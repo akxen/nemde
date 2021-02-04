@@ -798,15 +798,18 @@ def reorder_tuple(input_tuple) -> tuple:
         return tuple((input_tuple[0], input_tuple[1]))
 
 
-def get_price_tied_bands(data):
-    """Get price-tied generators"""
+def get_price_tied_bands(data, trade_type):
+    """
+    Get price-tied generators and loads. 'trade_type'=ENOF for generators,
+    'trade_type'=LDOF for loads.
+    """
 
     # Price and quantity bands
     price_bands = get_trader_price_bands(data)
     quantity_bands = get_trader_quantity_bands(data)
 
     # Generator energy offer price bands
-    filtered_price_bands = {k: v for k, v in price_bands.items() if k[1] == 'ENOF'}
+    filtered_price_bands = {k: v for k, v in price_bands.items() if k[1] == trade_type}
 
     # Trader region
     trader_region = get_trader_period_attribute(data, '@RegionID', str)
@@ -1156,7 +1159,8 @@ def construct_case(data, mode) -> dict:
         'S_TRADER_ENERGY_OFFERS': get_trader_energy_offer_index(data),
         'S_TRADER_FCAS_OFFERS': get_trader_fcas_offer_index(data),
         'S_TRADER_FAST_START': get_trader_fast_start_index(data),
-        'S_TRADER_PRICE_TIED': get_price_tied_bands(data),
+        'S_TRADER_PRICE_TIED_GENERATORS': get_price_tied_bands(data, trade_type='ENOF'),
+        'S_TRADER_PRICE_TIED_LOADS': get_price_tied_bands(data, trade_type='LDOF'),
         'S_GENERIC_CONSTRAINTS': get_generic_constraint_index(data),
         'S_GC_TRADER_VARS': get_generic_constraint_trader_variable_index(data),
         'S_GC_INTERCONNECTOR_VARS': get_generic_constraint_interconnector_variable_index(data),

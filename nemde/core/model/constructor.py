@@ -34,7 +34,8 @@ def define_sets(m, data):
     m.S_TRADER_FAST_START = pyo.Set(initialize=data['S_TRADER_FAST_START'])
 
     # Price tied bands
-    m.S_TRADER_PRICE_TIED = pyo.Set(initialize=data.get('S_TRADER_PRICE_TIED'))
+    m.S_TRADER_PRICE_TIED_GENERATORS = pyo.Set(initialize=data.get('S_TRADER_PRICE_TIED_GENERATORS'))
+    m.S_TRADER_PRICE_TIED_LOADS = pyo.Set(initialize=data.get('S_TRADER_PRICE_TIED_LOADS'))
 
     # Generic constraints
     m.S_GENERIC_CONSTRAINTS = pyo.Set(initialize=data['S_GENERIC_CONSTRAINTS'])
@@ -426,8 +427,11 @@ def define_variables(m):
     m.V_LOSS_Y = pyo.Var(m.S_INTERCONNECTOR_LOSS_MODEL_INTERVALS, within=pyo.Binary)
 
     # Trader tie-break slack variables
-    m.V_TRADER_SLACK_1 = pyo.Var(m.S_TRADER_PRICE_TIED, within=pyo.NonNegativeReals)
-    m.V_TRADER_SLACK_2 = pyo.Var(m.S_TRADER_PRICE_TIED, within=pyo.NonNegativeReals)
+    m.V_TRADER_SLACK_1_GENERATOR = pyo.Var(m.S_TRADER_PRICE_TIED_GENERATORS, within=pyo.NonNegativeReals)
+    m.V_TRADER_SLACK_2_GENERATOR = pyo.Var(m.S_TRADER_PRICE_TIED_GENERATORS, within=pyo.NonNegativeReals)
+
+    m.V_TRADER_SLACK_1_LOAD = pyo.Var(m.S_TRADER_PRICE_TIED_LOADS, within=pyo.NonNegativeReals)
+    m.V_TRADER_SLACK_2_LOAD = pyo.Var(m.S_TRADER_PRICE_TIED_LOADS, within=pyo.NonNegativeReals)
 
     return m
 
@@ -1521,9 +1525,13 @@ def define_tie_breaking_expressions(m):
     """Tie-breaking expressions"""
 
     # Tie break cost TODO: Note that tie-break price of 1e-4 gives better results than 1e-6.
-    m.E_TRADER_TIE_BREAK_COST = pyo.Expression(
-        expr=sum(m.P_TIE_BREAK_PRICE * m.P_CVF_VOLL * (m.V_TRADER_SLACK_1[i] + m.V_TRADER_SLACK_2[i])
-                 for i in m.S_TRADER_PRICE_TIED))
+    m.E_TRADER_TIE_BREAK_COST_GENERATORS = pyo.Expression(
+        expr=sum(m.P_TIE_BREAK_PRICE * m.P_CVF_VOLL * (m.V_TRADER_SLACK_1_GENERATOR[i] + m.V_TRADER_SLACK_2_GENERATOR[i])
+                 for i in m.S_TRADER_PRICE_TIED_GENERATORS))
+
+    m.E_TRADER_TIE_BREAK_COST_LOADS = pyo.Expression(
+        expr=sum(m.P_TIE_BREAK_PRICE * m.P_CVF_VOLL * (m.V_TRADER_SLACK_1_LOAD[i] + m.V_TRADER_SLACK_2_LOAD[i])
+                 for i in m.S_TRADER_PRICE_TIED_LOADS))
 
     return m
 
@@ -2802,10 +2810,23 @@ def define_tie_breaking_constraints(m):
 
         return ((m.V_TRADER_OFFER[i, j, k] / m.P_TRADER_QUANTITY_BAND[i, j, k])
                 - (m.V_TRADER_OFFER[q, r, s] / m.P_TRADER_QUANTITY_BAND[q, r, s])
-                == m.V_TRADER_SLACK_1[i, j, k, q, r, s] - m.V_TRADER_SLACK_2[i, j, k, q, r, s])
+                == m.V_TRADER_SLACK_1_GENERATOR[i, j, k, q, r, s] - m.V_TRADER_SLACK_2_GENERATOR[i, j, k, q, r, s])
 
     # Generator tie-breaking rule
-    m.C_TRADER_TIE_BREAK = pyo.Constraint(m.S_TRADER_PRICE_TIED, rule=generator_tie_breaking_rule)
+    m.C_TRADER_TIE_BREAK_GENERATORS = pyo.Constraint(m.S_TRADER_PRICE_TIED_GENERATORS, rule=generator_tie_breaking_rule)
+
+    def load_tie_breaking_rule(m, i, j, k, q, r, s):
+        """Load tie-breaking rule for price-tied energy offers"""
+
+        if (m.P_TRADER_QUANTITY_BAND[i, j, k] == 0) or (m.P_TRADER_QUANTITY_BAND[q, r, s] == 0):
+            return pyo.Constraint.Skip
+
+        return ((m.V_TRADER_OFFER[i, j, k] / m.P_TRADER_QUANTITY_BAND[i, j, k])
+                - (m.V_TRADER_OFFER[q, r, s] / m.P_TRADER_QUANTITY_BAND[q, r, s])
+                == m.V_TRADER_SLACK_1_LOAD[i, j, k, q, r, s] - m.V_TRADER_SLACK_2_LOAD[i, j, k, q, r, s])
+
+    # Load tie-breaking rule
+    m.C_TRADER_TIE_BREAK_LOADS = pyo.Constraint(m.S_TRADER_PRICE_TIED_LOADS, rule=load_tie_breaking_rule)
 
     return m
 
@@ -2867,7 +2888,8 @@ def define_objective(m):
         expr=sum(m.E_TRADER_COST_FUNCTION[t] for t in m.S_TRADER_OFFERS)
         + sum(m.E_MNSP_COST_FUNCTION[t] for t in m.S_MNSP_OFFERS)
         + m.E_CV_TOTAL_PENALTY
-        + m.E_TRADER_TIE_BREAK_COST,
+        + m.E_TRADER_TIE_BREAK_COST_GENERATORS
+        + m.E_TRADER_TIE_BREAK_COST_LOADS,
         sense=pyo.minimize)
 
     return m
