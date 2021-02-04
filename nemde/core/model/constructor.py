@@ -270,8 +270,10 @@ def define_parameters(m, data):
     # Generic constraint violation factors
     m.P_CVF_GC = pyo.Param(m.S_GENERIC_CONSTRAINTS, initialize=data['P_CVF_GC'])
 
-    # Value of lost load TODO: check if necessary - not used
+    # Value of lost load
     m.P_CVF_VOLL = pyo.Param(initialize=data['P_CVF_VOLL'])
+
+    # Energy deficit price
     m.P_CVF_ENERGY_DEFICIT_PRICE = pyo.Param(initialize=data['P_CVF_ENERGY_DEFICIT_PRICE'])
     m.P_CVF_ENERGY_SURPLUS_PRICE = pyo.Param(initialize=data['P_CVF_ENERGY_SURPLUS_PRICE'])
     m.P_CVF_UIGF_SURPLUS_PRICE = pyo.Param(initialize=data['P_CVF_UIGF_SURPLUS_PRICE'])
@@ -328,7 +330,7 @@ def define_parameters(m, data):
     # Satisfactory network constraint price TODO: check - not used
     m.P_CVF_SATISFACTORY_NETWORK_PRICE = pyo.Param(initialize=data['P_CVF_SATISFACTORY_NETWORK_PRICE'])
 
-    # Tie-break price TODO: check - not used
+    # Tie-break price
     m.P_TIE_BREAK_PRICE = pyo.Param(initialize=data['P_TIE_BREAK_PRICE'])
 
     return m
@@ -1520,10 +1522,8 @@ def define_tie_breaking_expressions(m):
 
     # Tie break cost TODO: Note that tie-break price of 1e-4 gives better results than 1e-6.
     m.E_TRADER_TIE_BREAK_COST = pyo.Expression(
-        # expr=sum(m.P_TIE_BREAK_PRICE * (m.V_TRADER_SLACK_1[i] + m.V_TRADER_SLACK_2[i]) for i in m.S_TRADER_PRICE_TIED)
-        expr=sum(1e-2 * (m.V_TRADER_SLACK_1[i] + m.V_TRADER_SLACK_2[i])
-                 for i in m.S_TRADER_PRICE_TIED)
-    )
+        expr=sum(m.P_TIE_BREAK_PRICE * m.P_CVF_VOLL * (m.V_TRADER_SLACK_1[i] + m.V_TRADER_SLACK_2[i])
+                 for i in m.S_TRADER_PRICE_TIED))
 
     return m
 
