@@ -2760,69 +2760,72 @@ def define_loss_model_constraints(m):
 def define_fast_start_unit_inflexibility_constraints(m):
     """Fast start unit inflexibility profile constraints"""
 
-    def get_inflexibility_profile_base_time(mode, mode_time, t1, t2, t3):
-        """Get number of minutes from start of inflexibility profile"""
+    # def get_inflexibility_profile_base_time(mode, mode_time, t1, t2, t3):
+    #     """Get number of minutes from start of inflexibility profile"""
 
-        if mode == '0':
-            return mode_time
-        elif mode == '1':
-            return mode_time
-        elif mode == '2':
-            return t1 + mode_time
-        elif mode == '3':
-            return t1 + t2 + mode_time
-        elif mode == '4':
-            return t1 + t2 + t3 + mode_time
-        else:
-            raise Exception('Unhandled case:', mode, mode_time, t1, t2, t3)
+    #     if mode == '0':
+    #         return mode_time
+    #     elif mode == '1':
+    #         return mode_time
+    #     elif mode == '2':
+    #         return t1 + mode_time
+    #     elif mode == '3':
+    #         return t1 + t2 + mode_time
+    #     elif mode == '4':
+    #         return t1 + t2 + t3 + mode_time
+    #     else:
+    #         raise Exception('Unhandled case:', mode, mode_time, t1, t2, t3)
 
-    def get_inflexibility_profile_effective_mode_and_time(mode, mode_time, t1, t2, t3, t4):
-        """Get effective mode and time at end of dispatch interval"""
+    # def get_inflexibility_profile_effective_mode_and_time(mode, mode_time, t1, t2, t3, t4):
+    #     """Get effective mode and time at end of dispatch interval"""
 
-        # Time at end of dispatch interval - offsetting by 5 minutes to correspond to end of dispatch interval
-        minutes = get_inflexibility_profile_base_time(
-            mode, mode_time + 5, t1, t2, t3)
+    #     # Time at end of dispatch interval - offsetting by 5 minutes to correspond to end of dispatch interval
+    #     # minutes = get_inflexibility_profile_base_time(
+    #         # mode, mode_time + 5, t1, t2, t3)
 
-        # Time interval endpoints
-        t1_end = t1
-        t2_end = t1 + t2
-        t3_end = t1 + t2 + t3
-        t4_end = t1 + t2 + t3 + t4
+    #     minutes = fast_start.get_inflexibility_profile_base_time(
+    #         current_mode=mode, current_mode_time=mode_time + 5, t1=t1, t2=t2, t3=t3)
 
-        # Get effective mode
-        # TODO: need to fix this in the future - possible that unit in mode 0 has EnergyTarget > 0. Two NEMDE runs must
-        # be performed. See fast start unit docs.
-        if mode == '0':
-            effective_mode = '0'
-        elif minutes <= t1_end:
-            effective_mode = '1'
-        elif (minutes > t1_end) and (minutes <= t2_end):
-            effective_mode = '2'
-        elif (minutes > t2_end) and (minutes <= t3_end):
-            effective_mode = '3'
-        elif (minutes > t3_end) and (minutes <= t4_end):
-            effective_mode = '4'
-        elif minutes > t4_end:
-            effective_mode = '4'
-        else:
-            raise Exception('Unhandled case:', minutes,
-                            t1_end, t2_end, t3_end, t4_end)
+    #     # Time interval endpoints
+    #     t1_end = t1
+    #     t2_end = t1 + t2
+    #     t3_end = t1 + t2 + t3
+    #     t4_end = t1 + t2 + t3 + t4
 
-        # Get effective time based on effective mode and time interval endpoints
-        if effective_mode == '0':
-            effective_time = mode_time
-        elif effective_mode == '1':
-            effective_time = minutes
-        elif effective_mode == '2':
-            effective_time = minutes - t1_end
-        elif effective_mode == '3':
-            effective_time = minutes - t2_end
-        elif effective_mode == '4':
-            effective_time = minutes - t3_end
-        else:
-            raise Exception('Unhandled case:', effective_mode)
+    #     # Get effective mode
+    #     # TODO: need to fix this in the future - possible that unit in mode 0 has EnergyTarget > 0. Two NEMDE runs must
+    #     # be performed. See fast start unit docs.
+    #     if mode == '0':
+    #         effective_mode = '0'
+    #     elif minutes <= t1_end:
+    #         effective_mode = '1'
+    #     elif (minutes > t1_end) and (minutes <= t2_end):
+    #         effective_mode = '2'
+    #     elif (minutes > t2_end) and (minutes <= t3_end):
+    #         effective_mode = '3'
+    #     elif (minutes > t3_end) and (minutes <= t4_end):
+    #         effective_mode = '4'
+    #     elif minutes > t4_end:
+    #         effective_mode = '4'
+    #     else:
+    #         raise Exception('Unhandled case:', minutes,
+    #                         t1_end, t2_end, t3_end, t4_end)
 
-        return effective_mode, effective_time
+    #     # Get effective time based on effective mode and time interval endpoints
+    #     if effective_mode == '0':
+    #         effective_time = mode_time
+    #     elif effective_mode == '1':
+    #         effective_time = minutes
+    #     elif effective_mode == '2':
+    #         effective_time = minutes - t1_end
+    #     elif effective_mode == '3':
+    #         effective_time = minutes - t2_end
+    #     elif effective_mode == '4':
+    #         effective_time = minutes - t3_end
+    #     else:
+    #         raise Exception('Unhandled case:', effective_mode)
+
+    #     return effective_mode, effective_time
 
     def profile_constraint_rule(m, i):
         """Energy profile constraint"""
@@ -2838,14 +2841,31 @@ def define_fast_start_unit_inflexibility_constraints(m):
         else:
             raise Exception('Unexpected energy offer:', i)
 
-        # Get effective mode and time at end of dispatch interval
-        effective_mode, effective_time = get_inflexibility_profile_effective_mode_and_time(
-            m.P_TRADER_CURRENT_MODE[i],
-            m.P_TRADER_CURRENT_MODE_TIME[i],
-            m.P_TRADER_T1[i],
-            m.P_TRADER_T2[i],
-            m.P_TRADER_T3[i],
-            m.P_TRADER_T4[i])
+        # # Get effective mode and time at end of dispatch interval
+        # effective_mode, effective_time = get_inflexibility_profile_effective_mode_and_time(
+        #     m.P_TRADER_CURRENT_MODE[i],
+        #     m.P_TRADER_CURRENT_MODE_TIME[i],
+        #     m.P_TRADER_T1[i],
+        #     m.P_TRADER_T2[i],
+        #     m.P_TRADER_T3[i],
+        #     m.P_TRADER_T4[i])
+        effective_mode = fast_start.get_target_mode(
+            current_mode=m.P_TRADER_CURRENT_MODE[i],
+            current_mode_time=m.P_TRADER_CURRENT_MODE_TIME[i],
+            t1=m.P_TRADER_T1[i],
+            t2=m.P_TRADER_T2[i],
+            t3=m.P_TRADER_T3[i],
+            t4=m.P_TRADER_T4[i]
+        )
+
+        effective_time = fast_start.get_target_mode_time(
+            current_mode=m.P_TRADER_CURRENT_MODE[i],
+            current_mode_time=m.P_TRADER_CURRENT_MODE_TIME[i],
+            t1=m.P_TRADER_T1[i],
+            t2=m.P_TRADER_T2[i],
+            t3=m.P_TRADER_T3[i],
+            t4=m.P_TRADER_T4[i]
+        )
 
         # effective_mode = m.P_TRADER_CURRENT_MODE[i]
         # effective_time = m.P_TRADER_CURRENT_MODE_TIME[i]
