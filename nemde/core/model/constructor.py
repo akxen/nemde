@@ -1,33 +1,21 @@
 """Model used to construct and solve NEMDE approximation"""
 
-import os
-import sys
-import json
+# import os
+# import sys
+# import json
 import time
-import pickle
-import zipfile
-import calendar
-import collections.abc
+# import pickle
+# import zipfile
+# import calendar
+# import collections.abc
 from typing import Union
 
-import simplejson
-import numpy as np
-import pandas as pd
+# import simplejson
+# import numpy as np
+# import pandas as pd
 import pyomo.environ as pyo
 
 from nemde.core.model.utils import fast_start
-# import nemde.core.utils.fcas
-# import nemde.core.data.data
-# import nemde.core.data.lookup
-# import nemde.core.data.loaders
-# import nemde.core.postprocessing.solution
-# import nemde.core.utils.analysis
-# import nemde.core.database.mysql
-# import nemde.core.utils.validate
-# import nemde.core.preprocessing.preprocessing
-# import nemde.core.serializers.original.data
-# import nemde.core.serializers.simplified.data
-# import nemde.core.serializers.simplified.case
 
 
 def define_sets(m, data):
@@ -2760,73 +2748,6 @@ def define_loss_model_constraints(m):
 def define_fast_start_unit_inflexibility_constraints(m):
     """Fast start unit inflexibility profile constraints"""
 
-    # def get_inflexibility_profile_base_time(mode, mode_time, t1, t2, t3):
-    #     """Get number of minutes from start of inflexibility profile"""
-
-    #     if mode == '0':
-    #         return mode_time
-    #     elif mode == '1':
-    #         return mode_time
-    #     elif mode == '2':
-    #         return t1 + mode_time
-    #     elif mode == '3':
-    #         return t1 + t2 + mode_time
-    #     elif mode == '4':
-    #         return t1 + t2 + t3 + mode_time
-    #     else:
-    #         raise Exception('Unhandled case:', mode, mode_time, t1, t2, t3)
-
-    # def get_inflexibility_profile_effective_mode_and_time(mode, mode_time, t1, t2, t3, t4):
-    #     """Get effective mode and time at end of dispatch interval"""
-
-    #     # Time at end of dispatch interval - offsetting by 5 minutes to correspond to end of dispatch interval
-    #     # minutes = get_inflexibility_profile_base_time(
-    #         # mode, mode_time + 5, t1, t2, t3)
-
-    #     minutes = fast_start.get_inflexibility_profile_base_time(
-    #         current_mode=mode, current_mode_time=mode_time + 5, t1=t1, t2=t2, t3=t3)
-
-    #     # Time interval endpoints
-    #     t1_end = t1
-    #     t2_end = t1 + t2
-    #     t3_end = t1 + t2 + t3
-    #     t4_end = t1 + t2 + t3 + t4
-
-    #     # Get effective mode
-    #     # TODO: need to fix this in the future - possible that unit in mode 0 has EnergyTarget > 0. Two NEMDE runs must
-    #     # be performed. See fast start unit docs.
-    #     if mode == '0':
-    #         effective_mode = '0'
-    #     elif minutes <= t1_end:
-    #         effective_mode = '1'
-    #     elif (minutes > t1_end) and (minutes <= t2_end):
-    #         effective_mode = '2'
-    #     elif (minutes > t2_end) and (minutes <= t3_end):
-    #         effective_mode = '3'
-    #     elif (minutes > t3_end) and (minutes <= t4_end):
-    #         effective_mode = '4'
-    #     elif minutes > t4_end:
-    #         effective_mode = '4'
-    #     else:
-    #         raise Exception('Unhandled case:', minutes,
-    #                         t1_end, t2_end, t3_end, t4_end)
-
-    #     # Get effective time based on effective mode and time interval endpoints
-    #     if effective_mode == '0':
-    #         effective_time = mode_time
-    #     elif effective_mode == '1':
-    #         effective_time = minutes
-    #     elif effective_mode == '2':
-    #         effective_time = minutes - t1_end
-    #     elif effective_mode == '3':
-    #         effective_time = minutes - t2_end
-    #     elif effective_mode == '4':
-    #         effective_time = minutes - t3_end
-    #     else:
-    #         raise Exception('Unhandled case:', effective_mode)
-
-    #     return effective_mode, effective_time
-
     def profile_constraint_rule(m, i):
         """Energy profile constraint"""
 
@@ -2841,22 +2762,13 @@ def define_fast_start_unit_inflexibility_constraints(m):
         else:
             raise Exception('Unexpected energy offer:', i)
 
-        # # Get effective mode and time at end of dispatch interval
-        # effective_mode, effective_time = get_inflexibility_profile_effective_mode_and_time(
-        #     m.P_TRADER_CURRENT_MODE[i],
-        #     m.P_TRADER_CURRENT_MODE_TIME[i],
-        #     m.P_TRADER_T1[i],
-        #     m.P_TRADER_T2[i],
-        #     m.P_TRADER_T3[i],
-        #     m.P_TRADER_T4[i])
         effective_mode = fast_start.get_target_mode(
             current_mode=m.P_TRADER_CURRENT_MODE[i],
             current_mode_time=m.P_TRADER_CURRENT_MODE_TIME[i],
             t1=m.P_TRADER_T1[i],
             t2=m.P_TRADER_T2[i],
             t3=m.P_TRADER_T3[i],
-            t4=m.P_TRADER_T4[i]
-        )
+            t4=m.P_TRADER_T4[i])
 
         effective_time = fast_start.get_target_mode_time(
             current_mode=m.P_TRADER_CURRENT_MODE[i],
@@ -2864,44 +2776,44 @@ def define_fast_start_unit_inflexibility_constraints(m):
             t1=m.P_TRADER_T1[i],
             t2=m.P_TRADER_T2[i],
             t3=m.P_TRADER_T3[i],
-            t4=m.P_TRADER_T4[i]
-        )
-
-        # effective_mode = m.P_TRADER_CURRENT_MODE[i]
-        # effective_time = m.P_TRADER_CURRENT_MODE_TIME[i]
+            t4=m.P_TRADER_T4[i])
 
         # Unit is synchronising - output = 0
         if (effective_mode == '0') or (effective_mode == '1'):
-            return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_LHS[i]
+            return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] 
+                    + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_LHS[i]
                     == 0 + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_RHS[i])
 
         # Unit ramping to min loading - energy output fixed to profile
         elif effective_mode == '2':
             slope = m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T2[i]
             startup_profile = slope * effective_time
-            return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_LHS[i]
-                    == startup_profile + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_RHS[i])
+            return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] 
+                    + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_LHS[i]
+                    == startup_profile 
+                    + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_RHS[i])
 
         # Output lower bounded by MinLoadingMW
         elif effective_mode == '3':
-            return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] + m.V_CV_TRADER_INFLEXIBILITY_PROFILE[i]
+            return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] 
+                    + m.V_CV_TRADER_INFLEXIBILITY_PROFILE[i]
                     >= m.P_TRADER_MIN_LOADING_MW[i])
 
         # Output still lower bounded by inflexibility profile
         elif (effective_mode == '4') and (effective_time < m.P_TRADER_T4[i]):
             slope = - m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T4[i]
-            max_output = (slope * effective_time) + \
-                m.P_TRADER_MIN_LOADING_MW[i]
+            max_output = (slope * effective_time) + m.P_TRADER_MIN_LOADING_MW[i]
 
-            return m.V_TRADER_TOTAL_OFFER[i, energy_offer] + m.V_CV_TRADER_INFLEXIBILITY_PROFILE[i] >= max_output
+            return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] 
+                    + m.V_CV_TRADER_INFLEXIBILITY_PROFILE[i]
+                    >= max_output)
 
         # Unit operating normally - output not constrained by inflexibility profile
         else:
             return pyo.Constraint.Skip
 
     # Profile constraint
-    m.C_TRADER_INFLEXIBILITY_PROFILE = pyo.Constraint(
-        m.S_TRADER_FAST_START, rule=profile_constraint_rule)
+    m.C_TRADER_INFLEXIBILITY_PROFILE = pyo.Constraint(m.S_TRADER_FAST_START, rule=profile_constraint_rule)
 
     return m
 
@@ -2916,13 +2828,11 @@ def define_tie_breaking_constraints(m):
             return pyo.Constraint.Skip
 
         return ((m.V_TRADER_OFFER[i, j, k] / m.P_TRADER_QUANTITY_BAND[i, j, k])
-                - (m.V_TRADER_OFFER[q, r, s] /
-                   m.P_TRADER_QUANTITY_BAND[q, r, s])
+                - (m.V_TRADER_OFFER[q, r, s] / m.P_TRADER_QUANTITY_BAND[q, r, s])
                 == m.V_TRADER_SLACK_1[i, j, k, q, r, s] - m.V_TRADER_SLACK_2[i, j, k, q, r, s])
 
     # Generator tie-breaking rule
-    m.C_TRADER_TIE_BREAK = pyo.Constraint(
-        m.S_TRADER_PRICE_TIED, rule=generator_tie_breaking_rule)
+    m.C_TRADER_TIE_BREAK = pyo.Constraint(m.S_TRADER_PRICE_TIED, rule=generator_tie_breaking_rule)
 
     return m
 
@@ -3016,8 +2926,7 @@ def solve_model(m):
     """Solve model"""
 
     # Setup solver
-    solver_options = {
-    }
+    solver_options = {}
 
     opt = pyo.SolverFactory('cbc', solver_io='lp')
 
