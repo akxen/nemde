@@ -11,6 +11,36 @@ def solve_model(model, algorithm=None):
     """Solve model"""
 
     # Setup solver
+    options = {
+        'sec': 60,  # time limit for each solve
+    }
+
+    opt = pyo.SolverFactory('cbc', solver_io='lp')
+
+    # Solve model
+    t0 = time.time()
+
+    # First pass - MILP
+    status_1 = opt.solve(model, tee=True, options=options, keepfiles=False)
+
+    # Fix all integer variables
+    for i in model.V_MNSP_FLOW_DIRECTION.keys():
+        model.V_MNSP_FLOW_DIRECTION[i].fix()
+
+    for i in model.V_LOSS_Y.keys():
+        model.V_LOSS_Y[i].fix()
+
+    # Resolve with integer variables fixed
+    status_2 = opt.solve(model, tee=True, options=options, keepfiles=False)
+    print('Finished MILP solve:', time.time() - t0)
+
+    return model
+
+
+def solve_model_dispatch(model, algorithm=None):
+    """Solve model - only considers dispatch solution"""
+
+    # Setup solver
     solver_options = {
         'sec': 60,  # time limit for each solve
     }

@@ -330,6 +330,8 @@ def get_region_solution(model, region_id):
     surplus_generation = model.V_CV_REGION_GENERATION_SURPLUS[region_id].value
     cleared_demand = model.E_REGION_CLEARED_DEMAND[region_id].expr()
 
+    energy_price = model.dual[model.C_POWER_BALANCE[region_id]]
+
     # Total FCAS dispatch in each region
     trade_types = ['R6SE', 'R60S', 'R5MI', 'R5RE', 'L6SE', 'L60S', 'L5MI', 'L5RE']
     fcas = {i: get_region_total_dispatch(m=model, region_id=region_id, trade_type=i)
@@ -340,7 +342,7 @@ def get_region_solution(model, region_id):
         # "@PeriodID": "2020-11-01T04:05:00+10:00",
         "@CaseID": model.P_CASE_ID.value,  # Not in NEMDE solution
         "@Intervention": model.P_INTERVENTION_STATUS.value,
-        # "@EnergyPrice": "41.69967",
+        "@EnergyPrice": energy_price,
         "@DispatchedGeneration": dispatched_generation,
         "@DispatchedLoad": dispatched_load,
         "@FixedDemand": fixed_demand,
@@ -385,7 +387,7 @@ def get_region_solution_comparison(model, region_id, casefile):
 
     # Keys to be compared
     keys = ["@DispatchedGeneration", "@DispatchedLoad", "@FixedDemand",
-            "@NetExport", "@SurplusGeneration",
+            "@NetExport", "@SurplusGeneration", "@EnergyPrice",
             "@R6Dispatch", "@R60Dispatch", "@R5Dispatch", "@R5RegDispatch",
             "@L6Dispatch", "@L60Dispatch", "@L5Dispatch", "@L5RegDispatch",
             "@ClearedDemand"]
