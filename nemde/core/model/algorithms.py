@@ -12,6 +12,7 @@ def solve_model(model, algorithm=None):
 
     # Setup solver
     solver_options = {
+        'sec': 60,  # time limit for each solve
     }
 
     opt = pyo.SolverFactory('cbc', solver_io='lp')
