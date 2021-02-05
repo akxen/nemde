@@ -10,10 +10,11 @@ setup_environment_variables()
 start = time.time()
 
 data = {
-    'case_id': '20201101001',
+    'case_id': '20201103117',
     'run_mode': 'physical',
     'options': {
-        'solution_format': 'validation'
+        'solution_format': 'validation',
+        'algorithm': 'fast_start'
     }
 }
 
@@ -27,4 +28,5 @@ solution = run_model(data_json)
 #             .get('PeriodSolution').get('@TotalObjective'))
 # print(obj)
 print('Finished', time.time() - start)
-print(solution['RegionSolution'])
+# print(solution['RegionSolution'])
+print([abs(i['model'] - i['actual']) for i in solution['PeriodSolution'] if i['key'] == '@TotalObjective'])

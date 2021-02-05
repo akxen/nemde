@@ -162,6 +162,9 @@ def define_parameters(m, data):
     m.P_TRADER_T3 = pyo.Param(m.S_TRADER_FAST_START, initialize=data['P_TRADER_T3'])
     m.P_TRADER_T4 = pyo.Param(m.S_TRADER_FAST_START, initialize=data['P_TRADER_T4'])
 
+    # Used to 'swap' (deactivate) inflexibility profile constraints
+    m.P_TRADER_INFLEXIBILITY_PROFILE_SWAMP = pyo.Param(initialize=0, mutable=True)
+
     # Trader SCADA ramp up and down rates
     m.P_TRADER_SCADA_RAMP_UP_RATE = pyo.Param(
         m.S_TRADERS, initialize=data['P_TRADER_SCADA_RAMP_UP_RATE'])
@@ -2794,7 +2797,273 @@ def define_fast_start_unit_inflexibility_constraints(m):
             return pyo.Constraint.Skip
 
     # Profile constraint
-    m.C_TRADER_INFLEXIBILITY_PROFILE = pyo.Constraint(m.S_TRADER_FAST_START, rule=profile_constraint_rule)
+    # m.C_TRADER_INFLEXIBILITY_PROFILE = pyo.Constraint(m.S_TRADER_FAST_START, rule=profile_constraint_rule)
+
+
+    def profile_constraint_t0_t1_1_rule(m, i):
+        """
+        Output fixed to zero when in mode T0 and T1. This is the first of two
+        inequality constraints used to enforce this condition
+        """
+
+        # CurrentMode and CurrentModeTime may be missing - skip constraint
+        if (m.P_TRADER_CURRENT_MODE[i] is None) or (m.P_TRADER_CURRENT_MODE_TIME[i] is None):
+            return pyo.Constraint.Skip
+
+        if m.P_TRADER_TYPE[i] == 'GENERATOR':
+            energy_offer = 'ENOF'
+        elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
+            energy_offer = 'LDOF'
+        else:
+            raise Exception('Unexpected energy offer:', i)
+
+        target_mode = fast_start.get_target_mode(
+            current_mode=m.P_TRADER_CURRENT_MODE[i],
+            current_mode_time=m.P_TRADER_CURRENT_MODE_TIME[i],
+            t1=m.P_TRADER_T1[i],
+            t2=m.P_TRADER_T2[i],
+            t3=m.P_TRADER_T3[i],
+            t4=m.P_TRADER_T4[i])
+
+        # Unit is synchronising - output = 0
+        if (target_mode == '0') or (target_mode == '1'):
+            return (m.V_TRADER_TOTAL_OFFER[i, energy_offer]
+                    <= 
+                    0
+                    + m.P_TRADER_INFLEXIBILITY_PROFILE_SWAMP
+                    + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_RHS[i])
+        else:
+            return pyo.Constraint.Skip
+
+
+    # First of two inequality constraints used to fix power output to 0 when 
+    # unit is offline or synchronising (mode T0 and T1)
+    m.C_TRADER_INFLEXIBILITY_PROFILE_T0_T1_1_RULE = pyo.Constraint(
+        m.S_TRADER_FAST_START, rule=profile_constraint_t0_t1_1_rule)
+
+
+    def profile_constraint_t0_t1_2_rule(m, i):
+        """
+        Output fixed to zero when in mode T0 and T1. This is the second of two
+        inequality constraints used to enforce this condition
+        """
+
+        # CurrentMode and CurrentModeTime may be missing - skip constraint
+        if (m.P_TRADER_CURRENT_MODE[i] is None) or (m.P_TRADER_CURRENT_MODE_TIME[i] is None):
+            return pyo.Constraint.Skip
+
+        if m.P_TRADER_TYPE[i] == 'GENERATOR':
+            energy_offer = 'ENOF'
+        elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
+            energy_offer = 'LDOF'
+        else:
+            raise Exception('Unexpected energy offer:', i)
+
+        target_mode = fast_start.get_target_mode(
+            current_mode=m.P_TRADER_CURRENT_MODE[i],
+            current_mode_time=m.P_TRADER_CURRENT_MODE_TIME[i],
+            t1=m.P_TRADER_T1[i],
+            t2=m.P_TRADER_T2[i],
+            t3=m.P_TRADER_T3[i],
+            t4=m.P_TRADER_T4[i])
+
+        # Unit is synchronising - output = 0
+        if (target_mode == '0') or (target_mode == '1'):
+            return (m.V_TRADER_TOTAL_OFFER[i, energy_offer]
+                    + m.P_TRADER_INFLEXIBILITY_PROFILE_SWAMP
+                    + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_LHS[i]
+                    >=
+                    0)
+        else:
+            return pyo.Constraint.Skip
+
+    # Second of two inequality constraints used to fix power output to 0 when 
+    # unit is offline or synchronising (mode T0 and T1)
+    m.C_TRADER_INFLEXIBILITY_PROFILE_T0_T1_2_RULE = pyo.Constraint(
+        m.S_TRADER_FAST_START, rule=profile_constraint_t0_t1_2_rule)
+
+
+    def profile_constraint_t2_1_rule(m, i):
+        """
+        First of two inequality constraints used to fix output to startup
+        profile when in mode 2
+        """
+
+        # CurrentMode and CurrentModeTime may be missing - skip constraint
+        if (m.P_TRADER_CURRENT_MODE[i] is None) or (m.P_TRADER_CURRENT_MODE_TIME[i] is None):
+            return pyo.Constraint.Skip
+
+        if m.P_TRADER_TYPE[i] == 'GENERATOR':
+            energy_offer = 'ENOF'
+        elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
+            energy_offer = 'LDOF'
+        else:
+            raise Exception('Unexpected energy offer:', i)
+
+        target_mode = fast_start.get_target_mode(
+            current_mode=m.P_TRADER_CURRENT_MODE[i],
+            current_mode_time=m.P_TRADER_CURRENT_MODE_TIME[i],
+            t1=m.P_TRADER_T1[i],
+            t2=m.P_TRADER_T2[i],
+            t3=m.P_TRADER_T3[i],
+            t4=m.P_TRADER_T4[i])
+
+        target_mode_time = fast_start.get_target_mode_time(
+            current_mode=m.P_TRADER_CURRENT_MODE[i],
+            current_mode_time=m.P_TRADER_CURRENT_MODE_TIME[i],
+            t1=m.P_TRADER_T1[i],
+            t2=m.P_TRADER_T2[i],
+            t3=m.P_TRADER_T3[i],
+            t4=m.P_TRADER_T4[i])
+
+        # Unit ramping to min loading - energy output fixed to profile
+        if target_mode == '2':
+            slope = m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T2[i]
+            startup_profile = slope * target_mode_time
+            return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] 
+                    <=
+                    startup_profile 
+                    + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_RHS[i]
+                    + m.P_TRADER_INFLEXIBILITY_PROFILE_SWAMP)
+        else:
+            return pyo.Constraint.Skip
+
+    # First of two inequality constraints used to fix power output to 
+    # inflexibility profile when in mode T2
+    m.C_TRADER_INFLEXIBILITY_PROFILE_T2_1_RULE = pyo.Constraint(
+        m.S_TRADER_FAST_START, rule=profile_constraint_t2_1_rule)
+
+
+    def profile_constraint_t2_2_rule(m, i):
+        """
+        Second of two inequality constraints used to fix output to startup
+        profile when in mode 2
+        """
+
+        # CurrentMode and CurrentModeTime may be missing - skip constraint
+        if (m.P_TRADER_CURRENT_MODE[i] is None) or (m.P_TRADER_CURRENT_MODE_TIME[i] is None):
+            return pyo.Constraint.Skip
+
+        if m.P_TRADER_TYPE[i] == 'GENERATOR':
+            energy_offer = 'ENOF'
+        elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
+            energy_offer = 'LDOF'
+        else:
+            raise Exception('Unexpected energy offer:', i)
+
+        target_mode = fast_start.get_target_mode(
+            current_mode=m.P_TRADER_CURRENT_MODE[i],
+            current_mode_time=m.P_TRADER_CURRENT_MODE_TIME[i],
+            t1=m.P_TRADER_T1[i],
+            t2=m.P_TRADER_T2[i],
+            t3=m.P_TRADER_T3[i],
+            t4=m.P_TRADER_T4[i])
+
+        target_mode_time = fast_start.get_target_mode_time(
+            current_mode=m.P_TRADER_CURRENT_MODE[i],
+            current_mode_time=m.P_TRADER_CURRENT_MODE_TIME[i],
+            t1=m.P_TRADER_T1[i],
+            t2=m.P_TRADER_T2[i],
+            t3=m.P_TRADER_T3[i],
+            t4=m.P_TRADER_T4[i])
+
+        # Unit ramping to min loading - energy output fixed to profile
+        if target_mode == '2':
+            slope = m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T2[i]
+            startup_profile = slope * target_mode_time
+            return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] 
+                    + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_LHS[i]
+                    + m.P_TRADER_INFLEXIBILITY_PROFILE_SWAMP
+                    >=
+                    startup_profile)
+        else:
+            return pyo.Constraint.Skip
+
+    # First of two inequality constraints used to fix power output to 
+    # inflexibility profile when in mode T2
+    m.C_TRADER_INFLEXIBILITY_PROFILE_T2_2_RULE = pyo.Constraint(
+        m.S_TRADER_FAST_START, rule=profile_constraint_t2_2_rule)
+
+    def profile_constraint_t3_rule(m, i):
+        """Min loading constraint"""
+
+        # CurrentMode and CurrentModeTime may be missing - skip constraint
+        if (m.P_TRADER_CURRENT_MODE[i] is None) or (m.P_TRADER_CURRENT_MODE_TIME[i] is None):
+            return pyo.Constraint.Skip
+
+        if m.P_TRADER_TYPE[i] == 'GENERATOR':
+            energy_offer = 'ENOF'
+        elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
+            energy_offer = 'LDOF'
+        else:
+            raise Exception('Unexpected energy offer:', i)
+
+        target_mode = fast_start.get_target_mode(
+            current_mode=m.P_TRADER_CURRENT_MODE[i],
+            current_mode_time=m.P_TRADER_CURRENT_MODE_TIME[i],
+            t1=m.P_TRADER_T1[i],
+            t2=m.P_TRADER_T2[i],
+            t3=m.P_TRADER_T3[i],
+            t4=m.P_TRADER_T4[i])
+
+        # Output lower bounded by MinLoadingMW
+        if target_mode == '3':
+            return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] 
+                    + m.V_CV_TRADER_INFLEXIBILITY_PROFILE[i]
+                    + m.P_TRADER_INFLEXIBILITY_PROFILE_SWAMP
+                    >= m.P_TRADER_MIN_LOADING_MW[i])
+        else:
+            return pyo.Constraint.Skip
+
+    # Min loading constraint when in mode T3
+    m.C_TRADER_INFLEXIBILITY_PROFILE_T3_RULE = pyo.Constraint(
+        m.S_TRADER_FAST_START, rule=profile_constraint_t3_rule)
+
+    def profile_constraint_t4_rule(m, i):
+        """Min loading constraint when in mode T4"""
+
+        # CurrentMode and CurrentModeTime may be missing - skip constraint
+        if (m.P_TRADER_CURRENT_MODE[i] is None) or (m.P_TRADER_CURRENT_MODE_TIME[i] is None):
+            return pyo.Constraint.Skip
+
+        if m.P_TRADER_TYPE[i] == 'GENERATOR':
+            energy_offer = 'ENOF'
+        elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
+            energy_offer = 'LDOF'
+        else:
+            raise Exception('Unexpected energy offer:', i)
+
+        target_mode = fast_start.get_target_mode(
+            current_mode=m.P_TRADER_CURRENT_MODE[i],
+            current_mode_time=m.P_TRADER_CURRENT_MODE_TIME[i],
+            t1=m.P_TRADER_T1[i],
+            t2=m.P_TRADER_T2[i],
+            t3=m.P_TRADER_T3[i],
+            t4=m.P_TRADER_T4[i])
+
+        target_mode_time = fast_start.get_target_mode_time(
+            current_mode=m.P_TRADER_CURRENT_MODE[i],
+            current_mode_time=m.P_TRADER_CURRENT_MODE_TIME[i],
+            t1=m.P_TRADER_T1[i],
+            t2=m.P_TRADER_T2[i],
+            t3=m.P_TRADER_T3[i],
+            t4=m.P_TRADER_T4[i])
+
+        # Output still lower bounded by inflexibility profile
+        if (target_mode == '4') and (target_mode_time < m.P_TRADER_T4[i]):
+            slope = - m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T4[i]
+            max_output = (slope * target_mode_time_time) + m.P_TRADER_MIN_LOADING_MW[i]
+
+            return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] 
+                    + m.V_CV_TRADER_INFLEXIBILITY_PROFILE[i]
+                    + m.P_TRADER_INFLEXIBILITY_PROFILE_SWAMP
+                    >= max_output)
+        else:
+            return pyo.Constraint.Skip
+
+    # Min loading constraint when in mode T4
+    m.C_TRADER_INFLEXIBILITY_PROFILE_T4_RULE = pyo.Constraint(
+        m.S_TRADER_FAST_START, rule=profile_constraint_t4_rule)
 
     return m
 
