@@ -3052,7 +3052,7 @@ def define_fast_start_unit_inflexibility_constraints(m):
         # Output still lower bounded by inflexibility profile
         if (target_mode == '4') and (target_mode_time < m.P_TRADER_T4[i]):
             slope = - m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T4[i]
-            max_output = (slope * target_mode_time_time) + m.P_TRADER_MIN_LOADING_MW[i]
+            max_output = (slope * target_mode_time) + m.P_TRADER_MIN_LOADING_MW[i]
 
             return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] 
                     + m.V_CV_TRADER_INFLEXIBILITY_PROFILE[i]
