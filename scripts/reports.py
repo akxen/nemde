@@ -2,6 +2,7 @@
 
 import os
 import json
+import shutil
 import itertools
 
 import pandas as pd
@@ -12,7 +13,7 @@ from nemde.io.casefile import load_base_case
 from nemde.io.database.mysql import get_latest_run_id
 from nemde.io.database.mysql import get_test_run_validation_results
 from nemde.config.setup_variables import setup_environment_variables
-setup_environment_variables(online=False)
+setup_environment_variables()
 
 
 def parse_validation_results(run_id):
@@ -114,9 +115,14 @@ def construct_validation_report(run_id, root_dir):
         save_basis_results(results=results, key=key, filename=path)
 
     # Check if fast start unit starts up for a given interval
-    startup_flags = fast_start_unit_startup_periods(results=results)
-    (pd.DataFrame(startup_flags).sort_values(by='startup_flag', ascending=False)
-     .to_csv(os.path.join(output_dir, 'startup.csv'), index=False))
+    # startup_flags = fast_start_unit_startup_periods(results=results)
+    # (pd.DataFrame(startup_flags).sort_values(by='startup_flag', ascending=False)
+    #  .to_csv(os.path.join(output_dir, 'startup.csv'), index=False))
+
+    # Zip validation results and upload to bucket
+    # os.path
+    # shutil.make_archive(root_dir, 'zip', output_dir)
+    shutil.make_archive(base_name=output_dir, format='zip', root_dir=output_dir)
 
 
 if __name__ == '__main__':

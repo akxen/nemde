@@ -4,6 +4,9 @@ services:
   nemde:
     build:
       context: .
+    volumes:
+      - ./scripts/validation:/app/scripts/validation
+    entrypoint: /app/scripts/entrypoint.sh
 
 networks:
   default:

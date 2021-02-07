@@ -36,30 +36,19 @@ RUN apt-get -y install libssl-dev
 RUN mkdir /app
 COPY ./requirements.txt /app/
 RUN python3.9 -m pip install -r /app/requirements.txt
-COPY . /app
+COPY ./nemde /app/nemde
+COPY ./scripts /app/scripts
+COPY ./pytest.ini /app/
 WORKDIR /app
 
-EXPOSE 3306
+# Make scripts executable
+RUN chmod +x /app/scripts/*
+
+# Limit permissions
+RUN adduser user
+RUN chown -R user:user /app
+RUN chmod -R 755 /app
+USER user
+
+# Keep container running - should be overidden by entrypoint.sh in docker-compose.yml
 CMD tail -f /dev/null
-
-# COPY ./requirements.txt /requirements.txt
-
-# # Create directory for scripts
-# RUN mkdir /app
-# RUN mkdir /app/scripts
-# ENV PATH="/app/scripts:${PATH}"
-# COPY ./scripts /app/scripts
-# # RUN chmod +x /app/scripts/*
-
-# # WORKDIR /apps
-# WORKDIR /
-
-# ENV PATH="/app/nemde:${PATH}"
-
-# # RUN adduser user
-# # RUN chown -R user:user /apps
-# # RUN chmod -R 755 /apps
-# # RUN chmod -R 755 /scripts
-# # USER user
-
-# CMD ["entrypoint.sh"]

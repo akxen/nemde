@@ -5,11 +5,11 @@ import os
 from dotenv import load_dotenv
 
 
-def setup_environment_variables(online=False):
+def setup_environment_variables():
     """Setup environment variables depending on online / offline operation"""
 
     # Select correct ENV file
-    if online:
+    if os.environ.get('ONLINE_FLAG') == 'true':
         env_filename = 'online.env'
     else:
         env_filename = 'offline.env'

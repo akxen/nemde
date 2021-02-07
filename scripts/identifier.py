@@ -8,7 +8,7 @@ import context
 from nemde.io.casefile import load_base_case
 from nemde.core.casefile import lookup
 from nemde.config.setup_variables import setup_environment_variables
-setup_environment_variables(online=False)
+setup_environment_variables()
 
 
 def check_intervention_status(casefile):

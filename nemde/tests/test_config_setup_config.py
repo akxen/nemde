@@ -11,7 +11,7 @@ from nemde import setup_environment_variables
 def test_online_environment_variables_setup():
     """Test environment variables for online application are specified"""
 
-    setup_environment_variables(online=True)
+    setup_environment_variables()
 
     keys = ['MYSQL_HOST', 'MYSQL_USER', 'MYSQL_PORT', 'MYSQL_PASSWORD']
     for key in keys:
@@ -21,7 +21,7 @@ def test_online_environment_variables_setup():
 def test_offline_environment_variables_setup():
     """Test environment variables for offline application are specified"""
 
-    setup_environment_variables(online=False)
+    setup_environment_variables()
 
     keys = ['MYSQL_HOST', 'MYSQL_USER', 'MYSQL_PORT', 'MYSQL_PASSWORD']
     for key in keys:

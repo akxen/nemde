@@ -10,7 +10,7 @@ import context
 import nemde
 from nemde.io.database.mysql import initialise_tables
 from nemde.config.setup_variables import setup_environment_variables
-setup_environment_variables(online=False)
+setup_environment_variables()
 
 
 def get_month_dispatch_intervals(year, month):

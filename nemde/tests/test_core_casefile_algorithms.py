@@ -11,7 +11,7 @@ from nemde.core.casefile.algorithms import get_parsed_interconnector_loss_model_
 from nemde.core.casefile.algorithms import get_interconnector_loss_estimate
 from nemde.config.setup_variables import setup_environment_variables
 
-setup_environment_variables(online=False)
+setup_environment_variables()
 
 
 @pytest.fixture(scope='module')

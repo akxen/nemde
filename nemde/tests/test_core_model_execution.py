@@ -14,7 +14,7 @@ from nemde.core.model.execution import run_model
 from nemde.io.database import mysql
 from nemde.io.casefile import load_base_case
 from nemde.config.setup_variables import setup_environment_variables
-setup_environment_variables(online=False)
+setup_environment_variables()
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,7 @@ def get_casefile_ids():
     return case_ids
 
 
-@pytest.fixture(scope='module', params=get_randomised_casefile_ids(year=2020, month=11, n=100))
+@pytest.fixture(scope='module', params=get_randomised_casefile_ids(year=2020, month=11, n=1))
 # @pytest.fixture(scope='module', params=get_casefile_ids())
 def case_id(request):
     return request.param
