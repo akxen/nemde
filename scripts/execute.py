@@ -10,11 +10,11 @@ setup_environment_variables()
 start = time.time()
 
 data = {
-    'case_id': '20201103117',
+    'case_id': '20201110153',
     'run_mode': 'physical',
     'options': {
         'solution_format': 'validation',
-        'algorithm': 'fast_start'
+        'algorithm': 'dispatch_only'
     }
 }
 

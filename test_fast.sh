@@ -1,3 +1,3 @@
 #!/bin/bash
 
-pytest --junitxml=nemde/tests/report.xml
+pytest --verbose --capture=tee-sys --junitxml=nemde/tests/report.xml 

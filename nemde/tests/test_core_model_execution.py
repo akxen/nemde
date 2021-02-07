@@ -80,7 +80,7 @@ def get_casefile_ids():
     return case_ids
 
 
-@pytest.fixture(scope='module', params=get_randomised_casefile_ids(year=2020, month=11, n=1))
+@pytest.fixture(scope='module', params=get_randomised_casefile_ids(year=2020, month=11, n=100))
 # @pytest.fixture(scope='module', params=get_casefile_ids())
 def case_id(request):
     return request.param
