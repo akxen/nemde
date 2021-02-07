@@ -56,6 +56,7 @@ def solve_model_dispatch_only(model):
     # Setup solver
     options = {
         'sec': 60,  # time limit for each solve
+        'loglevel': 3
     }
 
     opt = pyo.SolverFactory('cbc', solver_io='lp')
