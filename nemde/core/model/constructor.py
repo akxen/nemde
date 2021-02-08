@@ -152,7 +152,7 @@ def define_parameters(m, data):
         m.S_TRADER_FAST_START, initialize=data['P_TRADER_MIN_LOADING_MW'])
 
     m.P_TRADER_CURRENT_MODE = pyo.Param(
-        m.S_TRADER_FAST_START, initialize=data['P_TRADER_CURRENT_MODE'], within=pyo.Any)
+        m.S_TRADER_FAST_START, initialize=data['P_TRADER_CURRENT_MODE'], within=pyo.Integers)
 
     m.P_TRADER_CURRENT_MODE_TIME = pyo.Param(
         m.S_TRADER_FAST_START, initialize=data['P_TRADER_CURRENT_MODE_TIME'])
@@ -1699,7 +1699,7 @@ def define_unit_constraints(m):
 
         # Unit on fixed startup profile. T2 ramp rate applies while in T2, then
         # SCADA ramp rate for rest of interval
-        if (i in m.P_TRADER_CURRENT_MODE.keys()) and (m.P_TRADER_CURRENT_MODE[i] == '1'):
+        if (i in m.P_TRADER_CURRENT_MODE.keys()) and (m.P_TRADER_CURRENT_MODE[i] == 1):
             # Total ramp up capability when unit initially in mode 1
             ramp_up_capability = fast_start.get_mode_one_ramping_capability(
                 t1=m.P_TRADER_T1[i],
@@ -1712,7 +1712,7 @@ def define_unit_constraints(m):
             # Note: InitialMW = 0 if CurrentMode is T1 (unit is synchronising)
             return m.V_TRADER_TOTAL_OFFER[i, j] <= ramp_up_capability + m.V_CV_TRADER_RAMP_UP[i]
 
-        elif (i in m.P_TRADER_CURRENT_MODE.keys()) and (m.P_TRADER_CURRENT_MODE[i] == '2'):
+        elif (i in m.P_TRADER_CURRENT_MODE.keys()) and (m.P_TRADER_CURRENT_MODE[i] == 2):
             # Initial MW and ramping capability if in mode 2
             initial_mw = fast_start.get_mode_two_initial_mw(
                 t2=m.P_TRADER_T2[i],
@@ -2763,13 +2763,13 @@ def define_fast_start_unit_inflexibility_constraints(m):
             t4=m.P_TRADER_T4[i])
 
         # Unit is synchronising - output = 0
-        if (effective_mode == '0') or (effective_mode == '1'):
+        if (effective_mode == 0) or (effective_mode == 1):
             return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] 
                     + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_LHS[i]
                     == 0 + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_RHS[i])
 
         # Unit ramping to min loading - energy output fixed to profile
-        elif effective_mode == '2':
+        elif effective_mode == 2:
             slope = m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T2[i]
             startup_profile = slope * effective_time
             return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] 
@@ -2778,13 +2778,13 @@ def define_fast_start_unit_inflexibility_constraints(m):
                     + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_RHS[i])
 
         # Output lower bounded by MinLoadingMW
-        elif effective_mode == '3':
+        elif effective_mode == 3:
             return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] 
                     + m.V_CV_TRADER_INFLEXIBILITY_PROFILE[i]
                     >= m.P_TRADER_MIN_LOADING_MW[i])
 
         # Output still lower bounded by inflexibility profile
-        elif (effective_mode == '4') and (effective_time < m.P_TRADER_T4[i]):
+        elif (effective_mode == 4) and (effective_time < m.P_TRADER_T4[i]):
             slope = - m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T4[i]
             max_output = (slope * effective_time) + m.P_TRADER_MIN_LOADING_MW[i]
 
@@ -2826,7 +2826,7 @@ def define_fast_start_unit_inflexibility_constraints(m):
             t4=m.P_TRADER_T4[i])
 
         # Unit is synchronising - output = 0
-        if (target_mode == '0') or (target_mode == '1'):
+        if (target_mode == 0) or (target_mode == 1):
             return (m.V_TRADER_TOTAL_OFFER[i, energy_offer]
                     <= 
                     0
@@ -2868,7 +2868,7 @@ def define_fast_start_unit_inflexibility_constraints(m):
             t4=m.P_TRADER_T4[i])
 
         # Unit is synchronising - output = 0
-        if (target_mode == '0') or (target_mode == '1'):
+        if (target_mode == 0) or (target_mode == 1):
             return (m.V_TRADER_TOTAL_OFFER[i, energy_offer]
                     + m.P_TRADER_INFLEXIBILITY_PROFILE_SWAMP
                     + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_LHS[i]
@@ -2917,7 +2917,7 @@ def define_fast_start_unit_inflexibility_constraints(m):
             t4=m.P_TRADER_T4[i])
 
         # Unit ramping to min loading - energy output fixed to profile
-        if target_mode == '2':
+        if target_mode == 2:
             slope = m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T2[i]
             startup_profile = slope * target_mode_time
             return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] 
@@ -2968,7 +2968,7 @@ def define_fast_start_unit_inflexibility_constraints(m):
             t4=m.P_TRADER_T4[i])
 
         # Unit ramping to min loading - energy output fixed to profile
-        if target_mode == '2':
+        if target_mode == 2:
             slope = m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T2[i]
             startup_profile = slope * target_mode_time
             return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] 
@@ -3007,7 +3007,7 @@ def define_fast_start_unit_inflexibility_constraints(m):
             t4=m.P_TRADER_T4[i])
 
         # Output lower bounded by MinLoadingMW
-        if target_mode == '3':
+        if target_mode == 3:
             return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] 
                     + m.V_CV_TRADER_INFLEXIBILITY_PROFILE[i]
                     + m.P_TRADER_INFLEXIBILITY_PROFILE_SWAMP
@@ -3050,7 +3050,7 @@ def define_fast_start_unit_inflexibility_constraints(m):
             t4=m.P_TRADER_T4[i])
 
         # Output still lower bounded by inflexibility profile
-        if (target_mode == '4') and (target_mode_time < m.P_TRADER_T4[i]):
+        if (target_mode == 4) and (target_mode_time < m.P_TRADER_T4[i]):
             slope = - m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T4[i]
             max_output = (slope * target_mode_time) + m.P_TRADER_MIN_LOADING_MW[i]
 

@@ -1189,7 +1189,7 @@ def construct_case(data, mode) -> dict:
         'P_TRADER_SCADA_RAMP_UP_RATE': get_trader_initial_condition_attribute(data, 'SCADARampUpRate', float),
         'P_TRADER_SCADA_RAMP_DN_RATE': get_trader_initial_condition_attribute(data, 'SCADARampDnRate', float),
         'P_TRADER_MIN_LOADING_MW': get_trader_fast_start_attribute(data, '@MinLoadingMW', float),
-        'P_TRADER_CURRENT_MODE': get_trader_fast_start_attribute(data, '@CurrentMode', str),
+        'P_TRADER_CURRENT_MODE': get_trader_fast_start_attribute(data, '@CurrentMode', int),
         'P_TRADER_CURRENT_MODE_TIME': get_trader_fast_start_attribute(data, '@CurrentModeTime', float),
         'P_TRADER_T1': get_trader_fast_start_attribute(data, '@T1', float),
         'P_TRADER_T2': get_trader_fast_start_attribute(data, '@T2', float),
