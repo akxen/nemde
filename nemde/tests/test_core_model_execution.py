@@ -63,24 +63,30 @@ def get_casefile_ids():
     #             '20201101135', '20201101161', '20201101164', '20201101165',
     #             '20201101169']
 
-    # Cases where at least one trader has current mode = 2
-    case_ids = ['20201101076',
-                '20201101136',
-                '20201101159',
-                '20201101160',
-                '20201101160',
-                '20201101161',
-                '20201101165',
-                '20201101166',
-                '20201101167',
-                '20201101171',
-                '20201101172',
-                '20201101173']
+    # # Cases where at least one trader has current mode = 2
+    # case_ids = ['20201101076',
+    #             '20201101136',
+    #             '20201101159',
+    #             '20201101160',
+    #             '20201101160',
+    #             '20201101161',
+    #             '20201101165',
+    #             '20201101166',
+    #             '20201101167',
+    #             '20201101171',
+    #             '20201101172',
+    #             '20201101173']
+
+    # # Cases where pass criterion should fail
+    # case_ids = ['20201117113']
+
+    # Cases where fast start generator starts up
+    case_ids = ['20201117111']
 
     return case_ids
 
 
-@pytest.fixture(scope='module', params=get_randomised_casefile_ids(year=2020, month=11, n=1))
+@pytest.fixture(scope='module', params=get_randomised_casefile_ids(year=2020, month=11, n=2000))
 # @pytest.fixture(scope='module', params=get_casefile_ids())
 def case_id(request):
     return request.param
@@ -120,6 +126,7 @@ def test_run_model_validation(testrun_uid, case_id):
         'case_id': case_id,
         'run_mode': 'physical',
         'options': {
+            'algorithm': 'dispatch_only',
             'solution_format': 'validation'
         }
     }

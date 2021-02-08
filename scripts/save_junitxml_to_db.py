@@ -32,5 +32,5 @@ def save_to_db():
 
 
 if __name__ == '__main__':
-    a = save_to_db()
-    b = 10
+    # Save junitxml report to database
+    save_to_db()

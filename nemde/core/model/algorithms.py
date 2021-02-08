@@ -25,7 +25,7 @@ def solve_model_prices(model):
 
     # Setup solver
     options = {
-        'sec': 60,  # time limit for each solve
+        'sec': 300,  # time limit for each solve
     }
 
     opt = pyo.SolverFactory('cbc', solver_io='lp')
@@ -55,7 +55,7 @@ def solve_model_dispatch_only(model):
 
     # Setup solver
     options = {
-        'sec': 60,  # time limit for each solve
+        'sec': 300,  # time limit for each solve
         'loglevel': 3
     }
 
@@ -108,7 +108,7 @@ def solve_model_fast_start(model):
     # Set CurrentMode=1 and CurrentModeTime=0 for generators starting up
     for i in starting:
         model.P_TRADER_CURRENT_MODE[i] = '1'
-        model.P_TRADER_CURRENT_MODE_TIME[i] = 0.0
+        model.P_TRADER_CURRENT_MODE_TIME[i] = 0
 
     # Re-activate fast start constraints and re-solve
     model.P_TRADER_INFLEXIBILITY_PROFILE_SWAMP = 0
