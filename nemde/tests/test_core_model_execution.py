@@ -81,13 +81,16 @@ def get_casefile_ids():
     # case_ids = ['20201117113']
 
     # Cases where fast start generator starts up
-    case_ids = ['20201117111']
+    case_ids = [
+        '20201117111',
+        # '20201120224',
+        ]
 
     return case_ids
 
 
-@pytest.fixture(scope='module', params=get_randomised_casefile_ids(year=2020, month=11, n=2000))
-# @pytest.fixture(scope='module', params=get_casefile_ids())
+# @pytest.fixture(scope='module', params=get_randomised_casefile_ids(year=2020, month=11, n=2000))
+@pytest.fixture(scope='module', params=get_casefile_ids())
 def case_id(request):
     return request.param
 

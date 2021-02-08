@@ -18,15 +18,17 @@ data = {
     }
 }
 
-data_json = json.dumps(data)
-solution = run_model(data_json)
+# data_json = json.dumps(data)
+# solution = run_model(data_json)
 
 # print(solution['PeriodSolution']['@TotalObjective'])
 
-# base = load_base_case(case_id='20201101001')
+# base = load_base_case(case_id='20201117111')
+# with open('20201117111.json', 'w') as f:
+    # json.dump(base, f)
 # obj = float(base.get('NEMSPDCaseFile').get('NemSpdOutputs')
 #             .get('PeriodSolution').get('@TotalObjective'))
 # print(obj)
-print('Finished', time.time() - start)
+# print('Finished', time.time() - start)
 # print(solution['RegionSolution'])
-print([abs(i['model'] - i['actual']) for i in solution['PeriodSolution'] if i['key'] == '@TotalObjective'])
+# print([abs(i['model'] - i['actual']) for i in solution['PeriodSolution'] if i['key'] == '@TotalObjective'])
