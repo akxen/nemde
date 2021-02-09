@@ -9,8 +9,9 @@ setup_environment_variables()
 
 start = time.time()
 
+case_id = '20201129176'
 data = {
-    'case_id': '20201121156',
+    'case_id': case_id,
     'run_mode': 'physical',
     'options': {
         'solution_format': 'validation',
@@ -23,7 +24,6 @@ solution = run_model(data_json)
 
 # print(solution['PeriodSolution']['@TotalObjective'])
 
-# case_id = '20201121156'
 # base = load_base_case(case_id=case_id)
 # with open(f'casefiles/{case_id}.json', 'w') as f:
     # json.dump(base, f)
