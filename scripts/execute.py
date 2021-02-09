@@ -10,25 +10,26 @@ setup_environment_variables()
 start = time.time()
 
 data = {
-    'case_id': '20201110153',
+    'case_id': '20201121156',
     'run_mode': 'physical',
     'options': {
         'solution_format': 'validation',
-        'algorithm': 'dispatch_only'
+        'algorithm': 'fast_start_units'
     }
 }
 
-# data_json = json.dumps(data)
-# solution = run_model(data_json)
+data_json = json.dumps(data)
+solution = run_model(data_json)
 
 # print(solution['PeriodSolution']['@TotalObjective'])
 
-# base = load_base_case(case_id='20201117111')
-# with open('20201117111.json', 'w') as f:
+# case_id = '20201121156'
+# base = load_base_case(case_id=case_id)
+# with open(f'casefiles/{case_id}.json', 'w') as f:
     # json.dump(base, f)
 # obj = float(base.get('NEMSPDCaseFile').get('NemSpdOutputs')
 #             .get('PeriodSolution').get('@TotalObjective'))
 # print(obj)
-# print('Finished', time.time() - start)
+print('Finished', time.time() - start)
 # print(solution['RegionSolution'])
-# print([abs(i['model'] - i['actual']) for i in solution['PeriodSolution'] if i['key'] == '@TotalObjective'])
+print([abs(i['model'] - i['actual']) for i in solution['PeriodSolution'] if i['key'] == '@TotalObjective'])

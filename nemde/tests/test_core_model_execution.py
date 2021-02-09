@@ -83,14 +83,49 @@ def get_casefile_ids():
     # Cases where fast start generator starts up
     case_ids = [
         '20201117111',
-        # '20201120224',
-        ]
+        '20201127043',
+        '20201121156',
+        '20201116149',
+        '20201106112',
+        '20201118096',
+        '20201118132',
+        '20201130139',
+        '20201105150',
+        '20201129141',
+        '20201125069',
+        '20201127157',
+        '20201104148',
+        '20201130169',
+        '20201113133',
+        '20201121157',
+        '20201122151',
+        '20201124151',
+        '20201123151',
+        '20201129139',
+        '20201111151',
+        '20201103117',
+        '20201119061',
+        '20201119157',
+        '20201119127',
+        '20201130217',
+        '20201123169',
+        '20201129176',
+        '20201114073',
+        '20201128140',
+        '20201119199',
+        '20201115073',
+        '20201122247',
+        '20201101049',
+        '20201113114',
+        '20201115092',
+        '20201111050'
+    ]
 
     return case_ids
 
 
-@pytest.fixture(scope='module', params=get_randomised_casefile_ids(year=2020, month=11, n=2000))
-# @pytest.fixture(scope='module', params=get_casefile_ids())
+# @pytest.fixture(scope='module', params=get_randomised_casefile_ids(year=2020, month=11, n=2000))
+@pytest.fixture(scope='module', params=get_casefile_ids())
 def case_id(request):
     return request.param
 
@@ -129,7 +164,7 @@ def test_run_model_validation(testrun_uid, case_id):
         'case_id': case_id,
         'run_mode': 'physical',
         'options': {
-            'algorithm': 'dispatch_only',
+            'algorithm': 'fast_start_units',
             'solution_format': 'validation'
         }
     }
