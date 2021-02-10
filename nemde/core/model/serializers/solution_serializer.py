@@ -274,7 +274,6 @@ def get_trader_solution(model, trader_id):
         "@L60Violation": violation['L60S'],
         "@L5Violation": violation['L5MI'],
         "@L5RegViolation": violation['L5RE'],
-        # "@FSTargetMode": "0",
     }
 
     # Ramp rate information - not included for all traders
@@ -285,10 +284,19 @@ def get_trader_solution(model, trader_id):
             # "@RampPrice": "0",
             # "@RampDeficit": "0"
         }
+
     else:
         ramp_rates = {}
 
-    return {**trader_solution, **ramp_rates}
+    # Fast start mode information - not included for all traders
+    if trader_id in model.P_TRADER_CURRENT_MODE.keys():
+        fast_start = {
+            "@FSTargetMode": model.P_TRADER_CURRENT_MODE[trader_id].value,
+        }
+    else:
+        fast_start = {}
+
+    return {**trader_solution, **ramp_rates, **fast_start}
 
 
 def get_trader_solution_comparison(model, trader_id, casefile):
@@ -306,7 +314,7 @@ def get_trader_solution_comparison(model, trader_id, casefile):
             '@L6Target', '@L60Target', '@L5Target', '@L5RegTarget',
             '@R6Violation', '@R60Violation', '@R5Violation', '@R5RegViolation',
             '@L6Violation', '@L60Violation', '@L5Violation', '@L5RegViolation',
-            '@EnergyTarget', '@RampUpRate', '@RampDnRate']
+            '@EnergyTarget', '@RampUpRate', '@RampDnRate', '@FSTargetMode']
 
     # Dispatch target and violation comparison
     info = {
