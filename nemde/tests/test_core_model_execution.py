@@ -129,7 +129,7 @@ def get_casefile_ids():
     return case_ids
 
 
-@pytest.fixture(scope='module', params=get_randomised_casefile_ids(year=2020, month=11, n=2000))
+@pytest.fixture(scope='module', params=get_randomised_casefile_ids(year=2020, month=11, n=10))
 # @pytest.fixture(scope='module', params=get_casefile_ids())
 def case_id(request):
     return request.param
@@ -169,7 +169,7 @@ def test_run_model_validation(testrun_uid, case_id):
         'case_id': case_id,
         'run_mode': 'physical',
         'options': {
-            'algorithm': 'fast_start_units',
+            'algorithm': 'default',
             'solution_format': 'validation'
         }
     }

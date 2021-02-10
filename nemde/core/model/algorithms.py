@@ -7,50 +7,50 @@ import time
 import pyomo.environ as pyo
 
 
-def solve_model(model, algorithm=None):
-    """Solve model using specified algorithm"""
+def default_algorithm(model):
+    """
+    First solve model without fast start inflexibility constraints to check
+    if units will come online. Change CurrentMode accordingly and resolve with
+    fast-start unit constraints.
 
-    if algorithm == 'dispatch_only':
-        return solve_model_dispatch_only(model)
-    elif algorithm == 'prices':
-        return solve_model_prices(model)
-    elif algorithm == 'fast_start_units':
-        return solve_model_fast_start_units(model)
-    else:
-        raise ValueError('Algorithm not recognised')
+    Note: There is sometimes a problem with CBC that makes it difficult to
+    deactivate a constraint block (e.g. model.C_TRADER_INFLEXIBILITY_PROFILE)
+    and then solve the model. Running inside Docker container seems to fix
+    this issue for now.
+    """
 
-
-def solve_model_prices(model):
-    """Solve model"""
-
-    # Setup solver
     options = {
-        'sec': 300,  # time limit for each solve
+        'sec': 300
     }
-
     opt = pyo.SolverFactory('cbc', solver_io='lp')
 
-    # Solve model
-    t0 = time.time()
+    # Solve model with 'swammped' inflexibility profiel constraints
+    model.C_TRADER_INFLEXIBILITY_PROFILE.deactivate()
+    first_pass = opt.solve(model, tee=True, options=options, keepfiles=False)
 
-    # First pass - MILP
-    status_1 = opt.solve(model, tee=True, options=options, keepfiles=False)
+    # Check if dispatch > 0 for any fast start units
+    starting = [i for i, j in model.S_TRADER_ENERGY_OFFERS
+                if (i in model.S_TRADER_FAST_START)
+                and (model.V_TRADER_TOTAL_OFFER[i, j].value > 0.005)
+                and (model.P_TRADER_CURRENT_MODE[i].value == 0)]
 
-    # Fix all integer variables
-    for i in model.V_MNSP_FLOW_DIRECTION.keys():
-        model.V_MNSP_FLOW_DIRECTION[i].fix()
+    # TODO: check if model can be returned when 'starting' is an empty list
 
-    for i in model.V_LOSS_Y.keys():
-        model.V_LOSS_Y[i].fix()
+    # Set CurrentMode=1 and CurrentModeTime=0 for generators starting up
+    for i in starting:
+        model.P_TRADER_CURRENT_MODE[i] = 1
+        model.P_TRADER_CURRENT_MODE_TIME[i] = 0
 
-    # Resolve with integer variables fixed
-    status_2 = opt.solve(model, tee=True, options=options, keepfiles=False)
-    print('Finished MILP solve:', time.time() - t0)
+    model.C_TRADER_RAMP_UP_RATE.reconstruct()
+    model.C_TRADER_RAMP_DOWN_RATE.reconstruct()
+    model.C_TRADER_INFLEXIBILITY_PROFILE.reconstruct()
+    model.C_TRADER_INFLEXIBILITY_PROFILE.activate()
+    second_pass = opt.solve(model, tee=True, options=options, keepfiles=False)
 
     return model
 
 
-def solve_model_dispatch_only(model):
+def dispatch_only_algorithm(model):
     """Solve model - only considers dispatch solution"""
 
     # Setup solver
@@ -72,58 +72,12 @@ def solve_model_dispatch_only(model):
     return model
 
 
-def solve_model_fast_start_units(model):
-    """
-    First solve model without fast start inflexibility constraints to check
-    if units will come online. Change CurrentMode accordingly and resolve with
-    fast-start unit constraints.
-    Note: There is problem with CBC that makes it difficult to deactivate
-    a constraint block (e.g. model.C_TRADER_INFLEXIBILITY_PROFILE) and then
-    solve the model. Cannot implement this feature for now.
-    """
+def solve_model(model, algorithm=None):
+    """Solve model using specified algorithm"""
 
-    solver_options = {}
-    opt = pyo.SolverFactory('cbc', solver_io='lp')
-
-    # # Deactivate inflexibility profiles constraints in first pass
-    # model.P_TRADER_INFLEXIBILITY_PROFILE_SWAMP = 2000
-
-    # # Reconstruct inflexibility profile constraints
-    # model.C_TRADER_INFLEXIBILITY_PROFILE_T0_T1_1_RULE.reconstruct()
-    # model.C_TRADER_INFLEXIBILITY_PROFILE_T0_T1_2_RULE.reconstruct()
-    # model.C_TRADER_INFLEXIBILITY_PROFILE_T2_1_RULE.reconstruct()
-    # model.C_TRADER_INFLEXIBILITY_PROFILE_T2_2_RULE.reconstruct()
-    # model.C_TRADER_INFLEXIBILITY_PROFILE_T3_RULE.reconstruct()
-    # model.C_TRADER_INFLEXIBILITY_PROFILE_T4_RULE.reconstruct()
-
-    # Solve model with 'swammped' inflexibility profiel constraints
-    model.C_TRADER_INFLEXIBILITY_PROFILE.deactivate()
-    first_pass = opt.solve(model, tee=True, options=solver_options, keepfiles=False)
-
-    # Check if dispatch > 0 for any fast start units
-    starting = [i for i, j in model.S_TRADER_ENERGY_OFFERS
-                if (i in model.S_TRADER_FAST_START)
-                and (model.V_TRADER_TOTAL_OFFER[i, j].value > 0.005)
-                and (model.P_TRADER_CURRENT_MODE[i].value == 0)]
-
-    # Set CurrentMode=1 and CurrentModeTime=0 for generators starting up
-    for i in starting:
-        model.P_TRADER_CURRENT_MODE[i] = 1
-        model.P_TRADER_CURRENT_MODE_TIME[i] = 0
-
-    # Re-activate fast start constraints and re-solve
-    # model.P_TRADER_INFLEXIBILITY_PROFILE_SWAMP = 0
-
-    # model.C_TRADER_INFLEXIBILITY_PROFILE_T0_T1_1_RULE.reconstruct()
-    # model.C_TRADER_INFLEXIBILITY_PROFILE_T0_T1_2_RULE.reconstruct()
-    # model.C_TRADER_INFLEXIBILITY_PROFILE_T2_1_RULE.reconstruct()
-    # model.C_TRADER_INFLEXIBILITY_PROFILE_T2_2_RULE.reconstruct()
-    # model.C_TRADER_INFLEXIBILITY_PROFILE_T3_RULE.reconstruct()
-    # model.C_TRADER_INFLEXIBILITY_PROFILE_T4_RULE.reconstruct()
-    model.C_TRADER_RAMP_UP_RATE.reconstruct()
-    model.C_TRADER_RAMP_DOWN_RATE.reconstruct()
-    model.C_TRADER_INFLEXIBILITY_PROFILE.reconstruct()
-    model.C_TRADER_INFLEXIBILITY_PROFILE.activate()
-    second_pass = opt.solve(model, tee=True, options=solver_options, keepfiles=False)
-
-    return model
+    if algorithm == 'default':
+        return default_algorithm(model)
+    elif algorithm == 'dispatch_only':
+        return dispatch_only_algorithm(model)
+    else:
+        raise ValueError(f"Algorithm '{algorithm}' not recognised")

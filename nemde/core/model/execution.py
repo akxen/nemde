@@ -30,7 +30,7 @@ def clean_user_input(user_data):
         'patches': data.get('patches', []),
         'run_mode': options.get('run_mode', 'physical'),
         'options': {
-            'algorithm': options.get('algorithm', 'dispatch_only'),
+            'algorithm': options.get('algorithm', 'default'),
             'solution_format': options.get('solution_format', 'standard'),
         }
     }
