@@ -897,52 +897,7 @@ def define_aggregate_power_expressions(m):
     m.E_REGION_INITIAL_SCHEDULED_LOAD = pyo.Expression(
         m.S_REGIONS, rule=region_initial_scheduled_load)
 
-    # def region_initial_allocated_loss(m, r):
-    #     """Losses allocated to region due to interconnector flow"""
-
-    #     # Allocated interconnector losses
-    #     region_interconnector_loss = 0
-
-    #     for i in m.S_INTERCONNECTORS:
-
-    #         if r not in [m.P_INTERCONNECTOR_FROM_REGION[i], m.P_INTERCONNECTOR_TO_REGION[i]]:
-    #             continue
-
-    #         # Initial loss estimate over interconnector
-    #         loss = m.P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE[i]
-
-    #         # MNSP losses applied to sending end - based on InitialMW
-    #         if m.P_INTERCONNECTOR_MNSP_STATUS[i] == '1':
-    #             if m.P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW[i] >= 0:
-    #                 mnsp_loss_share = 1
-    #             else:
-    #                 mnsp_loss_share = 0
-
-    #         # Positive flow indicates export from FromRegion
-    #         if r == m.P_INTERCONNECTOR_FROM_REGION[i]:
-    #             # Loss applied to sending end if MNSP
-    #             if m.P_INTERCONNECTOR_MNSP_STATUS[i] == '1':
-    #                 region_interconnector_loss += loss * mnsp_loss_share
-    #             else:
-    #                 region_interconnector_loss += loss * \
-    #                     m.P_INTERCONNECTOR_LOSS_SHARE[i]
-
-    #         # Positive flow indicates import to ToRegion (take negative to get
-    #         # export from ToRegion)
-    #         elif r == m.P_INTERCONNECTOR_TO_REGION[i]:
-    #             # Loss applied to sending end if MNSP
-    #             if m.P_INTERCONNECTOR_MNSP_STATUS[i] == '1':
-    #                 region_interconnector_loss += loss * (1 - mnsp_loss_share)
-    #             else:
-    #                 region_interconnector_loss += loss * \
-    #                     (1 - m.P_INTERCONNECTOR_LOSS_SHARE[i])
-
-    #         else:
-    #             pass
-
-    #     return region_interconnector_loss
-
-    def region_initial_allocated_loss2(m, r):
+    def region_initial_allocated_loss(m, r):
         """Losses allocated to region due to interconnector flow"""
 
         # Allocated interconnector losses
@@ -992,56 +947,9 @@ def define_aggregate_power_expressions(m):
 
     # Region initial allocated losses
     m.E_REGION_INITIAL_ALLOCATED_LOSS = pyo.Expression(
-        m.S_REGIONS, rule=region_initial_allocated_loss2)
+        m.S_REGIONS, rule=region_initial_allocated_loss)
 
-    # def region_allocated_loss_rule(m, r):
-    #     """Interconnector loss allocated to given region"""
-
-    #     # Allocated interconnector losses
-    #     region_interconnector_loss = 0
-    #     for i in m.S_INTERCONNECTORS:
-    #         from_region = m.P_INTERCONNECTOR_FROM_REGION[i]
-    #         to_region = m.P_INTERCONNECTOR_TO_REGION[i]
-    #         mnsp_status = m.P_INTERCONNECTOR_MNSP_STATUS[i]
-
-    #         if r not in [from_region, to_region]:
-    #             continue
-
-    #         # Interconnector flow from solution
-    #         loss = m.V_LOSS[i]
-    #         loss_share = m.P_INTERCONNECTOR_LOSS_SHARE[i]
-    #         initial_mw = m.P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW[i]
-
-    #         # MNSP losses applied to sending end - based on InitialMW
-    #         if mnsp_status == '1':
-    #             if initial_mw >= 0:
-    #                 mnsp_loss_share = 1
-    #             else:
-    #                 mnsp_loss_share = 0
-
-    #         # Positive flow indicates export from FromRegion
-    #         if r == from_region:
-    #             # Loss applied to sending end if MNSP
-    #             if mnsp_status == '1':
-    #                 region_interconnector_loss += loss * mnsp_loss_share
-    #             else:
-    #                 region_interconnector_loss += loss * loss_share
-
-    #         # Positive flow indicates import to ToRegion (take negative to get
-    #         # export from ToRegion)
-    #         elif r == to_region:
-    #             # Loss applied to sending end if MNSP
-    #             if mnsp_status == '1':
-    #                 region_interconnector_loss += loss * (1 - mnsp_loss_share)
-    #             else:
-    #                 region_interconnector_loss += loss * (1 - loss_share)
-
-    #         else:
-    #             pass
-
-    #     return region_interconnector_loss
-
-    def region_allocated_loss_rule2(m, r):
+    def region_allocated_loss_rule(m, r):
         """Interconnector loss allocated to given region"""
 
         # Allocated interconnector losses
@@ -1091,98 +999,9 @@ def define_aggregate_power_expressions(m):
 
     # Region allocated loss at end of dispatch interval
     m.E_REGION_ALLOCATED_LOSS = pyo.Expression(
-        m.S_REGIONS, rule=region_allocated_loss_rule2)
+        m.S_REGIONS, rule=region_allocated_loss_rule)
 
-    # def region_initial_mnsp_loss(m, r):
-    #     """
-    #     Get estimate of MNSP loss allocated to given region
-
-    #     MLFs used to compute loss. MLF equation: MLF = 1 + (DeltaLoss / DeltaLoad)
-    #     where load is varied at the connection point. Must compute the load the
-    #     connection point for the MNSP - this will be positive or negative
-    #     (i.e. generation) depending on the direction of flow over the
-    #     interconnector.
-
-    #     From the MLF equation: DeltaLoss = (MLF - 1) x DeltaLoad. So need to
-    #     compute the effective load at the connection point in order to compute
-    #     the loss. Note the loss may be positive or negative depending on the
-    #     MLF and the effective load at the connection point.
-    #     """
-
-    #     total = 0
-    #     for i in m.S_MNSPS:
-    #         from_region = m.P_INTERCONNECTOR_FROM_REGION[i]
-    #         to_region = m.P_INTERCONNECTOR_TO_REGION[i]
-
-    #         if r not in [from_region, to_region]:
-    #             continue
-
-    #         # Initial MW and solution flow
-    #         initial_mw = m.P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW[i]
-
-    #         to_lf_export = m.P_MNSP_TO_REGION_LF_EXPORT[i]
-    #         to_lf_import = m.P_MNSP_TO_REGION_LF_IMPORT[i]
-
-    #         from_lf_import = m.P_MNSP_FROM_REGION_LF_IMPORT[i]
-    #         from_lf_export = m.P_MNSP_FROM_REGION_LF_EXPORT[i]
-
-    #         # Initial loss estimate over interconnector
-    #         loss = m.P_INTERCONNECTOR_INITIAL_LOSS_ESTIMATE[i]
-
-    #         # MNSP loss share - loss applied to sending end
-    #         if initial_mw >= 0:
-    #             # Total loss allocated to FromRegion
-    #             mnsp_loss_share = 1
-    #         else:
-    #             # Total loss allocated to ToRegion
-    #             mnsp_loss_share = 0
-
-    #         if initial_mw >= 0:
-    #             if r == from_region:
-    #                 export_flow = initial_mw + (mnsp_loss_share * loss)
-    #                 mnsp_loss = (from_lf_export - 1) * export_flow
-    #             elif r == to_region:
-    #                 import_flow = initial_mw - ((1 - mnsp_loss_share) * loss)
-
-    #                 # Multiply by -1 because flow from MNSP connection point to
-    #                 # ToRegion can be considered a negative load MLF describes
-    #                 # how loss changes with an incremental change to load at
-    #                 # the connection point. So when flow is positive (e.g. flow
-    #                 # from TAS to VIC) then must consider a negative load
-    #                 # (i.e. a generator) when computing MNSP losses.
-    #                 mnsp_loss = (to_lf_import - 1) * import_flow * -1
-
-    #             else:
-    #                 raise Exception('Unexpected region:', r)
-
-    #         else:
-    #             if r == from_region:
-    #                 # Flow is negative, so add the allocated MNSP loss to get
-    #                 # the total import flow
-    #                 import_flow = initial_mw + (mnsp_loss_share * loss)
-
-    #                 # Import flow is negative. Can be considered as generation
-    #                 # at the connection point (negative load).
-    #                 mnsp_loss = (from_lf_import - 1) * import_flow
-
-    #             elif r == to_region:
-    #                 # Flow is negative, so subtract the allocated MNSP loss to
-    #                 # get the total export flow
-    #                 export_flow = initial_mw - ((1 - mnsp_loss_share) * loss)
-
-    #                 # Export flow is negative. Multiply by -1 so can be
-    #                 # considered as load at the connection point.
-    #                 mnsp_loss = (to_lf_export - 1) * export_flow * -1
-
-    #             else:
-    #                 raise Exception('Unexpected region:', r)
-
-    #         # Add to total MNSP loss allocated to a given region
-    #         total += mnsp_loss
-
-    #     return total
-
-    def region_initial_mnsp_loss2(m, r):
+    def region_initial_mnsp_loss(m, r):
         """
         Get estimate of MNSP loss allocated to given region
 
@@ -1241,88 +1060,9 @@ def define_aggregate_power_expressions(m):
 
     # Region initial allocated MNSP losses
     m.E_REGION_INITIAL_MNSP_LOSS = pyo.Expression(
-        m.S_REGIONS, rule=region_initial_mnsp_loss2)
+        m.S_REGIONS, rule=region_initial_mnsp_loss)
 
-    # def region_mnsp_loss_rule(m, r):
-    #     """
-    #     Get estimate of MNSP loss allocated to given region
-    #     MLFs used to compute loss. MLF equation: MLF = 1 + (DeltaLoss / DeltaLoad) where load is varied at the connection
-    #     point. Must compute the load the connection point for the MNSP - this will be positive or negative (i.e. generation)
-    #     depending on the direction of flow over the interconnector.
-    #     From the MLF equation: DeltaLoss = (MLF - 1) x DeltaLoad. So need to compute the effective load at the connection
-    #     point in order to compute the loss. Note the loss may be positive or negative depending on the MLF and the effective
-    #     load at the connection point.
-    #     """
-
-    #     total = 0
-    #     for i in m.S_MNSPS:
-    #         from_region = m.P_INTERCONNECTOR_FROM_REGION[i]
-    #         to_region = m.P_INTERCONNECTOR_TO_REGION[i]
-
-    #         if r not in [from_region, to_region]:
-    #             continue
-
-    #         # Extract initial and target flow
-    #         initial_flow = m.P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW[i]
-    #         flow = m.V_GC_INTERCONNECTOR[i]
-
-    #         to_lf_export = m.P_MNSP_TO_REGION_LF_EXPORT[i]
-    #         to_lf_import = m.P_MNSP_TO_REGION_LF_IMPORT[i]
-
-    #         from_lf_import = m.P_MNSP_FROM_REGION_LF_IMPORT[i]
-    #         from_lf_export = m.P_MNSP_FROM_REGION_LF_EXPORT[i]
-
-    #         # Loss over interconnector
-    #         loss = m.V_LOSS[i]
-
-    #         # MNSP loss share - loss applied to sending end
-    #         if initial_flow >= 0:
-    #             # Total loss allocated to FromRegion
-    #             mnsp_loss_share = 1
-    #         else:
-    #             # Total loss allocated to ToRegion
-    #             mnsp_loss_share = 0
-
-    #         if initial_flow >= 0:
-    #             if r == from_region:
-    #                 export_flow = flow + (mnsp_loss_share * loss)
-    #                 mnsp_loss = (from_lf_export - 1) * export_flow
-    #             elif r == to_region:
-    #                 import_flow = flow - ((1 - mnsp_loss_share) * loss)
-
-    #                 # Multiply by -1 because flow from MNSP connection point to ToRegion can be considered a negative
-    #                 # load MLF describes how loss changes with an incremental change to load at the connection point. So
-    #                 # when flow is positive (e.g. flow from TAS to VIC) then must consider a negative load
-    #                 # (i.e. a generator) when computing MNSP losses.
-    #                 mnsp_loss = (to_lf_import - 1) * import_flow * -1
-
-    #             else:
-    #                 raise Exception('Unexpected region:', r)
-
-    #         else:
-    #             if r == from_region:
-    #                 # Flow is negative, so add the allocated MNSP loss to get the total import flow
-    #                 import_flow = flow + (mnsp_loss_share * loss)
-
-    #                 # Import flow is negative. Can be considered as generation at the connection point (negative load).
-    #                 mnsp_loss = (from_lf_import - 1) * import_flow
-
-    #             elif r == to_region:
-    #                 # Flow is negative, so subtract the allocated MNSP loss to get the total export flow
-    #                 export_flow = flow - ((1 - mnsp_loss_share) * loss)
-
-    #                 # Export flow is negative. Multiply by -1 so can be considered as load at the connection point.
-    #                 mnsp_loss = (to_lf_export - 1) * export_flow * -1
-
-    #             else:
-    #                 raise Exception('Unexpected region:', r)
-
-    #         # Add to total MNSP loss allocated to a given region
-    #         total += mnsp_loss
-
-    #     return total
-
-    def region_mnsp_loss_rule2(m, r):
+    def region_mnsp_loss_rule(m, r):
         """
         Get estimate of MNSP loss allocated to given region
 
@@ -1346,19 +1086,6 @@ def define_aggregate_power_expressions(m):
             if r not in [from_region, to_region]:
                 continue
 
-            # # Extract initial and target flow
-            # initial_flow = m.P_INTERCONNECTOR_EFFECTIVE_INITIAL_MW[i]
-            # flow = m.V_GC_INTERCONNECTOR[i]
-
-            # to_lf_export = m.P_MNSP_TO_REGION_LF_EXPORT[i]
-            # to_lf_import = m.P_MNSP_TO_REGION_LF_IMPORT[i]
-
-            # from_lf_import = m.P_MNSP_FROM_REGION_LF_IMPORT[i]
-            # from_lf_export = m.P_MNSP_FROM_REGION_LF_EXPORT[i]
-
-            # # Loss over interconnector
-            # loss = m.V_LOSS[i]
-
             if r == from_region:
                 total += m.E_MNSP_FROM_REGION_LOSS[i]
 
@@ -1371,11 +1098,11 @@ def define_aggregate_power_expressions(m):
         return total
 
     # Region MNSP loss at end of dispatch interval
-    m.E_REGION_MNSP_LOSS = pyo.Expression(m.S_REGIONS, rule=region_mnsp_loss_rule2)
+    m.E_REGION_MNSP_LOSS = pyo.Expression(m.S_REGIONS, rule=region_mnsp_loss_rule)
 
     def region_fixed_demand_rule(m, r):
         """
-        Check region fixed demand calculation - demand at start of dispatch 
+        Check region fixed demand calculation - demand at start of dispatch
         interval
         """
 
@@ -1991,10 +1718,10 @@ def define_mnsp_constraints(m):
     m.C_MNSP_TO_REGION_IMPORT_4 = pyo.Constraint(
         m.S_MNSPS, rule=mnsp_to_import_flow_4_rule)
 
-    def mnsp_region_loss_allocation_1_rule(m, i):
-        """Condition ensures either From or To region loss is non-zero"""
+    # def mnsp_region_loss_allocation_1_rule(m, i):
+    #     """Condition ensures either From or To region loss is non-zero"""
 
-        return -1000 * m.V_MNSP_FLOW_DIRECTION[i] <= m.E_MNSP_FROM_REGION_LOSS[i]
+    #     return -1000 * m.V_MNSP_FLOW_DIRECTION[i] <= m.E_MNSP_FROM_REGION_LOSS[i]
 
     # # MNSP loss allocation rule 1
     # # m.C_MNSP_REGION_LOSS_ALLOCATION_1 = pyo.Constraint(m.S_MNSPS, rule=mnsp_region_loss_allocation_1_rule)
@@ -2746,10 +2473,6 @@ def define_fast_start_unit_inflexibility_constraints(m):
         else:
             raise Exception('Unexpected energy offer:', i)
 
-        # CATCH AGLHAL REMOVE LATER
-        if i == 'AGLHAL':
-            b = 10
-
         effective_mode = fast_start.get_target_mode(
             current_mode=m.P_TRADER_CURRENT_MODE[i].value,
             current_mode_time=m.P_TRADER_CURRENT_MODE_TIME[i].value,
@@ -2803,272 +2526,6 @@ def define_fast_start_unit_inflexibility_constraints(m):
 
     # Profile constraint
     m.C_TRADER_INFLEXIBILITY_PROFILE = pyo.Constraint(m.S_TRADER_FAST_START, rule=profile_constraint_rule)
-
-
-    # def profile_constraint_t0_t1_1_rule(m, i):
-    #     """
-    #     Output fixed to zero when in mode T0 and T1. This is the first of two
-    #     inequality constraints used to enforce this condition
-    #     """
-
-    #     # CurrentMode and CurrentModeTime may be missing - skip constraint
-    #     if (m.P_TRADER_CURRENT_MODE[i].value is None) or (m.P_TRADER_CURRENT_MODE_TIME[i].value is None):
-    #         return pyo.Constraint.Skip
-
-    #     if m.P_TRADER_TYPE[i] == 'GENERATOR':
-    #         energy_offer = 'ENOF'
-    #     elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
-    #         energy_offer = 'LDOF'
-    #     else:
-    #         raise Exception('Unexpected energy offer:', i)
-
-    #     target_mode = fast_start.get_target_mode(
-    #         current_mode=m.P_TRADER_CURRENT_MODE[i].value,
-    #         current_mode_time=m.P_TRADER_CURRENT_MODE_TIME[i].value,
-    #         t1=m.P_TRADER_T1[i],
-    #         t2=m.P_TRADER_T2[i],
-    #         t3=m.P_TRADER_T3[i],
-    #         t4=m.P_TRADER_T4[i])
-
-    #     # Unit is synchronising - output = 0
-    #     if (target_mode == 0) or (target_mode == 1):
-    #         return (m.V_TRADER_TOTAL_OFFER[i, energy_offer]
-    #                 <= 
-    #                 0
-    #                 + m.P_TRADER_INFLEXIBILITY_PROFILE_SWAMP
-    #                 + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_RHS[i])
-    #     else:
-    #         return pyo.Constraint.Skip
-
-
-    # # First of two inequality constraints used to fix power output to 0 when 
-    # # unit is offline or synchronising (mode T0 and T1)
-    # m.C_TRADER_INFLEXIBILITY_PROFILE_T0_T1_1_RULE = pyo.Constraint(
-    #     m.S_TRADER_FAST_START, rule=profile_constraint_t0_t1_1_rule)
-
-
-    # def profile_constraint_t0_t1_2_rule(m, i):
-    #     """
-    #     Output fixed to zero when in mode T0 and T1. This is the second of two
-    #     inequality constraints used to enforce this condition
-    #     """
-
-    #     # CurrentMode and CurrentModeTime may be missing - skip constraint
-    #     if (m.P_TRADER_CURRENT_MODE[i].value is None) or (m.P_TRADER_CURRENT_MODE_TIME[i].value is None):
-    #         return pyo.Constraint.Skip
-
-    #     if m.P_TRADER_TYPE[i] == 'GENERATOR':
-    #         energy_offer = 'ENOF'
-    #     elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
-    #         energy_offer = 'LDOF'
-    #     else:
-    #         raise Exception('Unexpected energy offer:', i)
-
-    #     target_mode = fast_start.get_target_mode(
-    #         current_mode=m.P_TRADER_CURRENT_MODE[i].value,
-    #         current_mode_time=m.P_TRADER_CURRENT_MODE_TIME[i].value,
-    #         t1=m.P_TRADER_T1[i],
-    #         t2=m.P_TRADER_T2[i],
-    #         t3=m.P_TRADER_T3[i],
-    #         t4=m.P_TRADER_T4[i])
-
-    #     # Unit is synchronising - output = 0
-    #     if (target_mode == 0) or (target_mode == 1):
-    #         return (m.V_TRADER_TOTAL_OFFER[i, energy_offer]
-    #                 + m.P_TRADER_INFLEXIBILITY_PROFILE_SWAMP
-    #                 + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_LHS[i]
-    #                 >=
-    #                 0)
-    #     else:
-    #         return pyo.Constraint.Skip
-
-    # # Second of two inequality constraints used to fix power output to 0 when 
-    # # unit is offline or synchronising (mode T0 and T1)
-    # m.C_TRADER_INFLEXIBILITY_PROFILE_T0_T1_2_RULE = pyo.Constraint(
-    #     m.S_TRADER_FAST_START, rule=profile_constraint_t0_t1_2_rule)
-
-
-    # def profile_constraint_t2_1_rule(m, i):
-    #     """
-    #     First of two inequality constraints used to fix output to startup
-    #     profile when in mode 2
-    #     """
-
-    #     # CurrentMode and CurrentModeTime may be missing - skip constraint
-    #     if (m.P_TRADER_CURRENT_MODE[i].value is None) or (m.P_TRADER_CURRENT_MODE_TIME[i].value is None):
-    #         return pyo.Constraint.Skip
-
-    #     if m.P_TRADER_TYPE[i] == 'GENERATOR':
-    #         energy_offer = 'ENOF'
-    #     elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
-    #         energy_offer = 'LDOF'
-    #     else:
-    #         raise Exception('Unexpected energy offer:', i)
-
-    #     target_mode = fast_start.get_target_mode(
-    #         current_mode=m.P_TRADER_CURRENT_MODE[i].value,
-    #         current_mode_time=m.P_TRADER_CURRENT_MODE_TIME[i].value,
-    #         t1=m.P_TRADER_T1[i],
-    #         t2=m.P_TRADER_T2[i],
-    #         t3=m.P_TRADER_T3[i],
-    #         t4=m.P_TRADER_T4[i])
-
-    #     target_mode_time = fast_start.get_target_mode_time(
-    #         current_mode=m.P_TRADER_CURRENT_MODE[i].value,
-    #         current_mode_time=m.P_TRADER_CURRENT_MODE_TIME[i].value,
-    #         t1=m.P_TRADER_T1[i],
-    #         t2=m.P_TRADER_T2[i],
-    #         t3=m.P_TRADER_T3[i],
-    #         t4=m.P_TRADER_T4[i])
-
-    #     # Unit ramping to min loading - energy output fixed to profile
-    #     if target_mode == 2:
-    #         slope = m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T2[i]
-    #         startup_profile = slope * target_mode_time
-    #         return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] 
-    #                 <=
-    #                 startup_profile 
-    #                 + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_RHS[i]
-    #                 + m.P_TRADER_INFLEXIBILITY_PROFILE_SWAMP)
-    #     else:
-    #         return pyo.Constraint.Skip
-
-    # # First of two inequality constraints used to fix power output to 
-    # # inflexibility profile when in mode T2
-    # m.C_TRADER_INFLEXIBILITY_PROFILE_T2_1_RULE = pyo.Constraint(
-    #     m.S_TRADER_FAST_START, rule=profile_constraint_t2_1_rule)
-
-
-    # def profile_constraint_t2_2_rule(m, i):
-    #     """
-    #     Second of two inequality constraints used to fix output to startup
-    #     profile when in mode 2
-    #     """
-
-    #     # CurrentMode and CurrentModeTime may be missing - skip constraint
-    #     if (m.P_TRADER_CURRENT_MODE[i].value is None) or (m.P_TRADER_CURRENT_MODE_TIME[i].value is None):
-    #         return pyo.Constraint.Skip
-
-    #     if m.P_TRADER_TYPE[i] == 'GENERATOR':
-    #         energy_offer = 'ENOF'
-    #     elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
-    #         energy_offer = 'LDOF'
-    #     else:
-    #         raise Exception('Unexpected energy offer:', i)
-
-    #     target_mode = fast_start.get_target_mode(
-    #         current_mode=m.P_TRADER_CURRENT_MODE[i].value,
-    #         current_mode_time=m.P_TRADER_CURRENT_MODE_TIME[i].value,
-    #         t1=m.P_TRADER_T1[i],
-    #         t2=m.P_TRADER_T2[i],
-    #         t3=m.P_TRADER_T3[i],
-    #         t4=m.P_TRADER_T4[i])
-
-    #     target_mode_time = fast_start.get_target_mode_time(
-    #         current_mode=m.P_TRADER_CURRENT_MODE[i].value,
-    #         current_mode_time=m.P_TRADER_CURRENT_MODE_TIME[i].value,
-    #         t1=m.P_TRADER_T1[i],
-    #         t2=m.P_TRADER_T2[i],
-    #         t3=m.P_TRADER_T3[i],
-    #         t4=m.P_TRADER_T4[i])
-
-    #     # Unit ramping to min loading - energy output fixed to profile
-    #     if target_mode == 2:
-    #         slope = m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T2[i]
-    #         startup_profile = slope * target_mode_time
-    #         return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] 
-    #                 + m.V_CV_TRADER_INFLEXIBILITY_PROFILE_LHS[i]
-    #                 + m.P_TRADER_INFLEXIBILITY_PROFILE_SWAMP
-    #                 >=
-    #                 startup_profile)
-    #     else:
-    #         return pyo.Constraint.Skip
-
-    # # First of two inequality constraints used to fix power output to 
-    # # inflexibility profile when in mode T2
-    # m.C_TRADER_INFLEXIBILITY_PROFILE_T2_2_RULE = pyo.Constraint(
-    #     m.S_TRADER_FAST_START, rule=profile_constraint_t2_2_rule)
-
-    # def profile_constraint_t3_rule(m, i):
-    #     """Min loading constraint"""
-
-    #     # CurrentMode and CurrentModeTime may be missing - skip constraint
-    #     if (m.P_TRADER_CURRENT_MODE[i].value is None) or (m.P_TRADER_CURRENT_MODE_TIME[i].value is None):
-    #         return pyo.Constraint.Skip
-
-    #     if m.P_TRADER_TYPE[i] == 'GENERATOR':
-    #         energy_offer = 'ENOF'
-    #     elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
-    #         energy_offer = 'LDOF'
-    #     else:
-    #         raise Exception('Unexpected energy offer:', i)
-
-    #     target_mode = fast_start.get_target_mode(
-    #         current_mode=m.P_TRADER_CURRENT_MODE[i].value,
-    #         current_mode_time=m.P_TRADER_CURRENT_MODE_TIME[i].value,
-    #         t1=m.P_TRADER_T1[i],
-    #         t2=m.P_TRADER_T2[i],
-    #         t3=m.P_TRADER_T3[i],
-    #         t4=m.P_TRADER_T4[i])
-
-    #     # Output lower bounded by MinLoadingMW
-    #     if target_mode == 3:
-    #         return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] 
-    #                 + m.V_CV_TRADER_INFLEXIBILITY_PROFILE[i]
-    #                 + m.P_TRADER_INFLEXIBILITY_PROFILE_SWAMP
-    #                 >= m.P_TRADER_MIN_LOADING_MW[i])
-    #     else:
-    #         return pyo.Constraint.Skip
-
-    # # Min loading constraint when in mode T3
-    # m.C_TRADER_INFLEXIBILITY_PROFILE_T3_RULE = pyo.Constraint(
-    #     m.S_TRADER_FAST_START, rule=profile_constraint_t3_rule)
-
-    # def profile_constraint_t4_rule(m, i):
-    #     """Min loading constraint when in mode T4"""
-
-    #     # CurrentMode and CurrentModeTime may be missing - skip constraint
-    #     if (m.P_TRADER_CURRENT_MODE[i].value is None) or (m.P_TRADER_CURRENT_MODE_TIME[i].value is None):
-    #         return pyo.Constraint.Skip
-
-    #     if m.P_TRADER_TYPE[i] == 'GENERATOR':
-    #         energy_offer = 'ENOF'
-    #     elif m.P_TRADER_TYPE[i] in ['LOAD', 'NORMALLY_ON_LOAD']:
-    #         energy_offer = 'LDOF'
-    #     else:
-    #         raise Exception('Unexpected energy offer:', i)
-
-    #     target_mode = fast_start.get_target_mode(
-    #         current_mode=m.P_TRADER_CURRENT_MODE[i].value,
-    #         current_mode_time=m.P_TRADER_CURRENT_MODE_TIME[i].value,
-    #         t1=m.P_TRADER_T1[i],
-    #         t2=m.P_TRADER_T2[i],
-    #         t3=m.P_TRADER_T3[i],
-    #         t4=m.P_TRADER_T4[i])
-
-    #     target_mode_time = fast_start.get_target_mode_time(
-    #         current_mode=m.P_TRADER_CURRENT_MODE[i].value,
-    #         current_mode_time=m.P_TRADER_CURRENT_MODE_TIME[i].value,
-    #         t1=m.P_TRADER_T1[i],
-    #         t2=m.P_TRADER_T2[i],
-    #         t3=m.P_TRADER_T3[i],
-    #         t4=m.P_TRADER_T4[i])
-
-    #     # Output still lower bounded by inflexibility profile
-    #     if (target_mode == 4) and (target_mode_time < m.P_TRADER_T4[i]):
-    #         slope = - m.P_TRADER_MIN_LOADING_MW[i] / m.P_TRADER_T4[i]
-    #         max_output = (slope * target_mode_time) + m.P_TRADER_MIN_LOADING_MW[i]
-
-    #         return (m.V_TRADER_TOTAL_OFFER[i, energy_offer] 
-    #                 + m.V_CV_TRADER_INFLEXIBILITY_PROFILE[i]
-    #                 + m.P_TRADER_INFLEXIBILITY_PROFILE_SWAMP
-    #                 >= max_output)
-    #     else:
-    #         return pyo.Constraint.Skip
-
-    # # Min loading constraint when in mode T4
-    # m.C_TRADER_INFLEXIBILITY_PROFILE_T4_RULE = pyo.Constraint(
-    #     m.S_TRADER_FAST_START, rule=profile_constraint_t4_rule)
 
     return m
 
