@@ -34,11 +34,27 @@ def save_basis_results(results, key, filename):
     # Construct basis results
     df = pd.DataFrame(itertools.chain.from_iterable([i[key] for i in results]))
 
+    # Columns appearing in all results files
+    index = ['case_id', 'intervention']
+    metrics = ['key', 'model', 'actual', 'abs_difference']
+
+    # Construct column based on filename
+    if filename.endswith('traders.csv'):
+        columns = index + ['trader_id'] + metrics
+    elif filename.endswith('interconnectors.csv'):
+        columns = index + ['interconnector_id'] + metrics
+    elif filename.endswith('regions.csv'):
+        columns = index + ['region_id'] + metrics
+    elif filename.endswith('periods.csv'):
+        columns = index + metrics
+    else:
+        raise ValueError("Unrecognised filename pattern", filename)
+
     # Compute absolute difference and sort by this value
     df['abs_difference'] = df['model'].subtract(df['actual']).abs()
     df = df.sort_values(by=['case_id', 'intervention'], ascending=False)
 
-    df.to_csv(filename, index=False)
+    df.loc[:, columns].to_csv(filename, index=False)
 
 
 def construct_validation_report(run_id, root_dir):
@@ -72,6 +88,6 @@ def construct_validation_report(run_id, root_dir):
 
 if __name__ == '__main__':
     run_id = get_latest_run_id(schema=os.environ['MYSQL_SCHEMA'], table='results')
-    print(run_id)
+    print('Run ID:', run_id)
     root_directory = os.path.join(os.path.dirname(__file__), 'validation')
     construct_validation_report(run_id=run_id, root_dir=root_directory)
