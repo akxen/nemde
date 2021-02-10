@@ -6,6 +6,7 @@ services:
       context: .
     volumes:
       - ./scripts/validation:/app/scripts/validation
+      - ./nemde/tests:/app/nemde/tests
     entrypoint: /app/scripts/entrypoint.sh
     environment:
       - ONLINE_FLAG=true

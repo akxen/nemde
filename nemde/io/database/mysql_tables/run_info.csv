@@ -1,3 +1,0 @@
-"row_id",INT NOT NULL AUTO_INCREMENT
-"run_id","INT"
-"parameters","JSON"

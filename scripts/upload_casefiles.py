@@ -8,9 +8,9 @@ import calendar
 
 import context
 import nemde
-from nemde.io.database.mysql import initialise_tables
+from nemde.io.casefile import load_xml_from_archive
+from nemde.io.database.mysql import initialise_tables, post_entry
 from nemde.config.setup_variables import setup_environment_variables
-setup_environment_variables()
 
 
 def get_month_dispatch_intervals(year, month):
@@ -26,9 +26,8 @@ def upload_casefile(data_dir, schema, year, month, day, interval):
     """Upload a single casefile"""
 
     # Load casefile and construct case ID
-    casefile = nemde.core.casefile.load.load_file(
-        data_dir=data_dir, year=year, month=month, day=day,
-        interval=interval)
+    casefile = load_xml_from_archive(data_dir=data_dir, year=year, month=month,
+                                     day=day, interval=interval)
 
     # TODO: check if compression is necessary
     # compressed = zlib.compress(casefile)
@@ -42,8 +41,7 @@ def upload_casefile(data_dir, schema, year, month, day, interval):
         'upload_timestamp': time.time(),
     }
 
-    nemde.core.database.mysql.post_entry(
-        schema=schema, table='casefiles', entry=entry)
+    post_entry(schema=schema, table='casefiles', entry=entry)
 
 
 def upload_casefiles(schema, data_dir, year, month):
@@ -64,7 +62,8 @@ def upload_casefiles(schema, data_dir, year, month):
 
 if __name__ == '__main__':
     # Setup env variables
-    nemde.config.setup_variables.setup_environment_variables(online=False)
+    os.environ['ONLINE_FLAG'] = 'true'
+    setup_environment_variables()
 
     # Folder containing zipped NEMDE casefiles
     data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir,

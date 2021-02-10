@@ -92,7 +92,7 @@ def initialise_tables(schema):
     """
 
     # Create tables
-    tables = ['run_info', 'results', 'casefiles', 'reports']
+    tables = ['results', 'casefiles', 'reports']
     for t in tables:
         create_table(schema, t)
 
