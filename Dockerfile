@@ -52,10 +52,10 @@ WORKDIR /app
 RUN chmod +x /app/scripts/*
 
 # Limit permissions
-RUN adduser user
-RUN chown -R user:user /app
-RUN chmod -R 755 /app
-USER user
+# RUN adduser user
+# RUN chown -R user:user /app
+# RUN chmod -R 755 /app
+# USER user
 
 # Keep container running - should be overidden by entrypoint.sh in docker-compose.yml
 CMD tail -f /dev/null
