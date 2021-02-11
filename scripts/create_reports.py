@@ -1,6 +1,7 @@
 """Validate by comparing model outputs with NEMDE outputs"""
 
 import os
+import zlib
 import json
 import shutil
 import itertools
@@ -22,7 +23,7 @@ def parse_validation_results(run_id):
     results = get_test_run_validation_results(
         schema=os.environ['MYSQL_SCHEMA'], table='results', run_id=run_id)
 
-    return [json.loads(i['results']) for i in results]
+    return [json.loads(zlib.decompress(i['results'])) for i in results]
 
 
 def save_basis_results(results, key, filename):

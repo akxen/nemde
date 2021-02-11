@@ -1,6 +1,7 @@
 """Test that model runs correctly"""
 
 import os
+import zlib
 import json
 import time
 import logging
@@ -129,7 +130,7 @@ def get_casefile_ids():
     return case_ids
 
 
-@pytest.fixture(scope='module', params=get_randomised_casefile_ids(year=2020, month=11, n=10))
+@pytest.fixture(scope='module', params=get_randomised_casefile_ids(year=2020, month=11, n=3))
 # @pytest.fixture(scope='module', params=get_casefile_ids())
 def case_id(request):
     return request.param
@@ -178,12 +179,16 @@ def test_run_model_validation(testrun_uid, case_id):
     user_data_json = json.dumps(user_data)
     solution = run_model(user_data=user_data_json)
 
+    # Compress results before saving
+    results = zlib.compress(json.dumps(solution).encode('utf-8'))
+
     # Entry to post to database
     entry = {
         'run_id': testrun_uid,
         'run_time': int(time.time()),
         'case_id': user_data['case_id'],
-        'results': json.dumps(solution)
+        # 'results': json.dumps(solution)
+        'results': results
     }
 
     # Post entry to database

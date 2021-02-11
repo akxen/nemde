@@ -116,7 +116,8 @@ def load_base_case(case_id):
                                   int(case_id[6:8]), int(case_id[8:]))
 
     # Load XML and convert to dictionary
-    base = load_xml_from_database(year=year, month=month, day=day, interval=interval)
+    base = load_xml_from_archive(data_dir=os.getenv('CASEFILE_DIR'), year=year,
+                                 month=month, day=day, interval=interval)
 
     # Force some nodes to always have lists
     force_list = ('Trade', 'TradeTypePriceStructure',)

@@ -32,8 +32,15 @@ RUN apt-get -y install mysql-server
 RUN apt-get -y install libmysqlclient-dev
 RUN apt-get -y install libssl-dev
 
-# Setup repo
+# Create repo folder 
 RUN mkdir /app
+
+# Copy casefiles
+RUN mkdir /app/casefiles
+RUN mkdir /app/casefiles/zipped
+COPY ./casefiles/zipped /app/casefiles/zipped
+
+# Copy model and scripts
 COPY ./requirements.txt /app/
 RUN python3.9 -m pip install -r /app/requirements.txt
 COPY ./nemde /app/nemde

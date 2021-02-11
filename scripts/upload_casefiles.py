@@ -30,14 +30,15 @@ def upload_casefile(data_dir, schema, year, month, day, interval):
                                      day=day, interval=interval)
 
     # TODO: check if compression is necessary
-    # compressed = zlib.compress(casefile)
+    compressed = zlib.compress(casefile)
 
     case_id = f'{year}{month:02}{day:02}{interval:03}'
 
     # Construct entry to be uploaded
     entry = {
         'case_id': case_id,
-        'casefile': casefile,
+        # 'casefile': casefile,
+        'casefile': compressed,
         'upload_timestamp': time.time(),
     }
 
@@ -62,7 +63,7 @@ def upload_casefiles(schema, data_dir, year, month):
 
 if __name__ == '__main__':
     # Setup env variables
-    os.environ['ONLINE_FLAG'] = 'true'
+    # os.environ['ONLINE_FLAG'] = 'true'
     setup_environment_variables()
 
     # Folder containing zipped NEMDE casefiles

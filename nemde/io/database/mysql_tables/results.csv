@@ -2,4 +2,4 @@
 "run_id","VARCHAR(40)"
 "run_time","INT"
 "case_id","VARCHAR(20)"
-"results","JSON"
+"results","BLOB"
