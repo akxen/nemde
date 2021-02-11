@@ -1,5 +1,0 @@
-"row_id",INT NOT NULL AUTO_INCREMENT
-"run_id","INT"
-"run_time","INT"
-"case_id","VARCHAR(20)"
-"results","JSON"
