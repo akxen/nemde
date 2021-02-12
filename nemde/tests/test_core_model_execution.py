@@ -1,6 +1,7 @@
 """Test that model runs correctly"""
 
 import os
+import uuid
 import zlib
 import json
 import time
@@ -20,9 +21,9 @@ setup_environment_variables()
 logger = logging.getLogger(__name__)
 
 
-def get_randomised_casefile_ids(year, month, n):
+def get_casefile_id_sample(year, month, n):
     """
-    Get casefile IDs
+    Get random sample of casefile IDs
 
     Parameters
     ----------
@@ -56,27 +57,37 @@ def get_randomised_casefile_ids(year, month, n):
     return population[:n]
 
 
-def get_casefile_ids():
+def get_selected_casefile_ids():
     """Run tests for a given set of casefiles"""
 
-    # Cases where at least one trader has current mode = 1
-    # case_ids = ['20201101017', '20201101126', '20201101127', '20201101134',
-    #             '20201101135', '20201101161', '20201101164', '20201101165',
-    #             '20201101169']
+    # # Cases where at least one trader has current mode = 1
+    # case_ids = [
+    #     '20201101017',
+    #     '20201101126',
+    #     '20201101127',
+    #     '20201101134',
+    #     '20201101135',
+    #     '20201101161',
+    #     '20201101164',
+    #     '20201101165',
+    #     '20201101169',
+    # ]
 
     # # Cases where at least one trader has current mode = 2
-    # case_ids = ['20201101076',
-    #             '20201101136',
-    #             '20201101159',
-    #             '20201101160',
-    #             '20201101160',
-    #             '20201101161',
-    #             '20201101165',
-    #             '20201101166',
-    #             '20201101167',
-    #             '20201101171',
-    #             '20201101172',
-    #             '20201101173']
+    # case_ids = [
+    #     '20201101076',
+    #     '20201101136',
+    #     '20201101159',
+    #     '20201101160',
+    #     '20201101160',
+    #     '20201101161',
+    #     '20201101165',
+    #     '20201101166',
+    #     '20201101167',
+    #     '20201101171',
+    #     '20201101172',
+    #     '20201101173',
+    # ]
 
     # # Cases where pass criterion should fail
     # case_ids = ['20201117113']
@@ -130,13 +141,111 @@ def get_casefile_ids():
     return case_ids
 
 
-@pytest.fixture(scope='module', params=get_randomised_casefile_ids(year=2020, month=11, n=3))
-# @pytest.fixture(scope='module', params=get_casefile_ids())
+def record_new_test_run(schema, case_ids):
+    """Initialise and record a new run"""
+
+    entry = {
+        'group_id': uuid.uuid4().hex,
+        'parameters': json.dumps({'case_ids': case_ids})
+    }
+    mysql.post_entry(schema=schema, table='test_run_info', entry=entry)
+
+
+def get_most_recent_test_run_info(schema):
+    """
+    Get most recent run info. Includes case IDs for which tests should be
+    undertaken. Note that each time pytest starts a new testrun_uid is created.
+    There may be instances where a test is interrupted and needs to resume
+    midway. The 'parameters' field within the 'run_info' table contains the
+    the case IDs for a given test run. All case IDs specified in order to
+    complete the run. Therefore if a test run is interrupted several
+    testrun_uids may be associated with a given 'group' run, which are
+    identified by a 'group_id'.
+    """
+
+    sql = f"SELECT * FROM {schema}.run_info ORDER BY row_id DESC LIMIT 1"
+    results = mysql.run_query(sql)
+
+    if results:
+        return results[0]
+    else:
+        return None
+
+
+def get_test_run_info(schema, group_id):
+    """Get run info"""
+
+    sql = f"SELECT * FROM {schema}.run_info WHERE group_id='{group_id}'"
+    results = mysql.run_query(sql)
+
+    if results:
+        return results[0]
+    else:
+        return None
+
+
+def get_remaining_casefile_ids(schema, group_id):
+    """Get remaining casefile IDs to test for a given test run"""
+
+    # Latest goup info
+    info = get_test_run_info(schema=schema, group_id=group_id)
+    group_id = info['group_id']
+    parameters = json.loads(info['parameters'])
+
+    # Complete casefile IDs
+    sql = f"SELECT case_id FROM {schema}.results WHERE group_id='{group_id}'"
+    results = mysql.run_query(sql)
+    completed = [i['case_id'] for i in results]
+
+    # Remaining casefile IDs for which tests must be run
+    remaining = list(set(parameters['case_ids']) - set(completed))
+    remaining.sort()
+
+    return remaining
+
+
+@pytest.fixture(scope='module')
+def most_recent_group_id():
+    """Get test run ID from database allowing for test continuation after pause"""
+
+    sql = "SELECT group_id FROM nemde.run_info ORDER BY row_id DESC LIMIT 1"
+    result = mysql.run_query(sql=sql)
+
+    if result:
+        return result[0]['run_id']
+    else:
+        return None
+
+
+def casefile_ids(year, month, n, continue_last=False):
+    """
+    Get casefile IDs for test run. Will attempt to finish remaining
+    cases for the latest test run.
+    """
+
+    schema = os.getenv('MYSQL_SCHEMA')
+
+    # Continue the last run
+    if continue_last:
+        info = get_most_recent_test_run_info(schema=schema)
+        case_ids = get_remaining_casefile_ids(schema=schema, group_id=info['group_id'])
+        return case_ids
+
+    # Start a new run
+    else:
+        case_ids = get_casefile_id_sample(year=year, month=month, n=n)
+        record_new_test_run(schema=schema, case_ids=case_ids)
+        return case_ids
+
+
+# @pytest.fixture(scope='module', params=get_test_run_casefile_ids(year=2020, month=11, n=10))
+@pytest.fixture(scope='module', params=get_casefile_ids(year=2020, month=11, n=10))
+# @pytest.fixture(scope='module', params=get_selected_casefile_ids())
 def case_id(request):
     return request.param
 
 
-def test_run_model():
+def test_model_execution():
     """Test model runs correctly given user input"""
 
     user_data_dict = {
@@ -163,7 +272,7 @@ def test_run_model():
     assert abs(relative_difference) <= 1e-3
 
 
-def test_run_model_validation(testrun_uid, case_id):
+def test_model_validation(case_id, testrun_uid, group_id):
     """Run model for a sample of case IDs"""
 
     user_data = {
@@ -185,9 +294,9 @@ def test_run_model_validation(testrun_uid, case_id):
     # Entry to post to database
     entry = {
         'run_id': testrun_uid,
+        'group_id': group_id,
         'run_time': int(time.time()),
         'case_id': user_data['case_id'],
-        # 'results': json.dumps(solution)
         'results': results
     }
 

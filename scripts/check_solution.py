@@ -8,7 +8,6 @@ import pandas as pd
 import context
 from nemde.io.database import mysql
 from nemde.config.setup_variables import setup_environment_variables
-setup_environment_variables()
 
 
 def check_period_solution(run_id=None):
@@ -73,6 +72,9 @@ def check_casefile_solution(filename, key, case_id=None, run_id=None):
 
 
 if __name__ == "__main__":
+    os.environ['ONLINE_FLAG'] = 'true'
+    setup_environment_variables()
+
     run_id = '95e84bdb88444ba2846a46aa7dc39402'
     # check_period_solution(run_id=run_id)
     # check_period_solution()

@@ -2,6 +2,7 @@
 
 import os
 import csv
+import json
 
 import MySQLdb
 import MySQLdb.cursors
@@ -92,7 +93,7 @@ def initialise_tables(schema):
     """
 
     # Create tables
-    tables = ['results', 'casefiles', 'reports']
+    tables = ['results', 'casefiles', 'reports', 'test_run_info']
     for t in tables:
         create_table(schema, t)
 
@@ -136,11 +137,21 @@ def post_entry(schema, table, entry):
     close_connection(conn, cur)
 
 
+def run_query(sql):
+    """Run SQL query"""
+
+    conn, cur = connect_to_database()
+    cur.execute(sql)
+    conn.commit()
+    close_connection(conn=conn, cur=cur)
+
+    return cur.fetchall()
+
+
 def get_casefile_validation_results(schema, table, run_id, case_id):
     """Extract results for a given casefile for a given validation test run"""
 
     conn, cur = connect_to_database()
-
     sql = f"SELECT * FROM {schema}.{table} WHERE run_id='{run_id}' AND case_id='{case_id}'"
     cur.execute(sql)
 
@@ -151,21 +162,7 @@ def get_test_run_validation_results(schema, table, run_id):
     """Extract all results for a given validation test run"""
 
     conn, cur = connect_to_database()
-
     sql = f"SELECT * FROM {schema}.{table} WHERE run_id='{run_id}'"
     cur.execute(sql)
 
     return cur.fetchall()
-
-
-def get_latest_run_id(schema, table):
-    """Get most recent validation run ID"""
-
-    conn, cur = connect_to_database()
-    sql = f"SELECT run_id FROM {schema}.{table} ORDER BY row_id DESC LIMIT 1"
-    cur.execute(sql)
-
-    # Results
-    results = cur.fetchall()
-
-    return results[0]['run_id']

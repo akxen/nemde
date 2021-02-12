@@ -1,5 +1,7 @@
 #!/bin/bash
 
+# tail -f /dev/null
+
 # Run tests
 pytest --verbose --capture=tee-sys --junitxml=/app/nemde/tests/report.xml
 status=$?
