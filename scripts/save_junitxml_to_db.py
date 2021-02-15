@@ -12,12 +12,15 @@ setup_environment_variables()
 def save_to_db():
     """Save Pytest report to database"""
 
+    schema = os.environ['MYSQL_SCHEMA']
+
     # Get latest run ID
-    run_id = mysql.get_latest_run_id(schema=os.environ['MYSQL_SCHEMA'], table='results')
+    run_id = mysql.get_most_recent_test_run_id(schema=schema, table='results')
 
     # Open pytest report
     report_path = os.path.join(
         os.path.dirname(__file__), os.path.pardir, 'nemde', 'tests', 'report.xml')
+
     with open(report_path, 'r') as f:
         report = f.read()
 
@@ -27,7 +30,7 @@ def save_to_db():
         'report': zlib.compress(report.encode('utf-8')),
     }
 
-    mysql.post_entry(schema=os.environ['MYSQL_SCHEMA'], table='reports', entry=entry)
+    mysql.post_entry(schema=schema, table='reports', entry=entry)
 
     return entry
 

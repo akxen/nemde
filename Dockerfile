@@ -38,7 +38,7 @@ RUN mkdir /app
 # Copy casefiles
 RUN mkdir /app/casefiles
 RUN mkdir /app/casefiles/zipped
-COPY ./casefiles/zipped /app/casefiles/zipped
+# COPY ./casefiles/zipped /app/casefiles/zipped
 
 # Copy model and scripts
 COPY ./requirements.txt /app/

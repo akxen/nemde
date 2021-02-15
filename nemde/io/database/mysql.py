@@ -2,10 +2,11 @@
 
 import os
 import csv
+import time
 import json
 
 import MySQLdb
-import MySQLdb.cursors
+from MySQLdb.cursors import DictCursor
 
 
 def get_database_credentials():
@@ -27,8 +28,16 @@ def connect_to_database():
     credentials = get_database_credentials()
 
     # MySQL connection object
-    conn = MySQLdb.connect(cursorclass=MySQLdb.cursors.DictCursor,
-                           **credentials)
+    attempts = 1
+    while attempts <= 5:
+        try:
+            conn = MySQLdb.connect(cursorclass=DictCursor, charset='utf8', **credentials)
+            break
+        except MySQLdb.OperationalError as e:
+            print(e)
+            time.sleep(attempts * 5)
+
+        attempts += 1
 
     # Cursor
     cur = conn.cursor()
@@ -143,9 +152,10 @@ def run_query(sql):
     conn, cur = connect_to_database()
     cur.execute(sql)
     conn.commit()
+    results = cur.fetchall()
     close_connection(conn=conn, cur=cur)
 
-    return cur.fetchall()
+    return results
 
 
 def get_casefile_validation_results(schema, table, run_id, case_id):
@@ -158,11 +168,29 @@ def get_casefile_validation_results(schema, table, run_id, case_id):
     return cur.fetchall()[0]
 
 
-def get_test_run_validation_results(schema, table, run_id):
+def get_test_run_validation_results(schema, table, group_id):
     """Extract all results for a given validation test run"""
 
     conn, cur = connect_to_database()
-    sql = f"SELECT * FROM {schema}.{table} WHERE run_id='{run_id}'"
+    sql = f"SELECT * FROM {schema}.{table} WHERE group_id='{group_id}'"
     cur.execute(sql)
 
     return cur.fetchall()
+
+
+def get_most_recent_test_run_id(schema, table):
+    """Get most recent test run ID"""
+
+    sql = f"SELECT run_id FROM {schema}.results ORDER BY row_id DESC LIMIT 1"
+    result = run_query(sql=sql)
+
+    return result[0]['run_id']
+
+
+def get_most_recent_test_group_id(schema, table):
+    """Get most recent test group ID"""
+
+    sql = f"SELECT group_id FROM {schema}.results ORDER BY row_id DESC LIMIT 1"
+    result = run_query(sql=sql)
+
+    return result[0]['group_id']

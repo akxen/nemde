@@ -6,20 +6,45 @@ import zlib
 import time
 import calendar
 
+import MySQLdb
+
 import context
 import nemde
 from nemde.io.casefile import load_xml_from_archive
-from nemde.io.database.mysql import initialise_tables, post_entry
+from nemde.io.database.mysql import initialise_tables, post_entry, run_query
 from nemde.config.setup_variables import setup_environment_variables
 
 
 def get_month_dispatch_intervals(year, month):
     """Get all dispatch interval IDs for a given month"""
 
-    days = range(1, calendar.monthrange(2020, 11)[1] + 1)
+    days = range(1, calendar.monthrange(year, month)[1] + 1)
     intervals = range(1, 289)
 
-    return [(year, month, d, i) for d in days for i in intervals]
+    # return [(year, month, d, i) for d in days for i in intervals]
+    return [f'{year}{month:02}{d:02}{i:03}' for d in days for i in intervals]
+
+
+def get_uploaded_casefile_ids(schema):
+    """Get all uploaded casefile IDs"""
+
+    sql = f"SELECT case_id FROM {schema}.casefiles"
+    results = run_query(sql=sql)
+    uploaded = [i['case_id'] for i in results]
+
+    return uploaded
+
+
+def get_intervals_to_upload(schema, year, month):
+    """Get case IDs to upload"""
+
+    intervals = get_month_dispatch_intervals(year=year, month=month)
+    uploaded = get_uploaded_casefile_ids(schema=schema)
+
+    to_upload = list(set(intervals) - set(uploaded))
+    to_upload.sort()
+
+    return to_upload
 
 
 def upload_casefile(data_dir, schema, year, month, day, interval):
@@ -29,16 +54,10 @@ def upload_casefile(data_dir, schema, year, month, day, interval):
     casefile = load_xml_from_archive(data_dir=data_dir, year=year, month=month,
                                      day=day, interval=interval)
 
-    # TODO: check if compression is necessary
-    compressed = zlib.compress(casefile)
-
-    case_id = f'{year}{month:02}{day:02}{interval:03}'
-
     # Construct entry to be uploaded
     entry = {
-        'case_id': case_id,
-        # 'casefile': casefile,
-        'casefile': compressed,
+        'case_id': f'{year}{month:02}{day:02}{interval:03}',
+        'casefile': zlib.compress(casefile),
         'upload_timestamp': time.time(),
     }
 
@@ -52,27 +71,27 @@ def upload_casefiles(schema, data_dir, year, month):
     initialise_tables(schema=schema)
 
     # All dispatch intervals for a given month
-    intervals = get_month_dispatch_intervals(year=year, month=month)
+    intervals = get_intervals_to_upload(schema=schema, year=year, month=month)
 
-    for interval_id in intervals:
-        print('Uploading', interval_id)
-        year, month, day, interval = interval_id
-        upload_casefile(data_dir=data_dir, schema=schema, year=year,
-                        month=month, day=day, interval=interval)
+    for i in intervals:
+
+        # Extract year, month, day, and interval from casefile ID
+        year, month, day, interval_id = int(i[:4]), int(i[4:6]), int(i[6:8]), int(i[8:])
+
+        # Upload file if it's not already in table
+        try:
+            upload_casefile(data_dir=data_dir, schema=schema, year=year,
+                            month=month, day=day, interval=interval_id)
+            print('Uploaded', i)
+        except MySQLdb.IntegrityError:
+            print('Skipping', i)
 
 
 if __name__ == '__main__':
     # Setup env variables
-    # os.environ['ONLINE_FLAG'] = 'true'
     setup_environment_variables()
 
-    # Folder containing zipped NEMDE casefiles
-    data_directory = os.path.join(os.path.dirname(__file__), os.path.pardir,
-                                  os.path.pardir, os.path.pardir,
-                                  os.path.pardir, os.path.pardir, 'nemweb',
-                                  'Reports', 'Data_Archive', 'NEMDE', 'zipped')
-
     # Upload casefiles for a given month
-    db_schema = os.environ['MYSQL_SCHEMA']
-    upload_casefiles(schema=db_schema, data_dir=data_directory,
-                     year=2020, month=11)
+    db_schema = os.getenv('MYSQL_SCHEMA')
+    casefile_dir = os.getenv('CASEFILE_DIR')
+    upload_casefiles(schema=db_schema, data_dir=casefile_dir, year=2020, month=11)

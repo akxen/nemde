@@ -4,6 +4,7 @@ Load NEMDE casefile
 
 import os
 import io
+import zlib
 import zipfile
 
 import xmltodict
@@ -100,12 +101,12 @@ def load_xml_from_database(year, month, day, interval):
         raise CasefileQueryError
 
     # Extract casefile string from record
-    casefile = result[0].get('casefile')
+    casefile = zlib.decompress(result[0].get('casefile')).decode('utf-8')
 
-    if not isinstance(casefile, str):
-        raise CasefileValueError
-    else:
+    if isinstance(casefile, str):
         return casefile
+    else:
+        raise CasefileValueError
 
 
 def load_base_case(case_id):
@@ -116,8 +117,9 @@ def load_base_case(case_id):
                                   int(case_id[6:8]), int(case_id[8:]))
 
     # Load XML and convert to dictionary
-    base = load_xml_from_archive(data_dir=os.getenv('CASEFILE_DIR'), year=year,
-                                 month=month, day=day, interval=interval)
+    # base = load_xml_from_archive(data_dir=os.getenv('CASEFILE_DIR'), year=year,
+    #  month=month, day=day, interval=interval)
+    base = load_xml_from_database(year=year, month=month, day=day, interval=interval)
 
     # Force some nodes to always have lists
     force_list = ('Trade', 'TradeTypePriceStructure',)

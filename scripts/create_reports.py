@@ -9,19 +9,17 @@ import itertools
 import pandas as pd
 
 import context
-from nemde.core.casefile import lookup
-from nemde.io.casefile import load_base_case
-from nemde.io.database.mysql import get_latest_run_id
+from nemde.io.database.mysql import get_most_recent_test_group_id
 from nemde.io.database.mysql import get_test_run_validation_results
 from nemde.config.setup_variables import setup_environment_variables
 setup_environment_variables()
 
 
-def parse_validation_results(run_id):
+def parse_validation_results(group_id):
     """Load validation results and convert to JSON"""
 
     results = get_test_run_validation_results(
-        schema=os.environ['MYSQL_SCHEMA'], table='results', run_id=run_id)
+        schema=os.environ['MYSQL_SCHEMA'], table='results', group_id=group_id)
 
     return [json.loads(zlib.decompress(i['results'])) for i in results]
 
@@ -58,17 +56,17 @@ def save_basis_results(results, key, filename):
     df.loc[:, columns].to_csv(filename, index=False)
 
 
-def construct_validation_report(run_id, root_dir):
+def construct_validation_report(group_id, root_dir):
     """
     Load data and perform calculations to check how close the approximated
     model results conform with NEMDE solutions
     """
 
     # Load results and convert to JSON
-    results = parse_validation_results(run_id=run_id)
+    results = parse_validation_results(group_id=group_id)
 
     # Construct directory where results are to be saved
-    output_dir = os.path.join(root_dir, run_id)
+    output_dir = os.path.join(root_dir, group_id)
     os.makedirs(output_dir, exist_ok=True)
 
     # Save basis results
@@ -88,7 +86,7 @@ def construct_validation_report(run_id, root_dir):
 
 
 if __name__ == '__main__':
-    run_id = get_latest_run_id(schema=os.environ['MYSQL_SCHEMA'], table='results')
-    print('Run ID:', run_id)
+    group_id = get_most_recent_test_group_id(schema=os.environ['MYSQL_SCHEMA'], table='results')
+    print('Group ID:', group_id)
     root_directory = os.path.join(os.path.dirname(__file__), 'validation')
-    construct_validation_report(run_id=run_id, root_dir=root_directory)
+    construct_validation_report(group_id=group_id, root_dir=root_directory)

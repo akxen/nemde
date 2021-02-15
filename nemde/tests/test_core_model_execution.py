@@ -12,9 +12,8 @@ import pytest
 import numpy as np
 
 import context
-from nemde.core.model.execution import run_model
 from nemde.io.database import mysql
-from nemde.io.casefile import load_base_case
+from nemde.core.model.execution import run_model
 from nemde.config.setup_variables import setup_environment_variables
 setup_environment_variables()
 
@@ -150,6 +149,8 @@ def record_new_test_run(schema, case_ids):
     }
     mysql.post_entry(schema=schema, table='test_run_info', entry=entry)
 
+    return entry
+
 
 def get_most_recent_test_run_info(schema):
     """
@@ -163,7 +164,7 @@ def get_most_recent_test_run_info(schema):
     identified by a 'group_id'.
     """
 
-    sql = f"SELECT * FROM {schema}.run_info ORDER BY row_id DESC LIMIT 1"
+    sql = f"SELECT * FROM {schema}.test_run_info ORDER BY row_id DESC LIMIT 1"
     results = mysql.run_query(sql)
 
     if results:
@@ -175,7 +176,7 @@ def get_most_recent_test_run_info(schema):
 def get_test_run_info(schema, group_id):
     """Get run info"""
 
-    sql = f"SELECT * FROM {schema}.run_info WHERE group_id='{group_id}'"
+    sql = f"SELECT * FROM {schema}.test_run_info WHERE group_id='{group_id}'"
     results = mysql.run_query(sql)
 
     if results:
@@ -204,20 +205,20 @@ def get_remaining_casefile_ids(schema, group_id):
     return remaining
 
 
-@pytest.fixture(scope='module')
-def most_recent_group_id():
-    """Get test run ID from database allowing for test continuation after pause"""
-
-    sql = "SELECT group_id FROM nemde.run_info ORDER BY row_id DESC LIMIT 1"
-    result = mysql.run_query(sql=sql)
-
-    if result:
-        return result[0]['run_id']
-    else:
-        return None
+@pytest.fixture
+def prepare_new_run():
+    """Prepare run"""
+    case_ids = get_casefile_id_sample(year=2020, month=11, n=10)
+    record_new_test_run(schema=os.getenv('MYSQL_SCHEMA'), case_ids=case_ids)
 
 
-def casefile_ids(year, month, n, continue_last=False):
+@pytest.mark.prepare_new_test_run
+def test_prepare(prepare_new_run):
+    """Prepare test run"""
+    assert True
+
+
+def get_casefile_ids():
     """
     Get casefile IDs for test run. Will attempt to finish remaining
     cases for the latest test run.
@@ -225,54 +226,30 @@ def casefile_ids(year, month, n, continue_last=False):
 
     schema = os.getenv('MYSQL_SCHEMA')
 
-    # Continue the last run
-    if continue_last:
-        info = get_most_recent_test_run_info(schema=schema)
-        case_ids = get_remaining_casefile_ids(schema=schema, group_id=info['group_id'])
-        return case_ids
+    info = get_most_recent_test_run_info(schema=schema)
+    case_ids = get_remaining_casefile_ids(schema=schema, group_id=info['group_id'])
 
-    # Start a new run
-    else:
-        case_ids = get_casefile_id_sample(year=year, month=month, n=n)
-        record_new_test_run(schema=schema, case_ids=case_ids)
-        return case_ids
+    # return [{'case_id': i, 'group_id': info['group_id']} for i in case_ids]
+    return case_ids
 
 
-# @pytest.fixture(scope='module', params=get_test_run_casefile_ids(year=2020, month=11, n=10))
-@pytest.fixture(scope='module', params=get_casefile_ids(year=2020, month=11, n=10))
-# @pytest.fixture(scope='module', params=get_selected_casefile_ids())
+# @pytest.fixture(scope='module', params=['20201101001', '20201101002'])
+@pytest.fixture(scope='module', params=get_casefile_ids())
 def case_id(request):
     return request.param
 
 
-def test_model_execution():
-    """Test model runs correctly given user input"""
+@pytest.fixture(scope='module')
+def group_id():
+    """Get test group ID"""
 
-    user_data_dict = {
-        'case_id': '20201101001',
-        'run_mode': 'physical'
-    }
+    info = get_most_recent_test_run_info(schema=os.getenv('MYSQL_SCHEMA'))
 
-    # Run model
-    user_data_json = json.dumps(user_data_dict)
-    solution = run_model(user_data=user_data_json)
-
-    # Extract total objective obtained from model
-    model_objective = solution['PeriodSolution']['@TotalObjective']
-
-    # Check NEMDE solution for the corresponding dispatch interval
-    base_case = load_base_case(case_id=user_data_dict['case_id'])
-    nemde_objective = float(base_case.get('NEMSPDCaseFile')
-                            .get('NemSpdOutputs').get('PeriodSolution')
-                            .get('@TotalObjective'))
-
-    # Normalised difference between model and observed objectives
-    relative_difference = (model_objective - nemde_objective) / nemde_objective
-
-    assert abs(relative_difference) <= 1e-3
+    return info['group_id']
 
 
-def test_model_validation(case_id, testrun_uid, group_id):
+@pytest.mark.validate
+def test_validate_model(case_id, testrun_uid, group_id):
     """Run model for a sample of case IDs"""
 
     user_data = {
