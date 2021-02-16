@@ -208,7 +208,7 @@ def get_remaining_casefile_ids(schema, group_id):
 @pytest.fixture
 def prepare_new_run():
     """Prepare run"""
-    case_ids = get_casefile_id_sample(year=2020, month=11, n=100)
+    case_ids = get_casefile_id_sample(year=2020, month=11, n=10000)
     record_new_test_run(schema=os.getenv('MYSQL_SCHEMA'), case_ids=case_ids)
 
 

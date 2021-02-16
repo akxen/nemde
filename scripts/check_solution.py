@@ -75,7 +75,7 @@ if __name__ == "__main__":
     os.environ['ONLINE_FLAG'] = 'true'
     setup_environment_variables()
 
-    run_id = '467980f77d4a4cac881abc7564cd2552'
+    run_id = '50fc2882cd1a4c27810e63a65eebff41'
     # check_period_solution(run_id=run_id)
     # check_period_solution()
     # check_casefile_solution(filename='traders.csv', case_id=20201128127, key='@EnergyTarget')
