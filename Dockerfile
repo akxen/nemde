@@ -57,7 +57,7 @@ RUN chmod +x /app/scripts/*
 # RUN chmod -R 755 /app
 # USER user
 
-COPY ./.pytest_cache /app/.pytest_cache
+# COPY ./.pytest_cache /app/.pytest_cache
 
 # Keep container running - should be overidden by entrypoint.sh in docker-compose.yml
 CMD tail -f /dev/null
