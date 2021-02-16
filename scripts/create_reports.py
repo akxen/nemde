@@ -51,7 +51,7 @@ def save_basis_results(results, key, filename):
 
     # Compute absolute difference and sort by this value
     df['abs_difference'] = df['model'].subtract(df['actual']).abs()
-    df = df.sort_values(by=['case_id', 'intervention'], ascending=False)
+    df = df.sort_values(by=['case_id', 'intervention'], ascending=True)
 
     df.loc[:, columns].to_csv(filename, index=False)
 
