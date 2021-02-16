@@ -75,10 +75,10 @@ if __name__ == "__main__":
     os.environ['ONLINE_FLAG'] = 'true'
     setup_environment_variables()
 
-    run_id = '95e84bdb88444ba2846a46aa7dc39402'
+    run_id = '467980f77d4a4cac881abc7564cd2552'
     # check_period_solution(run_id=run_id)
     # check_period_solution()
     # check_casefile_solution(filename='traders.csv', case_id=20201128127, key='@EnergyTarget')
-    check_casefile_solution(filename='regions.csv', key='@EnergyPrice')
+    check_casefile_solution(filename='regions.csv', key='@EnergyPrice', run_id=run_id)
     # check_casefile_solution(filename='traders.csv', key='@EnergyTarget')
-    check_casefile_solution(filename='periods.csv', key='@TotalObjective')
+    check_casefile_solution(filename='periods.csv', key='@TotalObjective', run_id=run_id)

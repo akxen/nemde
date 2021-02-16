@@ -10,7 +10,7 @@
 pytest -m prepare_new_test_run -n 1
 
 # Run model validation tests
-pytest --verbose --capture=tee-sys --junitxml=/app/nemde/tests/report.xml -n 3 -m "not prepare_new_test_run"
+pytest --verbose --capture=tee-sys --junitxml=/app/nemde/tests/report.xml -n 12 -m "not prepare_new_test_run"
 status=$?
 
 # Save junitxml report to database. Exit if pytest exit status is unexpected.
