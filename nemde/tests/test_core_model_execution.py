@@ -227,10 +227,13 @@ def get_casefile_ids():
     schema = os.getenv('MYSQL_SCHEMA')
 
     info = get_most_recent_test_run_info(schema=schema)
-    case_ids = get_remaining_casefile_ids(schema=schema, group_id=info['group_id'])
 
-    # return [{'case_id': i, 'group_id': info['group_id']} for i in case_ids]
-    return case_ids
+    # If there are no test run records return an empty list
+    if info is None:
+        return []
+    else:
+        case_ids = get_remaining_casefile_ids(schema=schema, group_id=info['group_id'])
+        return case_ids
 
 
 # @pytest.fixture(scope='module', params=['20201101001', '20201101002'])
