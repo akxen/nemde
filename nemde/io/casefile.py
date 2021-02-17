@@ -125,3 +125,20 @@ def load_base_case(case_id):
     force_list = ('Trade', 'TradeTypePriceStructure',)
 
     return xmltodict.parse(base, force_list=force_list)
+
+
+def load_base_case_from_archive(case_id, data_dir):
+    """Load case data as dictionary given case ID"""
+
+    # Decompose case ID
+    year, month, day, interval = (int(case_id[:4]), int(case_id[4:6]),
+                                  int(case_id[6:8]), int(case_id[8:]))
+
+    # Load XML and convert to dictionary
+    base = load_xml_from_archive(data_dir=data_dir, year=year,
+                                 month=month, day=day, interval=interval)
+
+    # Force some nodes to always have lists
+    force_list = ('Trade', 'TradeTypePriceStructure',)
+
+    return xmltodict.parse(base, force_list=force_list)
