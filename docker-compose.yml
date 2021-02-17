@@ -5,17 +5,13 @@ services:
     build:
       context: .
     volumes:
-      - ./scripts/validation:/app/scripts/validation
-      - ./nemde/tests:/app/nemde/tests
+      - ./reports:/app/reports
       - ./casefiles/zipped:/app/casefiles/zipped
     entrypoint: /app/scripts/entrypoint.sh
+    env_file:
+      - ./config/default.env
     depends_on:
       - mysql
-
-# networks:
-#   default:
-#     external:
-#       name: mysql_default
 
   mysql:
     image: kubedb/mysql:5.7.25

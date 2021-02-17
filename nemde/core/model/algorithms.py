@@ -24,7 +24,7 @@ def default_algorithm(model):
     }
     opt = pyo.SolverFactory('cbc', solver_io='lp')
 
-    # Solve model with 'swammped' inflexibility profiel constraints
+    # Solve model with 'swammped' inflexibility profile constraints
     model.C_TRADER_INFLEXIBILITY_PROFILE.deactivate()
     first_pass = opt.solve(model, tee=True, options=options, keepfiles=False)
 

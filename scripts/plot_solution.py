@@ -9,8 +9,7 @@ import context
 from nemde.io.casefile import load_base_case
 from nemde.io.database.mysql import get_latest_run_id
 from nemde.io.database.mysql import get_casefile_validation_results
-from nemde.config.setup_variables import setup_environment_variables
-setup_environment_variables()
+from setup_variables import setup_environment_variables
 
 
 def plot_trade_type_solution(ax, results, trade_type):
@@ -68,6 +67,8 @@ def save_case(case_id):
 
 
 if __name__ == '__main__':
+    setup_environment_variables()
+
     # Database parameters
     schema = os.environ['MYSQL_SCHEMA']
     case_id = '20201129139'

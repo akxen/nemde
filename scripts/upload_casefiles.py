@@ -12,7 +12,7 @@ import context
 import nemde
 from nemde.io.casefile import load_xml_from_archive
 from nemde.io.database.mysql import initialise_tables, post_entry, run_query
-from nemde.config.setup_variables import setup_environment_variables
+from setup_variables import setup_environment_variables
 
 
 def get_month_dispatch_intervals(year, month):
@@ -21,7 +21,6 @@ def get_month_dispatch_intervals(year, month):
     days = range(1, calendar.monthrange(year, month)[1] + 1)
     intervals = range(1, 289)
 
-    # return [(year, month, d, i) for d in days for i in intervals]
     return [f'{year}{month:02}{d:02}{i:03}' for d in days for i in intervals]
 
 
@@ -88,8 +87,7 @@ def upload_casefiles(schema, data_dir, year, month):
 
 
 if __name__ == '__main__':
-    # Setup env variables
-    setup_environment_variables()
+    setup_environment_variables('offline-host.env')
 
     # Upload casefiles for a given month
     db_schema = os.getenv('MYSQL_SCHEMA')

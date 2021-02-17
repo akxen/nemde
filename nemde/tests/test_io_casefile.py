@@ -4,13 +4,13 @@ Test loading of casefiles
 
 import os
 
+import pytest
+
 import context
 from nemde.io.casefile import load_xml_from_archive
-from nemde.config.setup_variables import setup_environment_variables
-
-setup_environment_variables()
 
 
+@pytest.mark.skip(reason='Not including casefile archive in container')
 def test_load_casefile_from_database():
     """Load casefile from a database"""
 

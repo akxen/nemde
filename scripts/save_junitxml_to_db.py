@@ -5,8 +5,7 @@ import zlib
 
 import context
 from nemde.io.database import mysql
-from nemde.config.setup_variables import setup_environment_variables
-setup_environment_variables()
+from setup_variables import setup_environment_variables
 
 
 def save_to_db():
@@ -18,8 +17,7 @@ def save_to_db():
     run_id = mysql.get_most_recent_test_run_id(schema=schema, table='results')
 
     # Open pytest report
-    report_path = os.path.join(
-        os.path.dirname(__file__), os.path.pardir, 'nemde', 'tests', 'report.xml')
+    report_path = os.path.join(os.path.dirname(__file__), os.path.pardir, 'reports', 'latest.xml')
 
     with open(report_path, 'r') as f:
         report = f.read()
@@ -36,5 +34,7 @@ def save_to_db():
 
 
 if __name__ == '__main__':
+    setup_environment_variables()
+
     # Save junitxml report to database
     save_to_db()

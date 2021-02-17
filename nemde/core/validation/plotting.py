@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 
 import nemde.core.model
 
+
 def plot_trader_solution_difference(data, solution, intervention):
     """Plot trader model solution against observed solution"""
 

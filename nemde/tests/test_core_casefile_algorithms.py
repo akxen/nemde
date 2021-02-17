@@ -9,9 +9,6 @@ from nemde.core.casefile import lookup
 from nemde.io.casefile import load_base_case
 from nemde.core.casefile.algorithms import get_parsed_interconnector_loss_model_segments
 from nemde.core.casefile.algorithms import get_interconnector_loss_estimate
-from nemde.config.setup_variables import setup_environment_variables
-
-setup_environment_variables()
 
 
 @pytest.fixture(scope='module')

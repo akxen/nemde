@@ -32,13 +32,11 @@ RUN apt-get -y install mysql-server
 RUN apt-get -y install libmysqlclient-dev
 RUN apt-get -y install libssl-dev
 
-# Create repo folder 
+# Create repo and subfolders
 RUN mkdir /app
-
-# Copy casefiles
 RUN mkdir /app/casefiles
 RUN mkdir /app/casefiles/zipped
-# COPY ./casefiles/zipped /app/casefiles/zipped
+RUN mkdir /app/reports
 
 # Copy model and scripts
 COPY ./requirements.txt /app/
@@ -56,8 +54,6 @@ RUN chmod +x /app/scripts/*
 # RUN chown -R user:user /app
 # RUN chmod -R 755 /app
 # USER user
-
-# COPY ./.pytest_cache /app/.pytest_cache
 
 # Keep container running - should be overidden by entrypoint.sh in docker-compose.yml
 CMD tail -f /dev/null

@@ -10,8 +10,6 @@ import xmltodict
 import context
 from nemde.io.casefile import load_base_case
 from nemde.core.model.serializers.casefile_serializer import construct_case
-from nemde.config.setup_variables import setup_environment_variables
-setup_environment_variables()
 
 logger = logging.getLogger(__name__)
 

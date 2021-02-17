@@ -11,8 +11,7 @@ import pandas as pd
 import context
 from nemde.io.casefile import load_base_case
 from nemde.core.casefile import lookup
-from nemde.config.setup_variables import setup_environment_variables
-setup_environment_variables()
+from setup_variables import setup_environment_variables
 
 
 def check_intervention_status(casefile):
@@ -134,9 +133,11 @@ def identify_fast_start_unit_startup_casefiles(year, month):
             out.append(entry)
 
     # Convert to DataFrame and save as CSV
-    path = os.path.join(os.path.dirname(__file__), 'casefiles',
-                        f'{year}{month:02}_startup.csv')
-    pd.DataFrame(out).sort_values(by=['case_id', 'intervention']).to_csv(path, index=False)
+    path = os.path.join(os.path.dirname(__file__), os.path.pardir, 'casefiles',
+                        'features', f'{year}{month:02}_startup.csv')
+
+    pd.DataFrame(out).sort_values(
+        by=['case_id', 'intervention']).to_csv(path, index=False)
 
 
 def identify_casefiles(year, month, function):
@@ -145,15 +146,14 @@ def identify_casefiles(year, month, function):
     for index, (day, interval) in enumerate(itertools.product(range(1, 31), range(1, 289))):
         case_id = f'{year}{month:02}{day:02}{interval:03}'
 
-        # if index % 10 == 0:
-        # print(index, case_id)
-
         # Load casefile and extract intervention status
         casefile = load_base_case(case_id=case_id)
         function(casefile)
 
 
 if __name__ == '__main__':
+    setup_environment_variables()
+
     # Identify casefiles with intervention status = True
     # identify_casefiles(year=2020, month=11, function=check_intervention_status)
 

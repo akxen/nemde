@@ -14,8 +14,6 @@ import numpy as np
 import context
 from nemde.io.database import mysql
 from nemde.core.model.execution import run_model
-from nemde.config.setup_variables import setup_environment_variables
-setup_environment_variables()
 
 logger = logging.getLogger(__name__)
 
@@ -208,7 +206,7 @@ def get_remaining_casefile_ids(schema, group_id):
 @pytest.fixture
 def prepare_new_run():
     """Prepare run"""
-    case_ids = get_casefile_id_sample(year=2020, month=11, n=10000)
+    case_ids = get_casefile_id_sample(year=2020, month=11, n=int(os.getenv('VALIDATION_SAMPLE_SIZE')))
     record_new_test_run(schema=os.getenv('MYSQL_SCHEMA'), case_ids=case_ids)
 
 

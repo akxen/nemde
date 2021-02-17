@@ -11,8 +11,7 @@ import pandas as pd
 import context
 from nemde.io.database.mysql import get_most_recent_test_group_id
 from nemde.io.database.mysql import get_test_run_validation_results
-from nemde.config.setup_variables import setup_environment_variables
-setup_environment_variables()
+from setup_variables import setup_environment_variables
 
 
 def parse_validation_results(group_id):
@@ -86,7 +85,9 @@ def construct_validation_report(group_id, root_dir):
 
 
 if __name__ == '__main__':
+    setup_environment_variables()
+
     group_id = get_most_recent_test_group_id(schema=os.environ['MYSQL_SCHEMA'], table='results')
     print('Group ID:', group_id)
-    root_directory = os.path.join(os.path.dirname(__file__), 'validation')
+    root_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'reports')
     construct_validation_report(group_id=group_id, root_dir=root_directory)

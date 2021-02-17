@@ -1,5 +1,8 @@
 #!/bin/bash
 
+echo "Sleeping for 10s" && sleep 10
+echo "Starting run"
+
 # Initialise database tables
 /usr/bin/python3.9 /app/scripts/initialise_tables.py
 
@@ -10,7 +13,7 @@
 pytest -m prepare_new_test_run -n 1
 
 # Run model validation tests
-pytest --verbose --capture=tee-sys --junitxml=/app/nemde/tests/report.xml -n 14 -m "not prepare_new_test_run"
+pytest --verbose --capture=tee-sys --junitxml=/app/reports/latest.xml -n $N_WORKERS -m "not prepare_new_test_run"
 status=$?
 
 # Save junitxml report to database. Exit if pytest exit status is unexpected.
@@ -20,5 +23,7 @@ status=$?
 
 # Construct reports
 /usr/bin/python3.9 /app/scripts/create_reports.py
+
+echo "Finished run"
 
 tail -f /dev/null

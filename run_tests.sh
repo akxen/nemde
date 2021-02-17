@@ -1,3 +1,3 @@
 #!/bin/bash
 
-sudo nohup docker-compose -f docker-compose-offline.yml up --build > ~/execution.log &
+sudo nohup docker-compose -f docker-compose.yml up --build > ~/execution.log &

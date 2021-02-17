@@ -4,8 +4,8 @@ import time
 import context
 from nemde.io.casefile import load_base_case
 from nemde.core.model.execution import run_model
-from nemde.config.setup_variables import setup_environment_variables
-setup_environment_variables()
+from setup_variables import setup_environment_variables
+setup_environment_variables('offline-host.env')
 
 start = time.time()
 

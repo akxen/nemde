@@ -1,1 +1,0 @@
-from nemde.config.setup_variables import setup_environment_variables

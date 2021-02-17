@@ -12,9 +12,6 @@ import numpy as np
 import context
 from nemde.io.casefile import load_base_case
 from nemde.analysis import calculations
-from nemde.config.setup_variables import setup_environment_variables
-
-setup_environment_variables()
 
 
 def get_casefile_ids(year, month, n):
