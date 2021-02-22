@@ -18,7 +18,7 @@ def clean_user_input(user_data):
     """Parse user data and set defaults if option not specified"""
 
     # Load user data as json
-    data = json.loads(user_data)
+    data = user_data
 
     # Extract options
     options = data.get('options', {})
