@@ -26,7 +26,7 @@ def default_algorithm(model):
 
     # Solve model with 'swammped' inflexibility profile constraints
     model.C_TRADER_INFLEXIBILITY_PROFILE.deactivate()
-    first_pass = opt.solve(model, tee=True, options=options, keepfiles=False)
+    solver_info_1 = opt.solve(model, tee=True, options=options, keepfiles=False)
 
     # Check if dispatch > 0 for any fast start units
     starting = [i for i, j in model.S_TRADER_ENERGY_OFFERS
@@ -45,9 +45,9 @@ def default_algorithm(model):
     model.C_TRADER_RAMP_DOWN_RATE.reconstruct()
     model.C_TRADER_INFLEXIBILITY_PROFILE.reconstruct()
     model.C_TRADER_INFLEXIBILITY_PROFILE.activate()
-    second_pass = opt.solve(model, tee=True, options=options, keepfiles=False)
+    solver_info_2 = opt.solve(model, tee=True, options=options, keepfiles=False)
 
-    return model
+    return model, solver_info_2
 
 
 def dispatch_only_algorithm(model):
@@ -65,11 +65,11 @@ def dispatch_only_algorithm(model):
     t0 = time.time()
 
     print('Starting MILP solve:', time.time() - t0)
-    solve_status_1 = opt.solve(model, tee=True, options=options, keepfiles=False)
+    solver_info = opt.solve(model, tee=True, options=options, keepfiles=False)
     print('Finished MILP solve:', time.time() - t0)
     print('Objective value - 1:', model.OBJECTIVE.expr())
 
-    return model
+    return model, solver_info
 
 
 def solve_model(model, algorithm=None):

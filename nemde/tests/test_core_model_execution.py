@@ -255,8 +255,8 @@ def test_validate_model(case_id, testrun_uid, group_id):
 
     user_data = {
         'case_id': case_id,
-        'run_mode': 'physical',
         'options': {
+            'run_mode': 'physical',
             'algorithm': 'default',
             'solution_format': 'validation'
         }

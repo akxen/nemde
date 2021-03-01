@@ -2,8 +2,6 @@
 Run model with user specified inputs
 """
 
-import json
-
 from nemde.io.casefile import load_base_case
 from nemde.errors import CasefileOptionsError
 from nemde.core.casefile.updater import patch_casefile
@@ -25,32 +23,48 @@ def clean_user_input(user_data):
 
     # Cleaned options
     cleaned = {
-        'case_data': data.get('case_data', None),
+        'casefile': data.get('casefile', None),
         'case_id': data.get('case_id', None),
         'patches': data.get('patches', []),
-        'run_mode': options.get('run_mode', 'physical'),
         'options': {
+            'run_mode': options.get('run_mode', 'physical'),
             'algorithm': options.get('algorithm', 'default'),
             'solution_format': options.get('solution_format', 'standard'),
+            'return_casefile': options.get('return_casefile', False),
+            'solution_elements': options.get('solution_elements', []),
+            'label': options.get('label', None),
         }
     }
 
-    has_case_data = cleaned['case_data'] is not None
+    has_casefile = cleaned['casefile'] is not None
     has_case_id = cleaned['case_id'] is not None
     has_patches = len(cleaned['patches']) > 0
 
-    if has_case_data and (has_case_id or has_patches):
-        message = ("If 'case_data' is specified then 'case_id' and 'patches'",
-                   "should be omitted")
-        raise CasefileOptionsError(message)
+    if has_casefile and (has_case_id or has_patches):
+        msg = ("If 'casefile' is specified then 'case_id' and 'patches'",
+               "should be omitted")
+        raise CasefileOptionsError(msg)
 
-    if cleaned.get('run_mode') not in ['physical', 'pricing']:
-        message = "'run_mode' must be set to 'physical' or 'pricing'"
-        raise CasefileOptionsError(message)
+    if cleaned.get('options').get('run_mode') not in ['physical', 'pricing']:
+        msg = "'run_mode' must be set to 'physical' or 'pricing'"
+        raise CasefileOptionsError(msg)
 
     if cleaned.get('options').get('solution_format') not in ['standard', 'validation']:
-        message = "'solution_format' must be either 'standard' or 'validation'"
-        raise CasefileOptionsError(message)
+        msg = "'solution_format' must be either 'standard' or 'validation'"
+        raise CasefileOptionsError(msg)
+
+    if not isinstance(cleaned.get('options').get('return_casefile'), bool):
+        msg = f"'return_casefile' must be either True or False: {cleaned.get('options').get('return_casefile')}"
+        raise CasefileOptionsError(msg)
+
+    if not isinstance(cleaned.get('options').get('solution_elements'), list):
+        msg = "'solution_elements' must be a list"
+        raise CasefileOptionsError(msg)
+
+    label = cleaned.get('options').get('label')
+    if (label is not None) and not isinstance(label, str):
+        msg = "'label' must be string"
+        raise CasefileOptionsError(msg)
 
     return cleaned
 
@@ -74,35 +88,52 @@ def run_model(user_data):
 
     # Extract model options
     case_id = data.get('case_id')
-    user_case_data = data.get('case_data')
-    user_patches = data.get('patches')
-    run_mode = data.get('run_mode')
+    casefile = data.get('casefile')
+    patches = data.get('patches')
+    run_mode = data.get('options').get('run_mode')
     algorithm = data.get('options').get('algorithm')
     solution_format = data.get('options').get('solution_format')
+    return_casefile = data.get('options').get('return_casefile')
 
     # Use user specified casefile
     if case_id is None:
-        case_data = user_case_data
+        case_data = casefile
 
-    # Use use base casefile and apply user patches
+    # Use base casefile and apply user patches
     else:
         base_case = load_base_case(case_id=case_id)
-        case_data = patch_casefile(casefile=base_case, updates=user_patches)
+        case_data = patch_casefile(casefile=base_case, updates=patches)
 
     # Construct serialized casefile and model object
     serialized_case = construct_case(data=case_data, mode=run_mode)
 
     # Construct and solve model
     model = construct_model(data=serialized_case)
-    model = solve_model(model=model, algorithm=algorithm)
+    model, solver_info = solve_model(model=model, algorithm=algorithm)
 
     # Compare solution with NEMDE solution or run model and return solution
     if solution_format == 'standard':
-        return get_solution(model=model)
+        solution = get_solution(model=model)
 
     elif solution_format == 'validation':
-        return get_solution_comparison(model=model)
+        solution = get_solution_comparison(model=model)
 
     else:
-        message = "'solution_format' must be either 'standard' or 'validation'"
-        raise CasefileOptionsError(message)
+        msg = "'solution_format' must be either 'standard' or 'validation'"
+        raise CasefileOptionsError(msg)
+
+    if return_casefile:
+        output = {
+            'input': case_data,
+            'output': solution,
+            # 'solver': solver_info,
+        }
+        return output
+
+    else:
+        output = {
+            'output': solution,
+            # 'solver': solver_info,
+        }
+
+        return output
