@@ -39,12 +39,19 @@ def save_basis_results(results, key, filename):
     # Construct column based on filename
     if filename.endswith('traders.csv'):
         columns = index + ['trader_id'] + metrics
+
     elif filename.endswith('interconnectors.csv'):
         columns = index + ['interconnector_id'] + metrics
+
     elif filename.endswith('regions.csv'):
         columns = index + ['region_id'] + metrics
+
+    elif filename.endswith('constraints.csv'):
+        columns = index + ['constraint_id'] + metrics
+
     elif filename.endswith('periods.csv'):
         columns = index + metrics
+
     else:
         raise ValueError("Unrecognised filename pattern", filename)
 
@@ -73,6 +80,7 @@ def construct_validation_report(group_id, root_dir):
         ('TraderSolution', 'traders.csv'),
         ('InterconnectorSolution', 'interconnectors.csv'),
         ('RegionSolution', 'regions.csv'),
+        ('ConstraintSolution', 'constraints.csv'),
         ('PeriodSolution', 'periods.csv')
     ]
 
@@ -87,7 +95,8 @@ def construct_validation_report(group_id, root_dir):
 if __name__ == '__main__':
     setup_environment_variables()
 
-    group_id = get_most_recent_test_group_id(schema=os.environ['MYSQL_SCHEMA'], table='results')
+    group_id = get_most_recent_test_group_id(
+        schema=os.environ['MYSQL_SCHEMA'], table='results')
     print('Group ID:', group_id)
     root_directory = os.path.join(os.path.dirname(__file__), os.path.pardir, 'reports')
     construct_validation_report(group_id=group_id, root_dir=root_directory)
