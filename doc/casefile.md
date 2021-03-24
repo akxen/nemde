@@ -1,8 +1,8 @@
 # Casefile format
-The following sections provide an overview of the structure of NEMDE casefiles and their constituent components. This is an incomplete list, and is simply intended to serve as a guide for those exploring common use cases.
+The structure of a NEMDE casefile is discussed in the following sections. Summaries for each component are by no means exhaustive, rather they seek to provide a high-level overview of the components most likely to be modified when undertaking scenario analyses. Users can refer to the JSON schema for a more precise overview of casefile structure and allowed data types.
 
 ### NEMSPDCaseFile.NemSpdInputs.Case
-High-level case details. Describes constraint violation penalty factors.
+Most of the following parameters pertain to constraint violation penalty factors. The price ceiling is given by `@VoLL` - formerly referred to as the 'value of lost load', while the price floor is represented by `@MPF`. The `@Intervention` flag indicates if an intervention pricing run occured for the given interval.
 
 ```
 {
@@ -39,7 +39,7 @@ High-level case details. Describes constraint violation penalty factors.
 ```
 
 ### NEMSPDCaseFile.NemSpdInputs.RegionCollection.Region
-Array describing intial conditions in each region.
+Array describing intial conditions for each region.
 
 ```
 [
@@ -68,7 +68,7 @@ Array describing intial conditions in each region.
 |`InitialDemand`| Region demand at start of dispatch interval |
 
 ### NEMSPDCaseFile.NemSpdInputs.TraderCollection.Trader
-Array describing trader parameters at start of dispatch interval.
+Array describing trader price bands and initial conditions at the start of a given dispatch interval.
 
 ```
 [
@@ -228,14 +228,14 @@ Array describing initial conditions for each interconnector at the start of a gi
 
 **Loss model**
 
-Loss model segments describe the relationship between interconnector flow and total losses over the interconnector. For each segment `@Factor` describes the marginal loss over a given loss model segment. The endpoints for each segment are given by `@Limit`. Each interconnector has a `@FromRegion` and `@ToRegion` (defined in TODO: add link). When power is flowing from an interconnector's `@FromRegion` to its `@ToRegion` flow is defined to be positive, while it is negative when power flows in the opposite direction. This is explains why `@Limit` takes negative values (the net transfer is from the interconnector's `@ToRegion` to its `@FromRegion`). The loss over a given loss model segment is simply the MW flow over the segment multiplied by `@Factor`. Integrating losses over each segment yields the total loss over the interconnector.
+Loss model segments are used to describe the relationship between interconnector flow and total losses over the interconnector. For each segment `@Factor` describes the marginal loss over a given loss model segment. The endpoints for each segment are given by `@Limit`. Each interconnector has a `@FromRegion` and `@ToRegion` (defined in TODO: add link). Positive flow corresponds to power flowing from an interconnector's `@FromRegion` to its `@ToRegion`, while negative values denote power flowing in the opposite direction. This is explains why `@Limit` takes negative values (the net transfer is from the interconnector's `@ToRegion` to its `@FromRegion`). The loss over a given loss model segment is simply the MW flow over the segment multiplied by `@Factor`. Integrating losses over each segment yields the total loss over the interconnector.
 
 (TODO: figure of loss model factors)
 
 (TODO: figure of integrated loss model segments)
 
 ### NEMSPDCaseFile.NemSpdInputs.ConstraintScadaDataCollection.ConstraintScadaData
-SCADA telemetry used when computing RHS values for constraints.
+SCADA telemetry data used when computing RHS values for constraints.
 
 **Note: these data are not currently used when implenting the approximated version of NEMDE. See RHS limitations for more information. (TODO: write caveats section for RHS values)**
 
@@ -272,7 +272,7 @@ SCADA telemetry used when computing RHS values for constraints.
 ```
 
 ### NEMSPDCaseFile.NemSpdInputs.GenericEquationCollection.GenericEquation
-Equation used to compute RHS for constraints with dynamic RHS values.
+Equation used to compute the RHS value for generic constraints with a dynamic RHS.
 
 **Note: these data are not currently used when implenting the approximated version of NEMDE. See RHS limitations for more information. (TODO: write caveats section for RHS values)**
 
@@ -375,8 +375,6 @@ Array describing generic constraint components.
 ]
 ```
 
-NEMSPDCaseFile.NemSpdInputs.PeriodCollection.Period.EnteredValuePeriodCollection.EnteredValuePeriod
-
 ### NEMSPDCaseFile.NemSpdInputs.PeriodCollection.Period.RegionPeriodCollection.RegionPeriod
 Array describing demand forecast for upcoming interval.
 
@@ -461,9 +459,9 @@ Array describing trader quantity band parameters.
 
 Each element of the `Trade` array describes quantity bands for a given trade type. 
 
-When determining a scheduled unit's availability it's important to examine the `@MaxAvail` parameter. Simply summing band availabilities will give misleading results.
+When determining a scheduled unit's availability it is important to examine the `@MaxAvail` parameter. Simply summing band availabilities will give misleading results.
 
-FCAS offers container additional parameters describing a given trade type's FCAS trapezium.
+FCAS offers contain additional parameters describing a given trade type's FCAS trapezium.
 
 (TODO figure of FCAS trapezium)
 
@@ -491,11 +489,11 @@ Array describing interconnector power flow limits and 'from' and 'to' region def
 | `@MNSP` | Flag indicating if unit is a Market Network Service Provider. These interconnectors can bid into the market and be dispatched in a similar way to traders |
 | `@FromRegion` | Interconector's from region |
 | `@ToRegion` | Interconector's to region |
-| `@LowerLimit` | Max power flow from `@ToRegion` to `@FromRegion` |
-| `@UpperLimit` | Max power flow from `@FromRegion` to `@ToRegion` |
+| `@LowerLimit` | Max power flow when the net power transfer is from `@ToRegion` to `@FromRegion` |
+| `@UpperLimit` | Max power flow when the net power transfer is from `@FromRegion` to `@ToRegion` |
 
 ### NEMSPDCaseFile.NemSpdInputs.PeriodCollection.Period.GenericConstraintPeriodCollection.GenericConstraintPeriod
-Array describing generic constraint type and whether or not it is used for intervention pricing runs.
+Array describing metadata for each generic constraint, including a flag denoting whether the constraint should be included when conducting an intervention pricing run. If market intervention occurs (e.g. AEMO directs a trader to produce above a minimum dispatch level) constraints corresponding to the market intervention will have their `@Intervention` flag set to 1. The first run of NEMDE is used to determine the dispatch targets for all traders, with all generic constraints included. A second run of NEMDE is then conducted with intervention constraints excluded. Pricing arising from this second 'intervention pricing' run set wholesale prices for the interval.
 
 ```
 [
@@ -549,7 +547,7 @@ High-level summary statistics for model solution.
 ```
 
 ### NEMSPDCaseFile.NemSpdOutputs.PeriodSolution
-Describes objective function value and aggregate violation statistics for a given period.
+Describes objective function value and aggregate violation statistics for a given interval.
 
 ```
 {
@@ -576,7 +574,7 @@ Describes objective function value and aggregate violation statistics for a give
 ```
 
 ### NEMSPDCaseFile.NemSpdOutputs.RegionSolution
-Array describing prices, demand, and net power outflow for each region.
+Array describing prices, demand, and net power flowing out of a given region.
 
 ```
 [
@@ -690,9 +688,11 @@ Array describing dispatch targets for each trader, and also additional parameter
 ]
 ```
 
-Note `@EnergyTarget`
+Note `@EnergyTarget` describes a trader's power target (in MW) in the market for energy. While generators and loads have differing trade types for this market (`ENOF` for generators and `LDOF` for loads) there is no distinction with respect to the dispatch solution - both trader categories use `@EnergyTarget` to power target set for generators and loads at the end of a given dispatch interval.
 
-NEMSPDCaseFile.NemSpdOutputs.ConstraintSolution
+### NEMSPDCaseFile.NemSpdOutputs.ConstraintSolution
+Array describing generic constraint solution. 
+
 ```
 [
     {
@@ -708,4 +708,8 @@ NEMSPDCaseFile.NemSpdOutputs.ConstraintSolution
 ]
 ```
 
-NEMSPDCaseFile.SolutionAnalysis
+| Parameter | Description |
+| --------- | ----------- |
+| `@RHS` | Right-hand side value for constraint |
+| `@MarginalValue` | Value of the dual variable corresponding to constraint. This value represents a sensitivity, describing how the objective function value would change for an incremental tightenting of the constraint. |
+| `@Deficit` | The amount by which the RHS has been violated |
