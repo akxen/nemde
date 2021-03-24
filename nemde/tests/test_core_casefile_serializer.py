@@ -18,5 +18,5 @@ def test_casefile_serializer():
 
     casefile = load_base_case(case_id='20201101001')
 
-    serialized_casefile = construct_case(data=casefile, mode='physical')
+    serialized_casefile = construct_case(data=casefile, mode='target')
     logger.info(serialized_casefile)

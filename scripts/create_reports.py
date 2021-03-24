@@ -30,7 +30,7 @@ def save_basis_results(results, key, filename):
     """
 
     # Construct basis results
-    df = pd.DataFrame(itertools.chain.from_iterable([i[key] for i in results]))
+    df = pd.DataFrame(itertools.chain.from_iterable([i['output'][key] for i in results]))
 
     # Columns appearing in all results files
     index = ['case_id', 'intervention']

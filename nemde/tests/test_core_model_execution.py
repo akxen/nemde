@@ -256,15 +256,15 @@ def test_validate_model(case_id, testrun_uid, group_id):
     user_data = {
         'case_id': case_id,
         'options': {
-            'run_mode': 'physical',
+            'run_mode': 'target',
             'algorithm': 'default',
             'solution_format': 'validation'
         }
     }
 
     # Run model and return solution
-    user_data_json = json.dumps(user_data)
-    solution = run_model(user_data=user_data_json)
+    # user_data_json = json.dumps(user_data)
+    solution = run_model(user_data=user_data)
 
     # Compress results before saving
     results = zlib.compress(json.dumps(solution).encode('utf-8'))
@@ -282,7 +282,7 @@ def test_validate_model(case_id, testrun_uid, group_id):
     mysql.post_entry(schema=os.environ['MYSQL_SCHEMA'], table='results', entry=entry)
 
     # Compute relative difference
-    objective = [i for i in solution['PeriodSolution']
+    objective = [i for i in solution.get('output')['PeriodSolution']
                  if i['key'] == '@TotalObjective'][0]
     absolute_difference = abs(objective['model'] - objective['actual'])
     relative_difference = absolute_difference / abs(objective['actual'])

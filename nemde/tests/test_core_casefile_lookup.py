@@ -170,4 +170,4 @@ def test_get_region_index(casefile):
 
 
 def test_get_intervention_status(casefile):
-    assert lookup.get_intervention_status(data=casefile, mode='physical') == '0'
+    assert lookup.get_intervention_status(data=casefile, mode='target') == '0'

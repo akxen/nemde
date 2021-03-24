@@ -27,7 +27,7 @@ def clean_user_input(user_data):
         'case_id': data.get('case_id', None),
         'patches': data.get('patches', []),
         'options': {
-            'run_mode': options.get('run_mode', 'physical'),
+            'run_mode': options.get('run_mode', 'target'),
             'algorithm': options.get('algorithm', 'default'),
             'solution_format': options.get('solution_format', 'standard'),
             'return_casefile': options.get('return_casefile', False),
@@ -45,8 +45,8 @@ def clean_user_input(user_data):
                "should be omitted")
         raise CasefileOptionsError(msg)
 
-    if cleaned.get('options').get('run_mode') not in ['physical', 'pricing']:
-        msg = "'run_mode' must be set to 'physical' or 'pricing'"
+    if cleaned.get('options').get('run_mode') not in ['target', 'pricing']:
+        msg = "'run_mode' must be set to 'target' or 'pricing'"
         raise CasefileOptionsError(msg)
 
     if cleaned.get('options').get('solution_format') not in ['standard', 'validation']:

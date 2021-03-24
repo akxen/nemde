@@ -457,18 +457,18 @@ def get_region_index(data) -> list:
 
 def get_intervention_status(data, mode) -> str:
     """
-    Check if intervention pricing run occurred - trying to model physical
+    Check if intervention pricing run occurred - modelling target mode
     run if intervention occurred
     """
 
     # Intervention flag is str in casefile 'True' or 'False'
     intervention_flag = get_case_attribute(data, '@Intervention', str)
 
-    if (intervention_flag == 'False') and (mode == 'physical'):
+    if (intervention_flag == 'False') and (mode == 'target'):
         return '0'
     elif (intervention_flag == 'False') and (mode == 'pricing'):
         return '0'
-    elif (intervention_flag == 'True') and (mode == 'physical'):
+    elif (intervention_flag == 'True') and (mode == 'target'):
         return '1'
     elif (intervention_flag == 'True') and (mode == 'pricing'):
         return '0'
