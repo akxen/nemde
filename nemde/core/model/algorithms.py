@@ -31,7 +31,7 @@ def default_algorithm(model):
     # Check if dispatch > 0 for any fast start units
     starting = [i for i, j in model.S_TRADER_ENERGY_OFFERS
                 if (i in model.S_TRADER_FAST_START)
-                and (model.V_TRADER_TOTAL_OFFER[i, j].value > 0.005)
+                and (model.V_TRADER_TOTAL_OFFER[i, j].value > model.P_FAST_START_THRESHOLD.value)
                 and (model.P_TRADER_CURRENT_MODE[i].value == 0)]
 
     # TODO: check if model can be returned when 'starting' is an empty list

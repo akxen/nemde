@@ -337,6 +337,9 @@ def define_parameters(m, data):
     # Tie-break price
     m.P_TIE_BREAK_PRICE = pyo.Param(initialize=data['P_TIE_BREAK_PRICE'])
 
+    # Power output threshold used in two-pass fast start algorithm
+    m.P_FAST_START_THRESHOLD = pyo.Param(initialize=data['P_FAST_START_THRESHOLD'])
+
     return m
 
 
