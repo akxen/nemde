@@ -8,8 +8,10 @@ RUN apt-get -y install --no-install-recommends ca-certificates
 
 RUN git clone https://github.com/coin-or/coinbrew /var/coin-or
 WORKDIR /var/coin-or
-RUN ./coinbrew fetch COIN-OR-OptimizationSuite@stable/1.9 --skip="ThirdParty/Blas ThirdParty/Lapack ThirdParty/Metis" --no-prompt
-RUN ./coinbrew build  COIN-OR-OptimizationSuite --skip="ThirdParty/Blas ThirdParty/Lapack ThirdParty/Metis" --no-prompt --prefix=/usr
+# RUN ./coinbrew fetch COIN-OR-OptimizationSuite@stable/1.9 --skip="ThirdParty/Blas ThirdParty/Lapack ThirdParty/Metis" --no-prompt
+# RUN ./coinbrew build  COIN-OR-OptimizationSuite --skip="ThirdParty/Blas ThirdParty/Lapack ThirdParty/Metis" --no-prompt --prefix=/usr
+RUN ./coinbrew fetch Cbc@2.10 --skip="ThirdParty/Blas ThirdParty/Lapack ThirdParty/Metis" --no-prompt
+RUN ./coinbrew build Cbc@2.10 --skip="ThirdParty/Blas ThirdParty/Lapack ThirdParty/Metis" --no-prompt --prefix=/usr
 
 # Setup python
 RUN apt-get -y install software-properties-common
