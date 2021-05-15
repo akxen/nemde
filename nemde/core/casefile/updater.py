@@ -93,6 +93,7 @@ def patch_casefile(casefile, updates):
     """
 
     # Create patch object and apply to casefile
-    patch = jsonpatch.JsonPatch(updates)
+    patches = [get_patch_operation(casefile=casefile, update=i) for i in updates]
+    patch = jsonpatch.JsonPatch(patches)
 
     return patch.apply(casefile)
