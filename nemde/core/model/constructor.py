@@ -2,6 +2,7 @@
 
 import time
 from typing import Union
+from pyomo.core.base.constraint import Constraint
 
 import pyomo.environ as pyo
 
@@ -1369,7 +1370,13 @@ def define_generic_constraints(m):
         variables
         """
 
-        return m.V_TRADER_TOTAL_OFFER[i, j] == m.V_GC_TRADER[i, j]
+        # GC trader index may include IDs that are not in Trader-Offer index.
+        # This seems logically inconsistent. If this occurs don't create linking
+        # constraint - will raise KeyError otherwise.
+        if (i, j) in m.V_TRADER_TOTAL_OFFER.keys():
+            return m.V_TRADER_TOTAL_OFFER[i, j] == m.V_GC_TRADER[i, j]
+        else:
+            return Constraint.Skip
 
     # Link between total power output and quantity band output
     m.C_TRADER_VARIABLE_LINK = pyo.Constraint(

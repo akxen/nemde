@@ -15,4 +15,4 @@ def setup_environment_variables(filename=None):
         env_filename = filename
 
     # Load variables
-    load_dotenv(os.path.join(os.path.dirname(__file__), env_filename))
+    load_dotenv(os.path.join(os.path.dirname(__file__), os.path.pardir, 'config', env_filename))

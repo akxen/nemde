@@ -92,4 +92,4 @@ if __name__ == '__main__':
     # Upload casefiles for a given month
     db_schema = os.getenv('MYSQL_SCHEMA')
     casefile_dir = os.getenv('CASEFILE_DIR')
-    upload_casefiles(schema=db_schema, data_dir=casefile_dir, year=2020, month=11)
+    upload_casefiles(schema=db_schema, data_dir=casefile_dir, year=2021, month=4)
