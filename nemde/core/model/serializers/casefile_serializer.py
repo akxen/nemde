@@ -372,9 +372,17 @@ def get_trader_fast_start_attribute(data, attribute, func) -> dict:
     # Fast start traders
     fast_start_traders = get_trader_fast_start_index(data)
 
-    return {i['@TraderID']: func(i.get(attribute))
-            if i.get(attribute) is not None else i.get(attribute)
-            for i in traders if i['@TraderID'] in fast_start_traders}
+    # CurrentModeTime may be missing for some traders (seem to be fast-start
+    # units). Set to 0 if missing.
+    if attribute == '@CurrentModeTime':
+        return {i['@TraderID']: func(i.get(attribute))
+                if i.get(attribute) is not None else 0.0
+                for i in traders if i['@TraderID'] in fast_start_traders}
+
+    else:
+        return {i['@TraderID']: func(i.get(attribute))
+                if i.get(attribute) is not None else i.get(attribute)
+                for i in traders if i['@TraderID'] in fast_start_traders}
 
 
 def get_interconnector_collection_attribute(data, attribute, func) -> dict:
