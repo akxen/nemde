@@ -51,7 +51,10 @@ def get_casefile_ids(year, month, n):
 
 
 # Get sample of casefile IDs for a given year and month
-casefile_ids = get_casefile_ids(year=2020, month=11, n=1)
+casefile_ids = get_casefile_ids(
+    year=int(os.environ['TEST_YEAR']),
+    month=int(os.environ['TEST_MONTH']),
+    n=1)
 
 
 @pytest.fixture(scope='module', params=casefile_ids)

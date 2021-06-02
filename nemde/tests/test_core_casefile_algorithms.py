@@ -2,6 +2,7 @@
 Test algorithms used to extract additional information from casefiles
 """
 
+import os
 import pytest
 
 import context
@@ -13,7 +14,10 @@ from nemde.core.casefile.algorithms import get_interconnector_loss_estimate
 
 @pytest.fixture(scope='module')
 def casefile():
-    return load_base_case('20201101001')
+    year = int(os.environ['TEST_YEAR'])
+    month = int(os.environ['TEST_MONTH'])
+    case_id = f'{year}{month:02}01001'
+    return load_base_case(case_id=case_id)
 
 
 def test_get_parsed_interconnector_loss_model_segments(casefile):

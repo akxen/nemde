@@ -2,6 +2,7 @@
 Test casefile conversion
 """
 
+import os
 import pytest
 
 import context
@@ -11,9 +12,13 @@ from nemde.io.casefile import load_base_case
 
 @pytest.fixture(scope='module')
 def casefile():
-    return load_base_case('20201101001')
+    year = int(os.environ['TEST_YEAR'])
+    month = int(os.environ['TEST_MONTH'])
+    case_id = f'{year}{month:02}01001'
+    return load_base_case(case_id=case_id)
 
 
+@pytest.mark.skip(reason='test value will vary by case file')
 def test_get_case_attribute(casefile):
     assert (lookup.get_case_attribute(
         data=casefile, attribute='@EnergySurplusPrice', func=str) == "2250000")
@@ -25,6 +30,7 @@ def test_get_region_collection_attribute(casefile):
         func=str) == 'SA1')
 
 
+@pytest.mark.skip(reason='test value will vary by case file')
 def test_get_region_collection_initial_condition_attribute(casefile):
     assert (lookup.get_region_collection_initial_condition_attribute(
         data=casefile, region_id="SA1", attribute="ADE", func=str) == "0")
@@ -48,6 +54,7 @@ def test_get_trader_collection_attribute(casefile):
         func=str) == 'AGLHAL')
 
 
+@pytest.mark.skip(reason='test value will vary by case file')
 def test_get_trader_collection_initial_condition_attribute(casefile):
     assert (lookup.get_trader_collection_initial_condition_attribute(
         data=casefile, trader_id='AGLHAL', attribute='AGCStatus',
@@ -60,6 +67,7 @@ def test_get_trader_period_collection_attribute(casefile):
         func=str) == "SA1")
 
 
+@pytest.mark.skip(reason='test value will vary by case file')
 def test_get_trader_quantity_band_attribute(casefile):
     assert (lookup.get_trader_quantity_band_attribute(
         data=casefile, trader_id='AGLHAL', trade_type='ENOF',
@@ -72,6 +80,7 @@ def test_get_trader_price_band_attribute(casefile):
         attribute="@TradeType", func=str) == 'ENOF')
 
 
+@pytest.mark.skip(reason='test value will vary by case file')
 def test_get_trader_solution_attribute(casefile):
     assert (lookup.get_trader_solution_attribute(
         data=casefile, trader_id='AGLHAL', attribute='@TraderID', func=str,
@@ -84,6 +93,7 @@ def test_get_interconnector_collection_attribute(casefile):
         attribute='@InterconnectorID', func=str) == 'N-Q-MNSP1')
 
 
+@pytest.mark.skip(reason='test value will vary by case file')
 def test_get_interconnector_collection_initial_condition_attribute(casefile):
     assert (lookup.get_interconnector_collection_initial_condition_attribute(
         data=casefile, interconnector_id='N-Q-MNSP1', attribute='InitialMW',
@@ -104,6 +114,7 @@ def test_get_interconnector_loss_model_segments(casefile):
     assert len(segments) > 0
 
 
+@pytest.mark.skip(reason='test value will vary by case file')
 def test_get_interconnector_loss_model_attribute(casefile):
     assert (lookup.get_interconnector_loss_model_attribute(
         data=casefile, interconnector_id='N-Q-MNSP1', attribute='@NPLRange',
@@ -135,6 +146,7 @@ def test_get_generic_constraint_solution_attribute(casefile):
         func=str, intervention='0') == '#BBTHREE3_E')
 
 
+@pytest.mark.skip(reason='test value will vary by case file')
 def test_get_period_solution_attribute(casefile):
     assert (lookup.get_period_solution_attribute(
         data=casefile, attribute='@SolverStatus', func=str,
@@ -169,5 +181,6 @@ def test_get_region_index(casefile):
     assert len(regions) == len(set(regions))
 
 
+@pytest.mark.skip(reason='test value will vary by case file')
 def test_get_intervention_status(casefile):
     assert lookup.get_intervention_status(data=casefile, mode='target') == '0'

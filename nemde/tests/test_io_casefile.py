@@ -14,7 +14,10 @@ from nemde.io.casefile import load_xml_from_archive
 def test_load_casefile_from_database():
     """Load casefile from a database"""
 
-    casefile = load_xml_from_archive(data_dir=os.getenv('CASEFILE_DIR'),
-                                     year=2020, month=11, day=1, interval=1)
+    year = int(os.environ['TEST_YEAR'])
+    month = int(os.environ['TEST_MONTH'])
+
+    casefile = load_xml_from_archive(data_dir=os.environ['CASEFILE_DIR'],
+                                     year=year, month=month, day=1, interval=1)
 
     assert isinstance(casefile, bytes)
