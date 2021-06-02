@@ -9,8 +9,12 @@ echo "Starting run"
 # Upload casefiles
 /usr/bin/python3.9 /app/scripts/upload_casefiles.py
 
-# Prepare a new test run - comment out if seeking to continue previous run
-pytest -m prepare_new_test_run -n 1
+# Prepare a new test run
+if [ $NEW_RUN -eq 1 ]
+then
+    echo "Preparing new run"
+    pytest -m prepare_new_test_run -n 1
+fi
 
 # Run model validation tests
 pytest --verbose --capture=tee-sys --junitxml=/app/reports/latest.xml -n $N_WORKERS -m "not prepare_new_test_run"
@@ -21,8 +25,8 @@ status=$?
 
 /usr/bin/python3.9 /app/scripts/save_junitxml_to_db.py
 
-# Construct reports
-/usr/bin/python3.9 /app/scripts/create_reports.py
+# Construct reports - instance may need > 40GB of RAM if constructing monthly report
+# /usr/bin/python3.9 /app/scripts/create_reports.py
 
 echo "Finished run"
 
