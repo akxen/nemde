@@ -57,82 +57,9 @@ def get_casefile_id_sample(year, month, n):
 def get_selected_casefile_ids():
     """Run tests for a given set of casefiles"""
 
-    # # Cases where at least one trader has current mode = 1
-    # case_ids = [
-    #     '20201101017',
-    #     '20201101126',
-    #     '20201101127',
-    #     '20201101134',
-    #     '20201101135',
-    #     '20201101161',
-    #     '20201101164',
-    #     '20201101165',
-    #     '20201101169',
-    # ]
-
-    # # Cases where at least one trader has current mode = 2
-    # case_ids = [
-    #     '20201101076',
-    #     '20201101136',
-    #     '20201101159',
-    #     '20201101160',
-    #     '20201101160',
-    #     '20201101161',
-    #     '20201101165',
-    #     '20201101166',
-    #     '20201101167',
-    #     '20201101171',
-    #     '20201101172',
-    #     '20201101173',
-    # ]
-
-    # # Cases where pass criterion should fail
-    # case_ids = ['20201117113']
-
-    # # Cases where fast start generator starts up
-    # case_ids = [
-    #     '20201117111',
-    #     '20201127043',
-    #     '20201121156',
-    #     '20201116149',
-    #     '20201106112',
-    #     '20201118096',
-    #     '20201118132',
-    #     '20201130139',
-    #     '20201105150',
-    #     '20201129141',
-    #     '20201125069',
-    #     '20201127157',
-    #     '20201104148',
-    #     '20201130169',
-    #     '20201113133',
-    #     '20201121157',
-    #     '20201122151',
-    #     '20201124151',
-    #     '20201123151',
-    #     '20201129139',
-    #     '20201111151',
-    #     '20201103117',
-    #     '20201119061',
-    #     '20201119157',
-    #     '20201119127',
-    #     '20201130217',
-    #     '20201123169',
-    #     '20201129176',
-    #     '20201114073',
-    #     '20201128140',
-    #     '20201119199',
-    #     '20201115073',
-    #     '20201122247',
-    #     '20201101049',
-    #     '20201113114',
-    #     '20201115092',
-    #     '20201111050'
-    # ]
-
     # Cases with discrepancy
     case_ids = [
-        '20201129176',
+        '20210419241',
     ]
 
     return case_ids
@@ -212,6 +139,7 @@ def prepare_new_run():
     sample_size = int(os.environ['VALIDATION_SAMPLE_SIZE'])
 
     case_ids = get_casefile_id_sample(year=year, month=month, n=sample_size)
+    # case_ids = get_selected_casefile_ids()
     record_new_test_run(schema=os.getenv('MYSQL_SCHEMA'), case_ids=case_ids)
 
 
