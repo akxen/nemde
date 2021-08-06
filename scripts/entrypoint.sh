@@ -26,7 +26,7 @@ status=$?
 /usr/bin/python3.9 /app/scripts/save_junitxml_to_db.py
 
 # Construct reports - instance may need > 40GB of RAM if constructing monthly report
-# /usr/bin/python3.9 /app/scripts/create_reports.py
+/usr/bin/python3.9 /app/scripts/create_reports.py
 
 echo "Finished run"
 

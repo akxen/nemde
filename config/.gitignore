@@ -1,1 +1,2 @@
 *.env
+!nemde-template.env

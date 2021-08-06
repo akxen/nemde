@@ -9,7 +9,7 @@ services:
       - ./casefiles/zipped:/app/casefiles/zipped
     entrypoint: /app/scripts/entrypoint.sh
     env_file:
-      - ./config/default.env
+      - ./config/nemde.env
     depends_on:
       - mysql
 
@@ -17,7 +17,7 @@ services:
     image: kubedb/mysql:5.7.25
     command: --max_allowed_packet=32505856
     env_file:
-      - ./mysql/.env
+      - ./mysql/mysql.env
     volumes:
       - ./mysql/data:/var/lib/mysql
       - ./mysql/mysqlconf:/etc/mysql/conf.d
