@@ -1,0 +1,103 @@
+[project]
+name = "nemde"
+version = "0.1.0"
+description = ""
+authors = [{ name = "akxen", email = "aleksis@akxen.net" }]
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas==2.2.2",
+    "pyomo==6.10.0",
+    "xmltodict==0.13.0",
+    "s3fs==2024.10.0",
+    "python-ulid==3.0.0",
+    "gitpython==3.1.43",
+    "deepdiff==8.6.1",
+    "click==8.3.3",
+    "highspy==1.14.0",
+    "plotly==7.0.0",
+]
+
+[project.scripts]
+nemde-backtest = "nemde.cli:main"
+nemde-solve = "nemde.cli:solve_command"
+
+[project.optional-dependencies]
+api = [
+    "fastapi==0.141.1",
+    "uvicorn==0.52.4",
+]
+dev = [
+    "pytest==8.3.2",
+    "pytest-watch==4.2.0",
+    "black==24.8.0",
+    "ruff==0.16.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    # pandas 2.2.2 false-positive: assign() on join() results triggers this despite
+    # operating on a local copy with no intent to mutate the original. Fixed in
+    # 2.2.3. A plain `warnings.filterwarnings()` call in a test module doesn't
+    # survive pytest's per-test filter reset, so it has to live here instead.
+    "ignore:ChainedAssignmentError.*:FutureWarning",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+extend-exclude = ["data"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "ERA", # commented-out code -- see the sweep note below
+    "ARG", # unused arguments
+]
+
+ignore = [
+    # `class TradeType(str, Enum)` is deliberate, not a missed StrEnum. These enums
+    # are used as dict keys, tuple elements and Pyomo Set members throughout, and
+    # StrEnum changes what str()/format() produce for a member -- a silent change to
+    # every f-string and index key in the model. Not worth it for a style rule.
+    "UP042",
+
+    # Every remaining if/else-to-ternary site carries a comment explaining each
+    # branch (which branch of the fast-start profile applies, which AGC limit is in
+    # play). Collapsing them to a ternary would drop the comments, which are the
+    # part worth keeping.
+    "SIM108",
+]
+
+[tool.ruff.lint.flake8-unused-arguments]
+# `_m`, `_i` mark Pyomo rule arguments a rule deliberately ignores.
+ignore-variadic-names = true
+
+[tool.ruff.lint.per-file-ignores]
+# `x in component.keys()` on a Pyomo IndexedComponent is not the dict idiom SIM118
+# assumes: `in component` and `in component.keys()` can differ for a Param with a
+# declared default, so "simplifying" these would be a semantic change.
+"nemde/model.py" = ["SIM118"]
+"nemde/solution.py" = ["SIM118"]
+
+# report.py and solution_report.py embed a CSS/JS stylesheet and HTML fragments as
+# string literals; wrapping those at 100 columns makes them harder to read, not easier.
+"nemde/report.py" = ["E501"]
+"nemde/solution_report.py" = ["E501"]
+
+# Test bodies name the rule they are asserting; long, explicit expectations read
+# better on one line than wrapped.
+"tests/*" = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
