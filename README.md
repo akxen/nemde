@@ -46,7 +46,8 @@ problem.
 ## Using the API
 
 `nemde.api` serves the same model over HTTP; the browser page above is just a
-client for it.
+client for it. Additional documentation and case studies are at
+<https://akxen.github.io/dispatch-api-docs/>.
 
 | Route | What it does |
 |---|---|
