@@ -1,7 +1,15 @@
 .vscode/*
+*.zip
 *.pyc
-data/MMSDM_2019_10/*
-*.xlsx
-*.ipynb_checkpoints/*
-*.loaded
-*.json
+data/output/*
+data/outbound/*
+tests/outputs/*
+# Bulk casefile data, not for version control. Two fixtures under this
+# directory are force-added anyway (deliberately, as minimal test fixtures) --
+# see data/input/NemSpdOutputs_20240701_loaded/NEMSPDOutputs_2024070100100.loaded and
+# data/input/NemSpdOutputs_20210101_loaded/NEMSPDOutputs_2021010100100.loaded
+data/input/*
+.DS_Store
+.venv/
+*.csv
+internal/docs/*.pdf

@@ -1,3 +1,0 @@
-"row_id",INT NOT NULL AUTO_INCREMENT
-"group_id","VARCHAR(40) UNIQUE"
-"parameters","JSON"

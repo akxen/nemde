@@ -1,61 +1,25 @@
-# Setup solver
-FROM ubuntu:xenial
+FROM python:3.11-slim-bookworm
 
-RUN apt-get update
-RUN apt-get -y install --no-install-recommends git subversion gcc g++ make wget gfortran patch pkg-config file
-RUN apt-get -y install --no-install-recommends libgfortran-5-dev libblas-dev liblapack-dev libmetis-dev libnauty2-dev
-RUN apt-get -y install --no-install-recommends ca-certificates
+# CBC is the solver run.py drives; HiGHS needs no apt package because the
+# highspy wheel vendors its own binary.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends coinor-cbc \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN git clone https://github.com/coin-or/coinbrew /var/coin-or
-WORKDIR /var/coin-or
-# RUN ./coinbrew fetch COIN-OR-OptimizationSuite@stable/1.9 --skip="ThirdParty/Blas ThirdParty/Lapack ThirdParty/Metis" --no-prompt
-# RUN ./coinbrew build  COIN-OR-OptimizationSuite --skip="ThirdParty/Blas ThirdParty/Lapack ThirdParty/Metis" --no-prompt --prefix=/usr
-RUN ./coinbrew fetch Cbc@2.10 --skip="ThirdParty/Blas ThirdParty/Lapack ThirdParty/Metis" --no-prompt
-RUN ./coinbrew build Cbc@2.10 --skip="ThirdParty/Blas ThirdParty/Lapack ThirdParty/Metis" --no-prompt --prefix=/usr
+COPY --from=ghcr.io/astral-sh/uv:0.9.7 /uv /usr/local/bin/uv
 
-# Setup python
-RUN apt-get -y install software-properties-common
-RUN add-apt-repository -y ppa:deadsnakes/ppa
-RUN apt-get update
-RUN apt-get -y install python3.9
-RUN apt-get -y install python3.9-distutils
-RUN apt-get -y install curl
-RUN curl "https://bootstrap.pypa.io/get-pip.py" -o "get-pip.py"
-RUN python3.9 get-pip.py
-
-# Setup git
-RUN apt-get install git
-RUN apt-get -y install python3.9-dev
-
-# Setup MySQL server
-RUN echo 'mysql-server mysql-server/root_password password your_password' | debconf-set-selections
-RUN echo 'mysql-server mysql-server/root_password_again password your_password' | debconf-set-selections
-RUN apt-get -y install mysql-server
-RUN apt-get -y install libmysqlclient-dev
-RUN apt-get -y install libssl-dev
-
-# Create repo and subfolders
-RUN mkdir /app
-RUN mkdir /app/casefiles
-RUN mkdir /app/casefiles/zipped
-RUN mkdir /app/reports
-
-# Copy model and scripts
-COPY ./requirements.txt /app/
-RUN python3.9 -m pip install -r /app/requirements.txt
-COPY ./nemde /app/nemde
-COPY ./scripts /app/scripts
-COPY ./pytest.ini /app/
 WORKDIR /app
 
-# Make scripts executable
-RUN chmod +x /app/scripts/*
+COPY pyproject.toml uv.lock README.md ./
+COPY nemde/ ./nemde/
+RUN uv sync --frozen --extra api
 
-# Limit permissions
-# RUN adduser user
-# RUN chown -R user:user /app
-# RUN chmod -R 755 /app
-# USER user
+# Reports stamp this sha in their footer; the image has no .git to read it from.
+ARG GIT_SHA=""
 
-# Keep container running - should be overidden by entrypoint.sh in docker-compose.yml
-CMD tail -f /dev/null
+ENV PATH="/app/.venv/bin:$PATH" \
+    MPLBACKEND=Agg \
+    NEMDE_GIT_SHA=$GIT_SHA
+
+EXPOSE 8000
+CMD ["uvicorn", "nemde.api:app", "--host", "0.0.0.0", "--port", "8000"]
